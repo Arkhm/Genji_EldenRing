@@ -2,7 +2,9 @@
 //! the automatic reload. Pure logic, no game access: `tick` says which throws to make this frame, and
 //! `shuriken.rs` makes them.
 //!
-//! Values from memory of Overwatch, **not verified** against the current game (DESIGN.md, 6b plan).
+//! Values (2026-10-07): from a video measurement of Overwatch you passed on (another AI's analysis of 10 consecutive
+//! throws) plus Blizzard's patch notes (0.68 s recovery, 75 m/s): 0.10 s between burst shuriken, 0.687 s between
+//! fans measured, reload about 1.5 s. The burst cycle is inferred (0.2 s burst + 0.68 s recovery), not measured.
 
 use crate::glog;
 
@@ -13,12 +15,15 @@ const BURST_SHOTS: u32 = 3;
 const FAN_SHOTS: u32 = 3;
 /// Time between the shuriken of one burst, seconds.
 const BURST_SPACING: f32 = 0.1;
-/// Time from the start of one burst to the earliest next burst or fan, seconds.
-const BURST_CYCLE: f32 = 0.68;
-/// Time from a fan to the earliest next burst or fan, seconds.
-const FAN_CYCLE: f32 = 0.75;
-/// Sideways angle of the fan's outer shuriken, degrees.
-const FAN_ANGLE: f32 = 9.0;
+/// Time from the start of one burst to the earliest next burst or fan, seconds: the burst itself (2 x 0.1 s) plus
+/// Overwatch's 0.68 s recovery. Was 0.68 (too fast).
+const BURST_CYCLE: f32 = 0.88;
+/// Time from a fan to the earliest next burst or fan, seconds (Overwatch's 0.68 s recovery; measured 0.687). Was 0.75.
+const FAN_CYCLE: f32 = 0.68;
+/// Sideways angle of the fan's outer shuriken, degrees: Genji's fan is 9 degrees in total, 4.5 to each side.
+/// Elden Ring's narrower view makes it look about 1.6 times wider on screen than in Overwatch; 2.84 would match the
+/// look instead of the real angle. Was 9.0.
+const FAN_ANGLE: f32 = 4.5;
 /// Automatic reload when empty, seconds.
 const RELOAD_TIME: f32 = 1.5;
 
@@ -133,7 +138,7 @@ mod tests {
     #[test]
     fn held_click_repeats_bursts_at_the_cycle() {
         let mut f = Firing::default();
-        let shots = run(&mut f, 1.0, true, false);
+        let shots = run(&mut f, BURST_CYCLE + 0.3, true, false);
         assert_eq!(shots.len(), 6);
         assert!((shots[3].0 - shots[0].0 - BURST_CYCLE).abs() < 2.0 * DT);
     }

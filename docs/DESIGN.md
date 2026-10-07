@@ -244,15 +244,17 @@ throws every spawn is refused. We always set that bit. Bit 3 of the same field a
 
 **6b plan (2026-10-07):** a small timing module (`genji/src/firing.rs`, no game access, unit-tested) decides each
 frame how many shuriken to throw and at which sideways angle; `shuriken.rs` throws them as in 6a.
-- Hold left click: bursts of 3 straight shuriken, 0.1 s apart, a new burst every 0.68 s while held.
-- Hold right click: Fan of Blades, 3 at once (centre and 9 degrees to each side, turned around the view's up
-  axis), every 0.75 s while held.
+- Hold left click: bursts of 3 straight shuriken, 0.1 s apart, a new burst every 0.88 s while held (0.2 s burst
+  + 0.68 s recovery).
+- Hold right click: Fan of Blades, 3 at once (centre and 4.5 degrees to each side, 9 in total, turned around the
+  view's up axis), every 0.68 s while held. Shuriken fly at 75 m/s.
 - Both share one recovery: no fan during a burst, no burst right after a fan.
 - 30 shuriken, one used per throw; at 0 the reload starts by itself and takes 1.5 s. No reload key: Elden Ring
   uses R for items, which you use in Genji mode.
 - Throws happen only while our movement controller drives (as in 6a); a burst still in progress is dropped
   otherwise. Timers keep running.
-- Values from memory of Overwatch, **not verified** against the current game: all are constants in `firing.rs`.
+- Values (updated 2026-10-07) from a measurement of an Overwatch video and Blizzard's notes, passed on by you; the
+  burst cycle is inferred. All are constants in `firing.rs`.
 - Log: `FIRE` lines for burst start, fan, reload start and end, with ammo left.
 
 **Logging:** every throw (time, origin, direction, bullet row, result code from the engine); HP changes of

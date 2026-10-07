@@ -51,9 +51,9 @@ const HAND_DOWN: f32 = 0.06;
 
 /// Shuriken flight, set in memory on the dagger's Bullet row while Genji mode is active: straight and fast up to
 /// SHURIKEN_RANGE, then falling (OUT_OF_RANGE_GRAVITY) so it ends on the ground and the engine removes it.
-/// Approximate Overwatch speed, not verified. The game's file is never changed; vanilla values are restored
+/// Speed: 75 m/s, Overwatch value per Blizzard (passed on by you, 2026-10-07; was 60). The game's file is never changed; vanilla values are restored
 /// whenever Genji mode lets go (menus, F9), so a real Throwing Dagger in plain Elden Ring is unchanged.
-const SHURIKEN_SPEED: f32 = 60.0;
+const SHURIKEN_SPEED: f32 = 75.0;
 const SHURIKEN_RANGE: f32 = 80.0;
 const OUT_OF_RANGE_GRAVITY: f32 = 20.0;
 /// Life the engine is told, seconds (logged against what the engine actually uses).

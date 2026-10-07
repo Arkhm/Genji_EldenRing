@@ -3,6 +3,21 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Shuriken values from an Overwatch video measurement
+
+**Changed:** `genji/src/firing.rs`: burst cycle 0.68 -> 0.88 s (start to start: 0.2 s burst + 0.68 s recovery),
+fan cycle 0.75 -> 0.68 s, fan 9 -> 4.5 degrees each side (9 in total). `genji/src/shuriken.rs`: speed 60 -> 75 m/s.
+Unchanged: 30 shuriken, 0.1 s between burst shuriken, 1.5 s reload, 27/54 damage.
+**Why:** Make it exactly like Genji. Values from another AI's analysis you passed on: measured in an Overwatch video
+(0.10 s between shuriken, 0.687 s between fans, reload about 1.5 s) and Blizzard's notes (0.68 s recovery,
+75 m/s, 9 degree spread). The burst cycle is inferred from those, not measured. Field of view measured last session:
+Elden Ring 48 degrees vertical (76.7 horizontal at 16:9, about 93.5 on your 21:9 screen), Overwatch 103 horizontal at
+16:9; you chose to keep Elden Ring's.
+**Tested how:** Build OK; 17 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** How it feels compared with Overwatch.
+**Next:** Your test, then step 7 (Swift Strike).
+
 ## 2026-10-07 Log the game's field of view; step 6b tested
 
 **Changed:** `genji/src/camera.rs`: when first person starts, a `CAMERA` line logs the field of view the game draws
