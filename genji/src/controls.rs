@@ -68,6 +68,9 @@ const TOGGLE_KEY: usize = dik::F9;
 const HUD_UI_STATE: u32 = 0x07;
 /// UI state of the Esc menu's tab bar (the HUD stays visible behind it).
 const ESC_MENU_UI_STATE: u32 = 0x1c;
+/// Gameplay must hold this long before capture switches on (release is instant). Going back from a menu tab
+/// to the Esc menu shows the HUD one frame before the Esc menu's own state, which flicked capture on for a frame.
+const CAPTURE_DELAY: f32 = 0.1;
 
 pub struct Controls {
     enabled: bool,
@@ -78,6 +81,7 @@ pub struct Controls {
     last_ui: Option<u128>,
     clock: f32,
     report_timer: f32,
+    gameplay_for: f32,
 }
 
 impl Default for Controls {
@@ -91,6 +95,7 @@ impl Default for Controls {
             last_ui: None,
             clock: 0.0,
             report_timer: 0.0,
+            gameplay_for: 0.0,
         }
     }
 }
@@ -117,7 +122,9 @@ impl Controls {
         }
         let hud = ui.is_some_and(|bits| bits & (1 << HUD_UI_STATE) != 0 && bits & (1 << ESC_MENU_UI_STATE) == 0);
 
-        let capturing = self.enabled && player_present && hud;
+        let gameplay = self.enabled && player_present && hud;
+        self.gameplay_for = if gameplay { self.gameplay_for + dt } else { 0.0 };
+        let capturing = gameplay && (self.capturing || self.gameplay_for >= CAPTURE_DELAY);
         if capturing != self.capturing {
             self.capturing = capturing;
             dinput::set_blocking(capturing);

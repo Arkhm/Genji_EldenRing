@@ -23,6 +23,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   don't attack, guard or use skills) and E, Q and Left Shift are hidden from it; all Genji keys and clicks are
   logged as Genji actions; F does Elden Ring's interact; F9 switches Genji mode off and on (plain Elden Ring,
   attacks work again); menus are left alone (Q and Esc back out). Keep Elden Ring's default key bindings.
+- First-person camera (step 4, tested 2026-10-07): while Genji mode is active, the view is at eye height and
+  your character's body is hidden; menus, the Esc menu, graces, dialogue and F9 give the normal camera back.
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once
@@ -32,4 +34,4 @@ Keep the default key bindings and the HUD on.
 
 ## What doesn't work yet
 
-Genji's abilities, movement, camera and looks: steps 2 and 4 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).
+Genji's abilities, movement and looks: steps 2 and 5 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).

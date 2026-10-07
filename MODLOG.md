@@ -3,6 +3,21 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 4 tested in game: PASSED (step 4 done); 0.1 s delay before capture
+
+**Changed:** `genji/src/controls.rs`: capture (and first person) switches on only after gameplay has held for
+0.1 s; release stays instant. `README.md`, `docs/DESIGN.md` updated. Test of commit `35cc87a`.
+**Why:** Step 4 pass condition. The log showed a one-frame flicker: going back from a tab to the Esc menu shows
+the HUD (`0x07`) one frame before the Esc bar (`0x1c`), so capture and first person turned on for about 20 ms
+(31.733 to 31.754 s, 53.339 to 53.359 s).
+**Tested how:** You set Camera Auto Rotate and Camera Auto Wall Recovery Off, strafed, opened and closed the
+Esc menu. I read `logs/genji.log` (170 lines).
+**Result:** You saw: strafing no longer turns the view; the Esc menu is third person. Log: every Esc press
+(`0x1c` shown at 30.5, 39.9, 52.1 s) released capture and first person. The delay fix builds without
+warnings; **not tested in game** (it only matters for that one frame).
+**Still broken / not tested:** Cutscenes, NPC dialogue camera, death camera, Torrent and ladders in first person.
+**Next:** Step 5, movement.
+
 ## 2026-10-07 Step 4: Esc menu counts as a menu; camera settings for the Genji save
 
 **Changed:** `genji/src/controls.rs`: gameplay now means UI state `0x07` (HUD) visible **and** `0x1c` (Esc menu
