@@ -93,6 +93,9 @@ impl Mover {
             );
         }
         self.frames_since_start += 1;
+        if self.frames_since_start == 1 || self.frames_since_start == 20 {
+            probe(phys_world, player, world);
+        }
 
         let p0 = player.chr_ins.modules.physics.position;
         let w = p0.3;
@@ -252,6 +255,34 @@ impl Mover {
             along_z.normalize_or_zero() * free(along_z),
         ];
         candidates.into_iter().max_by(|a, b| a.length().total_cmp(&b.length())).unwrap_or(Vec3::ZERO)
+    }
+}
+
+/// One-off diagnostic: casts a 3 m ray straight down from 1 m above the feet with several collision filters
+/// and several values for the position's 4th component, and logs which combinations hit. Added after the
+/// first 5a test (2026-10-07), where every ray with filter 0x2000058 missed, even straight down at the ground.
+fn probe(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, havok_man: &CSHavokMan) {
+    const FILTERS: [u32; 8] = [0x0200_0058, 0xFFFF_FFFF, 0x0000_0058, 0x0200_0000, 0x0000_0001, 0x0000_0000, 0x0000_0040, 0x0000_0010];
+    let p = player.chr_ins.modules.physics.position;
+    let origin = Vec3::new(p.0, p.1 + 1.0, p.2);
+    glog!(
+        "PROBE",
+        "feet ({:.2}, {:.2}, {:.2}) w {:.3} | CSHavokMan {:p} phys_world {:p}",
+        p.0, p.1, p.2, p.3,
+        havok_man as *const CSHavokMan,
+        world as *const eldenring::cs::CSPhysWorld
+    );
+    for w in [p.3, 0.0, 1.0] {
+        let results: Vec<String> = FILTERS
+            .iter()
+            .map(|&filter| {
+                match world.cast_ray(filter, &HavokPosition(origin.x, origin.y, origin.z, w), PositionDelta(0.0, -3.0, 0.0), player) {
+                    Some(hit) => format!("{filter:#x}:HIT y={:.2}", hit.1),
+                    None => format!("{filter:#x}:miss"),
+                }
+            })
+            .collect();
+        glog!("PROBE", "w={w:.3}: {}", results.join(" "));
     }
 }
 

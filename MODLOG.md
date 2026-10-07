@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a: ray probe, starting direction fix, sensitivity 6.90
+
+**Changed:** `genji/src/movement.rs`: a one-off probe on the 1st and 20th frame of each takeover casts a 3 m ray
+straight down from 1 m above the feet with 8 collision filters x 3 values of the position's 4th component, and
+logs which hit (`PROBE` lines). `genji/src/look.rs`: starts from the character's facing when the game's camera
+is still at (0, 0, 0) after loading; sensitivity set to your Overwatch value 6.90. `genji/src/camera.rs`: the
+`VIEW` line now says when the controller has given up (the 5a log claimed "first person + Genji movement"
+after the give-up, which was wrong).
+**Why:** The 5a test failed (entry below): every ray missed.
+**Tested how:** Build OK, no warnings. Offline: the library's address for the ray function (`0xc71e00`) starts
+with a normal function opening in `eldenring.exe` (`40 55 56 57 41 54 41 55 41 56 41 57 ...`), so it looks
+right; the bytes just before it don't look like the usual padding, so not certain.
+**Result:** Not tested in game.
+**Still broken / not tested:** Movement (blocked on the rays).
+**Next:** One test session to read the `PROBE` lines.
+
+## 2026-10-07 Step 5a tested in game: FAILED (collision rays never hit; safety net handed back)
+
+**Changed:** Nothing. Test of commit `30c0419`.
+**Why:** Step 5a pass condition.
+**Tested how:** You played; I read `logs/genji.log` (753 lines).
+**Result:** You saw third person, Space jumping, walls doing nothing special, fall damage, no clipping. That was
+plain Elden Ring: the controller took over at 27.316 s (`LOOK ... right match 1.000, up match 1.000, forward
+match 1.000`, `controller ON`, both blockers on: 4 weapon and 7 movement inputs), but the first ground ray
+missed (`left the ground` on frame 1) and no ray hit anything, so after 30 frames the safety net fired:
+`GAVE UP: no ray hit anything in 30 frames` at 28.084 s and gave everything back to the game for the session.
+While "falling", `outside push 2.21 m` in 0.5 s: the game's physics pushed the character back up out of the
+ground our position writes were pushing it into, so the ground was there but our rays didn't see it.
+The look started at exactly yaw 0, pitch 0: the game's camera wasn't set up yet on that frame.
+**Still broken / not tested:** Ray casts; everything after them.
+**Next:** Probe.
+
 ## 2026-10-07 Step 5a: own mouse look and walking (movement controller, first slice)
 
 **Changed:** New `genji/src/look.rs` (mouse to yaw/pitch, Overwatch formula: degrees = counts x 0.0066 x

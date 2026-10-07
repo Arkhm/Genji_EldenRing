@@ -61,6 +61,8 @@ pub fn camera_step(dt: f32) {
 
     let reason = if !WANTED.load(Ordering::Relaxed) {
         Some("Genji input not captured")
+    } else if view.mover.gave_up {
+        Some("movement controller gave up this session, see MOVE lines")
     } else {
         cannot_drive(player)
     };
@@ -72,7 +74,7 @@ pub fn camera_step(dt: f32) {
         view.handback_reason = reason;
     }
 
-    if reason.is_some() || view.mover.gave_up {
+    if reason.is_some() {
         view.mover.release(player);
         view.look = None;
         gamepad::set_movement_blocked(false);
@@ -84,7 +86,11 @@ pub fn camera_step(dt: f32) {
     }
 
     // 1. Look.
-    let look = view.look.get_or_insert_with(|| Look::from_game_camera(&camera.pers_cam_2.matrix));
+    let body_forward = {
+        let q = glam::Quat::from(player.chr_ins.modules.physics.orientation);
+        q * Vec3::NEG_Z
+    };
+    let look = view.look.get_or_insert_with(|| Look::from_game_camera(&camera.pers_cam_2.matrix, body_forward));
     let (dx, dy) = gamepad::mouse_delta();
     look.turn(dx, dy);
 

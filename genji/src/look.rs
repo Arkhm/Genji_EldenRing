@@ -11,8 +11,8 @@ use crate::glog;
 
 /// Overwatch's mouse formula: degrees turned per mouse count = 0.0066 x sensitivity.
 const OW_DEGREES_PER_COUNT: f32 = 0.0066;
-/// Overwatch sensitivity. Placeholder until the player's own Overwatch value is known.
-pub const OW_SENSITIVITY: f32 = 6.0;
+/// Overwatch sensitivity: the player's own Overwatch setting (6.90, told 2026-10-07).
+pub const OW_SENSITIVITY: f32 = 6.9;
 /// Pitch limit, degrees.
 const PITCH_LIMIT: f32 = 89.0;
 
@@ -25,9 +25,16 @@ pub struct Look {
 }
 
 impl Look {
-    /// Starts from the game's current camera.
-    pub fn from_game_camera(m: &F32ViewMatrix) -> Self {
-        let forward = Vec3::new(m.2.0, m.2.1, m.2.2).normalize_or(Vec3::Z);
+    /// Starts from the game's current camera, or from the character's facing (`body_forward`) when the game's
+    /// camera isn't set up yet (right after loading it sits at 0,0,0 facing +Z: seen in the step 4 and 5a logs).
+    pub fn from_game_camera(m: &F32ViewMatrix, body_forward: Vec3) -> Self {
+        let camera_ready = m.3.0 != 0.0 || m.3.1 != 0.0 || m.3.2 != 0.0;
+        let forward = if camera_ready {
+            Vec3::new(m.2.0, m.2.1, m.2.2).normalize_or(Vec3::Z)
+        } else {
+            glog!("LOOK", "game camera not set up yet; starting from the character's facing");
+            body_forward.normalize_or(Vec3::Z)
+        };
         let game_right = Vec3::new(m.0.0, m.0.1, m.0.2);
         let game_up = Vec3::new(m.1.0, m.1.1, m.1.2);
         let yaw = forward.x.atan2(forward.z);
