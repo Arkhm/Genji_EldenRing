@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a tested in game: PASSED (5a done)
+
+**Changed:** Nothing. Test of commit `7a2ef25`. `README.md`, `docs/DESIGN.md` updated.
+**Why:** Step 5a pass condition: look, walk on flat ground and slopes, walls stop you, no falling through the
+ground, no deaths.
+**Tested how:** You stood still and walked around for about a minute. I read `logs/genji.log` (288 lines).
+**Result:** You saw: no deaths, walking works fine. Log: controller on from 21.9 s to 84.6 s with no hand-back,
+no `HP dropped`, no `GAVE UP`; 123 reports, 51 while moving, top speed 5.50 m/s; walls stopped you in 4 reports.
+**Still broken / not tested:** Some outside push remains while walking (average 0.51 m per 0.5 s while moving;
+probably slopes), not visible to you. Ledges weren't tried in this session (falling worked in an earlier one).
+**Next:** 5b, jump, gravity and fall damage.
+
 ## 2026-10-07 Step 5a: zero the game's fall timer while driving
 
 **Changed:** `genji/src/movement.rs`: `CSChrFallModule.fall_timer` is set to 0 every frame while our controller

@@ -25,6 +25,9 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   attacks work again); menus are left alone (Q and Esc back out). Keep Elden Ring's default key bindings.
 - First-person camera (step 4, tested 2026-10-07): while Genji mode is active, the view is at eye height and
   your character's body is hidden; menus, the Esc menu, graces, dialogue and F9 give the normal camera back.
+- Genji's movement, first part (step 5a, tested 2026-10-07): your own mouse look with your Overwatch
+  sensitivity (6.90), walking at Overwatch speed (5.5 m/s) relative to where you look, walls stop you, steps and
+  slopes work. Jumping, fall damage, double jump and wall climb are not done yet (Space does nothing).
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once
