@@ -96,16 +96,24 @@ pub struct ContactMonitor {
 }
 
 impl ContactMonitor {
-    pub fn update(&mut self, me: Vec3, my_radius: f32, obstacles: &[Obstacle]) {
+    /// `my_animation`: the animation the game plays on us, logged with any damage to show whether the game
+    /// still treats us as attacking or falling.
+    pub fn update(&mut self, me: Vec3, my_radius: f32, obstacles: &[Obstacle], my_animation: i32) {
         let mut now = HashMap::new();
         for ob in obstacles {
             let dist = Vec3::new(ob.pos.x - me.x, 0.0, ob.pos.z - me.z).length();
             if dist <= my_radius + ob.radius + CONTACT_MARGIN {
                 match self.touching.get(&ob.id) {
-                    None => glog!("TOUCH", "touching character {:#x} (radius {:.2}, hp {})", ob.id, ob.radius, ob.hp),
-                    Some(&before) if ob.hp < before => {
-                        glog!("TOUCH", "character {:#x} LOST HP while we touch it: {before} -> {}", ob.id, ob.hp)
-                    }
+                    None => glog!(
+                        "TOUCH",
+                        "touching character {:#x} (radius {:.2}, hp {}) | our animation {my_animation}",
+                        ob.id, ob.radius, ob.hp
+                    ),
+                    Some(&before) if ob.hp < before => glog!(
+                        "TOUCH",
+                        "character {:#x} LOST HP while we touch it: {before} -> {} | our animation {my_animation}",
+                        ob.id, ob.hp
+                    ),
                     _ => {}
                 }
                 now.insert(ob.id, ob.hp);

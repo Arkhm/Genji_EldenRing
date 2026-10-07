@@ -3,6 +3,42 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5b: take over only after the game has landed the character; log our animation
+
+**Changed:** `genji/src/movement.rs`: before taking over, the game itself must report the character standing on
+solid ground and not falling for 0.3 s in a row (after 3 s it takes over anyway and logs that); the waiting
+counters reset whenever control goes back to the game. The current animation (TimeAct `anim_id`) is logged at
+takeover, in every movement report, and with every `TOUCH` line. `genji/src/obstacles.rs`: `TOUCH` lines carry our
+animation.
+**Why:** Your three tests (entry below): damage to touched characters only happens when the controller took
+over right after loading or respawning, and pressing F9 twice (which lets the game land the character)
+stopped it. My explanation, **not verified**: the controller grabbed the character while it was still dropping
+onto the ground after the loading screen, so the game never saw it land and kept treating it as falling or
+attacking (Elden Ring has plunging attacks that damage and stagger what you fall on). The animation numbers in
+the next log will show whether that's right.
+**Tested how:** Build OK, no warnings; 6 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** The damage itself, until your test.
+**Next:** Your test without F9.
+
+## 2026-10-07 Step 5b obstacle fix tested in game (3 sessions): no fall damage, no rock clipping; damage to characters depends on F9
+
+**Changed:** Nothing. Test of commit `f905288`.
+**Why:** Step 5b pass condition.
+**Tested how:** You ran three sessions: (1) with F9 off/on, (2) spawned partly inside the swamp floor, F9 twice
+fixed it, no damage to an enemy, (3) without F9: damage and staggers, worse after dying. I read `logs/genji.log`
+and `logs/genji.prev.log`.
+**Result:**
+- You saw: no fall damage; no clipping into rocks. Characters took damage and were staggered when the controller
+  had taken over right after loading or respawning; pressing F9 twice made it stop completely, even when jumping
+  into them.
+- Log, session with F9: touched characters 9 times (radius 0.8 to 1.9 m), **no HP lost**.
+- Log, last session without F9: **13 hits of 3 to 4 HP** on 4 characters while touching them (for example
+  `417 -> 414 -> 411` within 0.1 s, then every 0.3 to 0.4 s). The filter chosen was `0x2` (all bits see the same
+  surface, so any works).
+**Still broken / not tested:** See entry above.
+**Next:** Fix above.
+
 ## 2026-10-07 Step 5b: characters are obstacles, no fall damage, foot-level wall check in the air
 
 **Changed:** New `genji/src/obstacles.rs`: nearby living characters (from the game's distance-sorted list) are

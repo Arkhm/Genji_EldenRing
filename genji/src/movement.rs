@@ -61,6 +61,13 @@ const WALL_RAY_HEIGHTS: [f32; 3] = [0.65, 1.1, 1.6];
 /// In the air there are no steps to walk up, so we also look for walls at foot level. Without it, a timed jump
 /// could carry the feet into the edge of a rock and inside it (5b test, 2026-10-07).
 const AIR_WALL_RAY_HEIGHTS: [f32; 4] = [0.1, 0.65, 1.1, 1.6];
+/// Before taking over, the game itself must report the character standing on solid ground (not falling) for
+/// this long, seconds. Taking over while the character was still dropping onto the ground after a loading screen
+/// left the game's animation state "in the air", and touching or jumping into enemies then damaged and staggered
+/// them (5b test, 2026-10-07; pressing F9 twice, which lets the game land, made it go away).
+const SETTLE_TIME: f32 = 0.3;
+/// Take over anyway after waiting this long for the game to report the character settled, seconds.
+const SETTLE_GIVE_UP: f32 = 3.0;
 /// Landing ray starts this far above the feet, so a surface we've slightly sunk into is still found, metres.
 const LANDING_RAY_LIFT: f32 = 0.5;
 /// Ray-cast filter from the CS2 field note. It hits *some* map collision, but in one 5a test it hit a surface
@@ -121,6 +128,8 @@ pub struct Mover {
     since_left_ground: f32,
     jump_was_down: bool,
     contacts: ContactMonitor,
+    settled_for: f32,
+    waited_for: f32,
     character_blocks: u32,
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
@@ -163,6 +172,28 @@ impl Mover {
                 }
             }
             self.ever_hit = true;
+            // The game must have landed the character itself (see SETTLE_TIME).
+            let physics = &player.chr_ins.modules.physics;
+            let settled = physics.standing_on_solid_ground && !physics.is_falling;
+            self.waited_for += dt;
+            self.settled_for = if settled { self.settled_for + dt } else { 0.0 };
+            if self.settled_for < SETTLE_TIME {
+                if self.waited_for < SETTLE_GIVE_UP {
+                    return None;
+                }
+                glog!("MOVE", "game never reported the character settled in {SETTLE_GIVE_UP}s; taking over anyway");
+            }
+            glog!(
+                "MOVE",
+                "settled after {:.2}s: on solid ground {} falling {} ground touch state {} animation {}",
+                self.waited_for,
+                physics.standing_on_solid_ground as u8,
+                physics.is_falling as u8,
+                player.chr_ins.modules.behavior.ground_touch_state,
+                current_animation(player)
+            );
+            self.settled_for = 0.0;
+            self.waited_for = 0.0;
             if self.waiting_frames > 0 {
                 glog!("MOVE", "collision ready after {} frames of waiting", self.waiting_frames);
                 self.waiting_frames = 0;
@@ -304,7 +335,7 @@ impl Mover {
         player.chr_ins.modules.fall.fall_timer = 0.0;
         self.last_written = Some(pos);
         self.record(player, pos, frame_push);
-        self.contacts.update(pos, RADIUS, &others);
+        self.contacts.update(pos, RADIUS, &others, current_animation(player));
 
         // Report.
         self.moved += horizontal.length();
@@ -313,7 +344,7 @@ impl Mover {
             let speed = self.moved / self.report_timer;
             glog!(
                 "MOVE",
-                "speed {speed:.2} m/s | yaw {:.1} pitch {:.1} | {} | vy {:.1} | wall hits {} | character blocks {} | outside push {:.2} m | pos ({:.2}, {:.2}, {:.2})",
+                "speed {speed:.2} m/s | yaw {:.1} pitch {:.1} | {} | vy {:.1} | wall hits {} | character blocks {} | outside push {:.2} m | animation {} | pos ({:.2}, {:.2}, {:.2})",
                 look.yaw.to_degrees(),
                 look.pitch.to_degrees(),
                 if self.grounded { "ground" } else { "air" },
@@ -321,6 +352,7 @@ impl Mover {
                 self.wall_hits,
                 self.character_blocks,
                 self.outside_push,
+                current_animation(player),
                 pos.x, pos.y, pos.z
             );
             self.outside_push = 0.0;
@@ -334,6 +366,8 @@ impl Mover {
 
     /// Gives control back to the game (menus, Torrent, ladders, death, F9).
     pub fn release(&mut self, player: &mut PlayerIns) {
+        self.settled_for = 0.0;
+        self.waited_for = 0.0;
         if !self.active {
             return;
         }
@@ -443,6 +477,13 @@ impl Mover {
         ];
         candidates.into_iter().max_by(|a, b| a.length().total_cmp(&b.length())).unwrap_or(Vec3::ZERO)
     }
+}
+
+/// The animation the game is currently playing on the character (TimeAct animation id).
+pub fn current_animation(player: &PlayerIns) -> i32 {
+    let time_act = &player.chr_ins.modules.time_act;
+    let queue = &time_act.anim_queue;
+    queue[time_act.read_idx as usize % queue.len()].anim_id
 }
 
 /// Picks the ray filter whose surface is right under the feet: casts a 3 m ray down from 1 m above the feet with
