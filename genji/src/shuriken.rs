@@ -186,7 +186,6 @@ pub struct Thrower {
     headshots: u32,
     removed_after_life_zero: u32,
     removed_after_push: u32,
-    pool_diag_timer: f32,
 }
 
 impl Thrower {
@@ -396,16 +395,6 @@ impl Thrower {
         }
         for (pos, vel, age) in impacts {
             self.resolve(player, pos, vel, age, dt);
-        }
-
-        // STATUS.md option A: name what fills the second pool, at most every 10 s while it holds anything. "Holds
-        // anything" = its live list has a head (+0x28). The first version waited for the extra-allocation count
-        // (+0x38), which stays 0 until the 64 buffer slots are used up, so it never ran in a 45-throw test.
-        self.pool_diag_timer -= dt;
-        let pool2_head = unsafe { ((manager as *const CSBulletManager as *const u8).add(0x28) as *const u64).read() };
-        if pool2_head != 0 && self.pool_diag_timer <= 0.0 {
-            self.pool_diag_timer = 10.0;
-            crate::pooldiag::report(manager);
         }
 
         self.report_timer += dt;

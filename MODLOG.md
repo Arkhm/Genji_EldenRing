@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 STATUS option A result: pool entries are plain impact records; diagnostic removed (it froze the game)
+
+**Changed:** `genji/src/pooldiag.rs` removed (kept in git history at `b0ad34a`), its call removed from
+`genji/src/shuriken.rs`, module removed from `genji/src/lib.rs`. `STATUS.md` updated with the result and the
+remaining options.
+**Why:** Your test of `3309b4d`: the screen froze for moments. The log shows each diagnostic run took about 4 s on
+the game's frame (39.108 -> 43.541 s, 53.115 -> 57.171 s, 66.882 -> 72.890 s): my code checked the memory before
+every 8-byte read, thousands of times in a row. Not your PC or Codex.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Diagnostic output (from your test): all 64 buffer slots and the head entry have **no class name**
+(plain data, not objects); a live entry holds a small id (`0xff00`, `0xff24`), empty handles (`0xffffffff...`), a
+3x3 rotation at `+0x900` and a position at `+0x930` near the impact point, and 0.1 / 0.785 (45 degrees) / 79.2 at
+`+0x6f0` / `+0x6fc`, `+0x700` / `+0x8fc`. Not matched to any dagger Bullet value. No "next" pointer found.
+**Still broken / not tested:** Unlimited throwing. The build without the diagnostic is not tested in game (it
+removes code only).
+**Next:** Your choice: option B (recommended) or C in `STATUS.md`.
+
 ## 2026-10-07 Step 6 diagnostic: trigger fixed (it never ran)
 
 **Changed:** `genji/src/shuriken.rs`: the pool diagnostic now runs whenever the second pool's live list has a head

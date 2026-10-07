@@ -39,7 +39,27 @@ and, slowly, by itself (entries expire after a while).
   collision, the bullet's targeting/homing data.
 - Whether every projectile does this, or the Throwing Dagger row in particular.
 
-## Options from here
+## Option A result (2026-10-07)
+The read-only diagnostic ran three times (it also froze the game for about 4 s each time: it checked memory before
+every 8-byte read on the game's frame; removed again):
+- The entries are **not C++ objects**: no class name in any of the 64 buffer slots, none embedded in the first
+  0x200 bytes. Plain data records.
+- Content of a live entry: a small id at `+0x000` (`0xff00`, `0xff24`); many `0xffffffff...` (empty handles);
+  a **3x3 rotation** at `+0x900..+0x928` and a **position** at `+0x930..+0x938` near the impact point;
+  `+0x6f0` = 0.1, `+0x6fc` = `+0x700` = 0.785 (45 degrees in radians), `+0x8fc` = 79.2. None of these matches a
+  value of the dagger's Bullet row directly (homing 10 degrees, lock limit 30, ranges 2/7/80...).
+- So: each hit leaves a data record at the impact point that outlives the projectile and expires after a while.
+  What system owns it (impact decal, AI noise, hit record, ...) is not identified; I won't build a fix on a guess.
+
+## Options from here (updated)
+
+| | Option | What it does | Cost |
+|---|---|---|---|
+| **B (recommended now)** | Try other projectile rows (a sorcery bolt that bursts on impact, an arrow, another throwable) with a debug key to switch between them, logging how much the pool grows per wall hit. | Finds a projectile that doesn't leave records; we give it the shuriken values. | One or two sessions |
+| C | Ghidra: find the code that writes into this pool (we now know an entry's shape: id at 0, rotation at 0x900, position at 0x930). | The real answer. | Larger; Ghidra 12 install |
+| D | `dmgHitRecordLifeTime` | Still a guess. | Tiny |
+
+## Options from here (original)
 
 | | Option | What it does | Cost | Risk |
 |---|---|---|---|---|
