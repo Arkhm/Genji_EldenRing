@@ -18,7 +18,6 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
 - `tools/play.ps1` backs up your saves, builds `genji.dll` and starts Elden Ring offline through me3 with its
   own save (`ER0000.genji.sl2`). The DLL loads, and logs the player's position, map block and HP to
   `logs/genji.log` (tested in game 2026-10-07).
-
 - Ultrawide: no black bars (tested 2026-10-07).
 - Genji's controls (step 3, tested 2026-10-07): during gameplay, E, Q and Left Shift are hidden from Elden Ring
   and logged as Genji actions; F does Elden Ring's interact; F9 switches Genji mode off and on; menus are left
