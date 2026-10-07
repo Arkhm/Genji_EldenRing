@@ -3,6 +3,51 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 2 (Overwatch assets): BLOCKED, waiting for a DataTool update
+
+**Changed:** New `tools/get_datatool.ps1` (downloads the latest official DataTool release into
+`third_party/datatool/`) and `tools/extract_genji.ps1` (runs DataTool read-only and offline, extracts Genji's
+skin with animations, his abilities and voice lines into `owassets/raw/`, writes `logs/extract-summary.txt`).
+Downloaded DataTool v2.24.1.0+1149 (`toolchain-release.zip`, 75,453,689 bytes, SHA-256 `64042bdd...840482c`,
+from github.com/overtools/OWLib releases) into `third_party/datatool/` (gitignored). `docs/DESIGN.md` plan order
+updated.
+**Why:** Step 2 of the plan: get Genji's assets from your own Overwatch install.
+**Tested how:** Ran `DataTool.exe <Overwatch> list-heroes --online=false`, then `tools/extract_genji.ps1`.
+**Result:** **Blocked.** Your Steam Overwatch updated on 2026-10-06 to build `prometheus-2_25_0_0-154088`
+(the new season). The newest DataTool supports 2.24.1.0.153480 and refuses newer builds:
+`unable to parse TRG. invalid version 14, expected 5 ... 13`. Neither DataTool nor its file library TACTLib
+has unreleased support yet (checked their GitHub: last DataTool update 2026-09-15, last TACTLib commit
+2026-09-24). Patching it ourselves is not an option: each build also needs decryption keys that the DataTool
+team gets out of the Overwatch game itself, which would mean working around Overwatch's protection (hard
+rule 5). Good sign: DataTool did open the Steam install and read its build number, so the Steam layout itself
+looks supported (not proven).
+- Found while testing: `--online` is on by default in DataTool ("allow downloading of corrupted files" from
+  Blizzard). Our script always passes `--online=false`.
+- First script version crashed on Windows PowerShell 5.1 (a tool writing to its error stream counted as a
+  script failure) before showing its own message. Fixed by running DataTool as a separate process; now it
+  stops with "This DataTool doesn't support the installed Overwatch build yet".
+**Still broken / not tested:** The extraction itself (`extract-unlocks`, `extract-abilities`,
+`extract-hero-voice` and their exact search syntax) is **not tested**. Whether Genji's first-person model
+comes out is unknown.
+**Next:** Recent DataTool updates came 8 to 24 days after an Overwatch patch. When a new release is out, run
+`tools\get_datatool.ps1` then `tools\extract_genji.ps1`. Meanwhile, continue with the mechanics (steps 3 to 9),
+which don't need Overwatch assets.
+
+## 2026-10-07 Ultrawide and input diagnostics tested in game: PASSED
+
+**Changed:** Nothing. Test of commits `df286b8` (ultrawide) and `0da4be5` (input diagnostics).
+**Why:** Check the ultrawide fix; find out why only controller prompts showed.
+**Tested how:** You launched with `tools/play.ps1`, played, changed "Device for On-Screen Prompts" to Keyboard
+and Mouse. I read `logs/genji.log` (151 lines).
+**Result:**
+- Ultrawide: `WIDE patched 0x7ff76a41da5e: 0x74 -> 0xeb (scan 1, 0.0s)` at 0.051 s. You confirmed no black bars.
+- Prompts: you confirmed keyboard icons after changing the setting. Cause: the setting, copied from your old
+  save. No controller of any kind (real, Steam Input or ViGEm virtual) appeared in the log the whole session;
+  keyboard and mouse presses all arrived (`Esc`, `Q` x4, `W A S D`, `Space`, `F`, `LShift`, mouse clicks).
+**Still broken / not tested:** The controller plug-in part of the test wasn't done, so connecting a pad is
+not verified in the diagnostic (not needed now).
+**Next:** Step 2.
+
 ## 2026-10-07 Input diagnostics, and the "controller-only prompts" report
 
 **Changed:** New `genji/src/inputdiag.rs`, wired into `genji/src/lib.rs` (commit `0da4be5`). Read-only: while the
