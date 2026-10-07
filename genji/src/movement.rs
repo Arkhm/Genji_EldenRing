@@ -33,6 +33,7 @@ use glam::Vec3;
 
 use crate::glog;
 use crate::look::Look;
+use crate::obstacles::{self, ContactMonitor};
 
 /// Overwatch ground speed for most heroes, metres per second.
 const RUN_SPEED: f32 = 5.5;
@@ -44,10 +45,8 @@ const JUMP_HEIGHT: f32 = 1.2;
 const COYOTE_TIME: f32 = 0.1;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
 const HEAD_HEIGHT: f32 = 1.75;
-/// Fall damage (Elden Ring-style; Overwatch has none): none below SAFE_FALL, rising linearly to all of max HP at
-/// LETHAL_FALL. Heights are from the highest point of the jump or the edge you walked off, in metres.
-const SAFE_FALL: f32 = 8.0;
-const LETHAL_FALL: f32 = 20.0;
+// No fall damage in Genji mode (your choice, 2026-10-07, like Overwatch). Falls are only logged. An Elden
+// Ring-style version (none to 8 m, lethal at 20 m) was built and worked in game; see MODLOG.
 const MAX_FALL_SPEED: f32 = 55.0;
 /// Highest step the character walks up without jumping, metres.
 const MAX_STEP: f32 = 0.5;
@@ -59,6 +58,11 @@ const GROUND_GAP: f32 = 0.08;
 const RADIUS: f32 = 0.35;
 /// Heights (above the feet) of the rays that look for walls. All above MAX_STEP so steps don't count as walls.
 const WALL_RAY_HEIGHTS: [f32; 3] = [0.65, 1.1, 1.6];
+/// In the air there are no steps to walk up, so we also look for walls at foot level. Without it, a timed jump
+/// could carry the feet into the edge of a rock and inside it (5b test, 2026-10-07).
+const AIR_WALL_RAY_HEIGHTS: [f32; 4] = [0.1, 0.65, 1.1, 1.6];
+/// Landing ray starts this far above the feet, so a surface we've slightly sunk into is still found, metres.
+const LANDING_RAY_LIFT: f32 = 0.5;
 /// Ray-cast filter from the CS2 field note. It hits *some* map collision, but in one 5a test it hit a surface
 /// 0.9 m below the feet (probably the low-detail collision), so the filter is now chosen at takeover from the
 /// 32 single bits (see `choose_filter`). This value is only one of the candidates.
@@ -116,6 +120,8 @@ pub struct Mover {
     /// Time since leaving the ground without jumping (coyote time).
     since_left_ground: f32,
     jump_was_down: bool,
+    contacts: ContactMonitor,
+    character_blocks: u32,
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
     last_hp: Option<i32>,
@@ -201,7 +207,13 @@ impl Mover {
             dir = dir.normalize();
         }
         let wanted = dir * RUN_SPEED * dt;
-        let horizontal = self.clip_horizontal(phys_world, player, start, wanted, w);
+        let others = obstacles::nearby(&player.chr_ins, start);
+        let (wanted, char_blocked) = obstacles::clip(start, wanted, RADIUS, HEAD_HEIGHT, &others);
+        if char_blocked {
+            self.character_blocks += 1;
+        }
+        let heights: &[f32] = if self.grounded { &WALL_RAY_HEIGHTS } else { &AIR_WALL_RAY_HEIGHTS };
+        let horizontal = self.clip_horizontal(phys_world, player, start, wanted, w, heights);
         let mut pos = start + horizontal;
 
         // Jump: Space pressed (not held) while on the ground, or just after walking off an edge.
@@ -248,7 +260,7 @@ impl Mover {
             self.vy = (self.vy - GRAVITY * dt).max(-MAX_FALL_SPEED);
             self.fall_time += dt;
             let drop = (-self.vy * dt).max(0.0);
-            let lift = 0.3;
+            let lift = LANDING_RAY_LIFT;
             match ray(phys_world, player, self.filter, pos + Vec3::Y * lift, Vec3::NEG_Y * (lift + drop), w) {
                 Some(hit) if self.vy <= 0.0 => {
                     self.ever_hit = true;
@@ -262,7 +274,7 @@ impl Mover {
                     self.vy = 0.0;
                     self.grounded = true;
                     self.fall_time = 0.0;
-                    apply_fall_damage(player, fallen);
+                    glog!("MOVE", "fell {fallen:.1} m (no fall damage in Genji mode)");
                 }
                 _ => {
                     pos.y += self.vy * dt;
@@ -292,6 +304,7 @@ impl Mover {
         player.chr_ins.modules.fall.fall_timer = 0.0;
         self.last_written = Some(pos);
         self.record(player, pos, frame_push);
+        self.contacts.update(pos, RADIUS, &others);
 
         // Report.
         self.moved += horizontal.length();
@@ -300,12 +313,13 @@ impl Mover {
             let speed = self.moved / self.report_timer;
             glog!(
                 "MOVE",
-                "speed {speed:.2} m/s | yaw {:.1} pitch {:.1} | {} | vy {:.1} | wall hits {} | outside push {:.2} m | pos ({:.2}, {:.2}, {:.2})",
+                "speed {speed:.2} m/s | yaw {:.1} pitch {:.1} | {} | vy {:.1} | wall hits {} | character blocks {} | outside push {:.2} m | pos ({:.2}, {:.2}, {:.2})",
                 look.yaw.to_degrees(),
                 look.pitch.to_degrees(),
                 if self.grounded { "ground" } else { "air" },
                 self.vy,
                 self.wall_hits,
+                self.character_blocks,
                 self.outside_push,
                 pos.x, pos.y, pos.z
             );
@@ -313,6 +327,7 @@ impl Mover {
             self.report_timer = 0.0;
             self.moved = 0.0;
             self.wall_hits = 0;
+            self.character_blocks = 0;
         }
         Some(pos)
     }
@@ -384,7 +399,15 @@ impl Mover {
 
     /// How much of `wanted` (horizontal) can be moved without entering a wall. Slides along walls by trying
     /// the two ground axes separately when the full move is blocked.
-    fn clip_horizontal(&mut self, world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, start: Vec3, wanted: Vec3, w: f32) -> Vec3 {
+    fn clip_horizontal(
+        &mut self,
+        world: &eldenring::cs::CSPhysWorld,
+        player: &PlayerIns,
+        start: Vec3,
+        wanted: Vec3,
+        w: f32,
+        heights: &[f32],
+    ) -> Vec3 {
         let len = wanted.length();
         if len < 1e-5 {
             return Vec3::ZERO;
@@ -397,7 +420,7 @@ impl Mover {
             }
             let dir = delta / l;
             let mut allowed = l;
-            for h in WALL_RAY_HEIGHTS {
+            for &h in heights {
                 let origin = start + Vec3::Y * h;
                 if let Some(hit) = ray(world, player, filter, origin, dir * (l + RADIUS), w) {
                     let dist = Vec3::new(hit.x - origin.x, 0.0, hit.z - origin.z).length() - RADIUS;
@@ -420,23 +443,6 @@ impl Mover {
         ];
         candidates.into_iter().max_by(|a, b| a.length().total_cmp(&b.length())).unwrap_or(Vec3::ZERO)
     }
-}
-
-/// Elden Ring-style fall damage from the height fallen (see SAFE_FALL / LETHAL_FALL). Logged on every landing.
-fn apply_fall_damage(player: &mut PlayerIns, fallen: f32) {
-    let data = &mut player.chr_ins.modules.data;
-    let damage = fall_damage(fallen, data.max_hp);
-    let before = data.hp;
-    if damage > 0 {
-        data.hp = (data.hp - damage).max(0);
-    }
-    glog!("MOVE", "fell {fallen:.1} m: fall damage {damage} (hp {before} -> {})", data.hp);
-}
-
-/// Damage for a fall of `fallen` metres with `max_hp` maximum HP.
-fn fall_damage(fallen: f32, max_hp: i32) -> i32 {
-    let share = ((fallen - SAFE_FALL) / (LETHAL_FALL - SAFE_FALL)).clamp(0.0, 1.0);
-    (share * max_hp as f32).ceil() as i32
 }
 
 /// Picks the ray filter whose surface is right under the feet: casts a 3 m ray down from 1 m above the feet with
@@ -501,15 +507,6 @@ fn face(physics: &mut eldenring::cs::CSChrPhysicsModule, look: &Look) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn fall_damage_curve() {
-        assert_eq!(fall_damage(-1.0, 800), 0, "landing higher than the jump start");
-        assert_eq!(fall_damage(1.2, 800), 0, "a normal jump");
-        assert_eq!(fall_damage(8.0, 800), 0, "safe limit");
-        assert_eq!(fall_damage(14.0, 800), 400, "halfway: half of max HP");
-        assert_eq!(fall_damage(20.0, 800), 800, "lethal");
-        assert_eq!(fall_damage(80.0, 800), 800, "never more than max HP");
-    }
 
     #[test]
     fn jump_reaches_jump_height() {

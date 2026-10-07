@@ -13,6 +13,7 @@ mod gamepad;
 mod log;
 mod look;
 mod movement;
+mod obstacles;
 mod ultrawide;
 
 use std::ffi::c_void;

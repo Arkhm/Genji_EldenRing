@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5b: characters are obstacles, no fall damage, foot-level wall check in the air
+
+**Changed:** New `genji/src/obstacles.rs`: nearby living characters (from the game's distance-sorted list) are
+upright cylinders (their collision radius and height); moves into them are cut, sideways moves slide around them;
+a contact monitor logs touching and any HP a touched character loses (`TOUCH` lines). `genji/src/movement.rs`:
+uses it; fall damage removed (falls only logged); in the air a wall ray at 0.1 m is added; the landing ray starts
+0.5 m above the feet instead of 0.3 m; reports count `character blocks`. `genji/src/lib.rs`: new module.
+**Why:** Your 5b test (entry below): you prefer no fall damage in Genji mode; walking into an animal damaged it
+repeatedly; a timed jump got you inside a rock.
+**Tested how:** Build OK, no warnings; 6 unit tests pass (new: walking straight into a character stops; a
+diagonal move slides around it; walking away is never blocked; characters far away, above or below are
+ignored).
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether the animal damage came from overlapping it (my explanation, not
+verified: nothing logged other characters' HP in that session; the `TOUCH` lines will show it now). Rock fix:
+you couldn't reproduce the bug yourself, so it may stay unverified.
+**Next:** Your test.
+
+## 2026-10-07 Step 5b tested in game: jumps work; three issues
+
+**Changed:** Nothing. Test of commit `1596351`.
+**Why:** Step 5b pass condition.
+**Tested how:** You jumped around, onto rocks, under an overhang, dropped from ledges, walked into an animal. I
+read `logs/genji.log` (1,389 lines) and your screenshot.
+**Result:**
+- You saw: jumps feel similar to Overwatch; fall damage works. Log: 84 jumps, 1 ceiling hit, landings from 0 to
+  3.5 m with no damage, and two damaging falls exactly on the formula (10.5 m -> 159 of 760 HP; 10.0 m -> 124 of
+  601 at that time... formula uses max HP, see code).
+- Issues: (1) you prefer **no fall damage** in Genji mode; (2) a specifically timed jump into a rock (screenshot)
+  got you inside it, not reproducible afterwards; (3) **walking into an animal dealt it repeated damage**.
+**Still broken / not tested:** See entry above.
+**Next:** Fixes above.
+
 ## 2026-10-07 Step 5b: jump, ceiling check, fall damage
 
 **Changed:** `genji/src/movement.rs`: Space jumps when on the ground, or up to 0.1 s after walking off an edge;
