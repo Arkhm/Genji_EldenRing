@@ -1,0 +1,14 @@
+# me3 profile for Genji in Elden Ring. Paths are relative to this file.
+profileVersion = "v1"
+
+# Separate save: the first launch copies your ER0000.sl2 to this name; your normal save is never written.
+savefile = "ER0000.genji.sl2"
+
+# Offline. me3 blocks the matchmaking servers by default; this makes it explicit.
+start_online = false
+
+[[supports]]
+game = "eldenring"
+
+[[natives]]
+path = '../build/genji.dll'

@@ -155,13 +155,12 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 
 ## 6. Risks and unknowns (honest list)
 
-- **Build tools are missing.** This PC has no Microsoft C++ linker, so Rust can't build a DLL yet. Tested: a
-  minimal DLL build fails. Fix: install Visual Studio Build Tools (step 1).
-- **Old mod loader in your game folder.** `dinput8.dll` (Elden Mod Loader) is in your Elden Ring folder and
-  loads `ersc.dll` (**Seamless Co-op, which goes online**), UltrawideFix and RemoveVignette. Windows loads that
-  `dinput8.dll` every time `eldenring.exe` starts, including under me3. For an offline-only Genji session it
-  has to be switched off (renamed) while we play. That writes to your game folder, so you decide (see the
-  questions in the chat or in `MODLOG.md`).
+- ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.
+- ~~Old mod loader in your game folder.~~ Resolved 2026-10-07: `dinput8.dll`, Seamless Co-op, ModEngine2 and
+  the other old mods were moved to `backups/game-folder-old-mods/`.
+- **fromsoftware-rs version pin.** The crates.io release (0.14.0) only supports Elden Ring 2.6.2.0. We depend
+  on its GitHub main branch pinned to commit `59fbd3b`, which supports 2.7.1.0. When Elden Ring updates, this
+  pin has to move to a commit that supports the new version.
 - **First-person models:** Overwatch has first-person arm models and animations. Whether DataTool exports them
   for Genji in a usable form is **not verified** yet (step 2 answers it). Fallback: use the third-person model
   with the head hidden.

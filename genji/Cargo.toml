@@ -1,0 +1,18 @@
+[package]
+name = "genji"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Git main, pinned: the crates.io 0.14.0 release only knows Elden Ring 2.6.2.0. This commit includes the
+# RVA update for 1.17.1 (exe 2.7.1.0), which is the version installed here.
+eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "59fbd3b3b7daaf14aca47c9f73530493dba6bc79" }
+fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "59fbd3b3b7daaf14aca47c9f73530493dba6bc79" }
+
+[profile.release]
+debug = 1          # line numbers in crash backtraces
+

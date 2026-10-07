@@ -3,6 +3,27 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 1: hello DLL, me3 profile, save backup
+
+**Changed:** New Rust crate `genji/` (`Cargo.toml`, `src/lib.rs`, `src/log.rs`), me3 profile
+`profile/genji.me3`, scripts `tools/build.ps1`, `tools/backup_saves.ps1`, `tools/play.ps1`. `docs/DESIGN.md`
+risk list updated.
+**Why:** Prove the whole pipeline (build, load through me3, find the game's objects, log) before any Genji code.
+The DLL changes nothing in the game. It waits for the game's task system, then once per second logs the
+player's position, map block, HP and frame rate, and logs when the player appears or disappears (loading
+screens). A crash inside our code is logged and switches the DLL off instead of crashing the game.
+**Tested how:** Built with `tools/build.ps1`; ran `tools/backup_saves.ps1`; checked the profile with
+`me3 profile show`.
+**Result:** Build OK, no warnings, `build/genji.dll` 264,192 bytes. Backup OK: 6 files, 110.5 MB, in
+`backups/saves/20261007-005004/` (`ER0000.sl2`, `ER0000.co2` and their `.bak`, `GraphicsConfig.xml`,
+`steam_autocloud.vdf`). me3 reads the profile: savefile `ER0000.genji.sl2`, Start Online false, `genji.dll`
+enabled. Found and fixed before building: the crates.io `eldenring` 0.14.0 only supports exe 2.6.2.0 and would
+have crashed on load; switched to fromsoftware-rs GitHub main pinned at `59fbd3b` (supports 2.7.1.0).
+**Still broken / not tested:** **Not tested in game.** Unknown until you run it: whether me3 loads the DLL,
+whether the boot wait succeeds, whether the logged values make sense. Without UltrawideFix, an ultrawide
+monitor will show black bars again.
+**Next:** You run `tools/play.ps1`, load your character, walk, quit; I read `logs/genji.log`.
+
 ## 2026-10-07 Old mods moved out of the Elden Ring folder
 
 **Changed:** Moved these out of `D:\SteamLibrary\steamapps\common\ELDEN RING\Game` (with your permission) into
