@@ -46,6 +46,7 @@ struct View {
     handback_reason: Option<&'static str>,
     thrower: Thrower,
     left_was_down: bool,
+    p_was_down: bool,
 }
 
 pub fn camera_step(dt: f32) {
@@ -83,8 +84,14 @@ pub fn camera_step(dt: f32) {
         view.handback_reason = reason;
     }
 
-    // Shuriken flight and damage values on the dagger's rows: on in Genji mode, vanilla otherwise.
+    // Shuriken flight and damage values on the projectile's rows: on in Genji mode, vanilla otherwise.
     view.thrower.set_shuriken_values(reason.is_none());
+    // STATUS.md option B: P switches the projectile row being compared.
+    let p_down = dinput::key_down(&dinput::raw_keys(), dik::P);
+    if p_down && !view.p_was_down {
+        view.thrower.next_candidate(reason.is_none());
+    }
+    view.p_was_down = p_down;
 
     if reason.is_some() {
         view.mover.release(player);

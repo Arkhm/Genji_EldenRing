@@ -3,6 +3,22 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 STATUS option B: compare projectile rows (P switches)
+
+**Changed:** `genji/src/shuriken.rs`: the projectile is now one of five player-owned rows from your
+regulation.bin, switched with **P**: Throwing Dagger 10170000 (start), Bone Dart 10171000, Kukri 10173000, Ruin
+Fragment 10176000, Glintstone Pebble 10400000 (sorcery; its attack row is 40000, so the attack row is now read from
+the bullet instead of assuming the same id). Each gets the same shuriken values while active and its vanilla values
+back when you switch or leave Genji mode. The `SHURIKEN` line shows the active projectile, impacts since the switch,
+the pool levels, the peak extra count since the switch, and a heuristic count of marked buffer slots. `PROJECTILE`
+lines mark each switch. `genji/src/camera.rs`: P key; `genji/src/dinput.rs`: P code.
+**Why:** You chose option B in `STATUS.md`.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether other rows behave the same with our values (speed, no drop); P might do
+something in Elden Ring itself (not bound by default as far as I know).
+**Next:** Your comparison session.
+
 ## 2026-10-07 STATUS option A result: pool entries are plain impact records; diagnostic removed (it froze the game)
 
 **Changed:** `genji/src/pooldiag.rs` removed (kept in git history at `b0ad34a`), its call removed from

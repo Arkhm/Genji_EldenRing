@@ -32,8 +32,17 @@ use glam::Vec3;
 use crate::glog;
 use crate::look::Look;
 
-/// Elden Ring's Throwing Dagger projectile (Bullet and AtkParam_Pc row).
-const THROWING_DAGGER_BULLET: i32 = 10_170_000;
+/// STATUS.md option B (2026-10-07): projectile rows to compare. Every wall hit with the Throwing Dagger leaves a
+/// record in the bullet manager's second pool until it expires, and after 256 of them throws are refused. P switches
+/// between these rows (all player-owned, from your regulation.bin); each gets the same shuriken values; the log
+/// shows the pool level so we can see which one leaves no records.
+const CANDIDATES: [(i32, &str); 5] = [
+    (10_170_000, "Throwing Dagger"),
+    (10_171_000, "Bone Dart"),
+    (10_173_000, "Kukri"),
+    (10_176_000, "Ruin Fragment"),
+    (10_400_000, "Glintstone Pebble"),
+];
 
 /// Where the shuriken appears, relative to the eye: like Overwatch's Genji (your screenshot, 2026-10-07: just right
 /// of and below the centre of the screen, not at the far right). Metres forward, right, down.
@@ -145,6 +154,8 @@ struct RowValues {
     sfx_hit: i32,
     sfx_delete_by_hit: i8,
     sfx_delete_by_life_end: i8,
+    /// The AtkParam_Pc row the bullet uses (not always the bullet's own id: Glintstone Pebble uses 40000).
+    atk_row: u32,
     atk_phys: u16,
 }
 
@@ -186,6 +197,10 @@ pub struct Thrower {
     headshots: u32,
     removed_after_life_zero: u32,
     removed_after_push: u32,
+    /// Index into CANDIDATES.
+    candidate: usize,
+    impacts: u32,
+    peak_extra: u32,
 }
 
 impl Thrower {
@@ -197,11 +212,16 @@ impl Thrower {
         let Ok(params) = (unsafe { SoloParamRepository::instance_mut() }) else {
             return;
         };
-        let id = THROWING_DAGGER_BULLET as u32;
+        let id = self.bullet_id() as u32;
         match self.vanilla {
             None => {
-                let (Some(bullet), Some(atk)) = (params.get::<BulletParam>(id), params.get::<AtkParam_Pc>(id)) else {
-                    glog!("THROW", "Bullet or AtkParam_Pc row {id} not found; shuriken values not applied");
+                let Some(bullet) = params.get::<BulletParam>(id) else {
+                    glog!("THROW", "Bullet row {id} not found; shuriken values not applied");
+                    return;
+                };
+                let atk_row = bullet.atk_id_bullet() as u32;
+                let Some(atk) = params.get::<AtkParam_Pc>(atk_row) else {
+                    glog!("THROW", "AtkParam_Pc row {atk_row} (of bullet {id}) not found; shuriken values not applied");
                     return;
                 };
                 let vanilla_hit = bullet.sfx_id_hit();
@@ -218,6 +238,7 @@ impl Thrower {
                     sfx_hit: bullet.sfx_id_hit(),
                     sfx_delete_by_hit: bullet.bullet_sfx_delete_type_by_hit(),
                     sfx_delete_by_life_end: bullet.bullet_sfx_delete_type_by_life_dead(),
+                    atk_row,
                     atk_phys: atk.atk_phys(),
                 };
                 let shuriken = RowValues {
@@ -233,12 +254,14 @@ impl Thrower {
                     sfx_hit: vanilla_hit,
                     sfx_delete_by_hit: SFX_DELETE,
                     sfx_delete_by_life_end: SFX_DELETE,
+                    atk_row,
                     atk_phys: ENGINE_ATK_PHYS,
                 };
                 write_values(params, id, &shuriken);
                 glog!(
                     "THROW",
-                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, hit effect {} kept, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    "shuriken values ON for {} (bullet {id}, attack {atk_row}): speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, hit effect {} kept, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    CANDIDATES[self.candidate].1,
                     vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick, vanilla.sfx_hit,
                     vanilla.sfx_delete_by_hit, vanilla.sfx_delete_by_life_end, vanilla.atk_phys
                 );
@@ -246,9 +269,33 @@ impl Thrower {
             }
             Some(vanilla) => {
                 write_values(params, id, &vanilla);
-                glog!("THROW", "shuriken values OFF: vanilla Throwing Dagger restored");
+                glog!("THROW", "shuriken values OFF: vanilla {} restored", CANDIDATES[self.candidate].1);
                 self.vanilla = None;
             }
+        }
+    }
+
+    fn bullet_id(&self) -> i32 {
+        CANDIDATES[self.candidate].0
+    }
+
+    /// Switches to the next projectile row (STATUS.md option B). `active`: Genji mode currently applies the values.
+    pub fn next_candidate(&mut self, active: bool) {
+        self.set_shuriken_values(false);
+        self.candidate = (self.candidate + 1) % CANDIDATES.len();
+        self.flying.clear();
+        self.impacts = 0;
+        self.peak_extra = 0;
+        glog!(
+            "PROJECTILE",
+            "now {} (bullet {}), {} of {}",
+            CANDIDATES[self.candidate].1,
+            self.bullet_id(),
+            self.candidate + 1,
+            CANDIDATES.len()
+        );
+        if active {
+            self.set_shuriken_values(true);
         }
     }
 
@@ -271,7 +318,7 @@ impl Thrower {
             behavior_id: -1,
             magic_id: -1,
             unk10: 0,
-            bullet_id: THROWING_DAGGER_BULLET,
+            bullet_id: self.bullet_id(),
             goods_id: -1,
             dummy_poly_id: -1,
             target: u64::MAX,
@@ -319,6 +366,7 @@ impl Thrower {
         let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
             return;
         };
+        let current = self.bullet_id();
         let mut seen = std::collections::HashSet::new();
         let mut impacts: Vec<(Vec3, Vec3, f32)> = Vec::new();
         let (mut live, mut stuck, mut sample_life) = (0u32, 0u32, None);
@@ -328,7 +376,7 @@ impl Thrower {
                 bullet.fly_state.base.param.param_id,
                 bullet.exp_state.base.param.param_id,
             ];
-            if !ids.contains(&THROWING_DAGGER_BULLET) {
+            if !ids.contains(&current) {
                 continue;
             }
             let handle = unsafe { std::ptr::read(&bullet.field_ins_handle as *const _ as *const u64) };
@@ -361,6 +409,7 @@ impl Thrower {
                     // Slowed sharply: it hit something between the last fast position and here.
                     impacts.push((entry.pos, entry.vel, entry.age));
                     entry.resolved = true;
+                    self.impacts += 1;
                 }
             }
             if entry.resolved && speed < STUCK_SPEED {
@@ -400,7 +449,17 @@ impl Thrower {
         self.report_timer += dt;
         if self.report_timer >= REPORT_EVERY && self.throws > 0 {
             self.report_timer = 0.0;
-            glog!("SHURIKEN", "{}", pool_levels(manager));
+            let extra = unsafe { ((manager as *const CSBulletManager as *const u8).add(0x38) as *const u32).read() };
+            self.peak_extra = self.peak_extra.max(extra);
+            glog!(
+                "SHURIKEN",
+                "[{}] impacts since switch {} | {} | peak extra {} | buffer slots marked {}/64 (heuristic)",
+                CANDIDATES[self.candidate].1,
+                self.impacts,
+                pool_levels(manager),
+                self.peak_extra,
+                buffer_marked(manager)
+            );
             glog!(
                 "SHURIKEN",
                 "live {live} (stuck {stuck}){} | thrown {} ended {} hits {} headshots {} | stuck ones removed after life=0: {}, after push down: {}",
@@ -474,6 +533,22 @@ fn pool_levels(manager: &CSBulletManager) -> String {
         "pools alive/ever-allocated: bullets {}/{} effects {}/{} other {}/{}",
         read(0x18), read(0x1C), read(0x38), read(0x3C), read(0x58), read(0x5C)
     )
+}
+
+/// How many of the second pool's 64 buffer slots carry the mark seen on live entries (`0xff` in the second byte,
+/// POOLDIAG 2026-10-07: `0xff00`, `0xff24`). A heuristic only: free slots may keep old marks.
+fn buffer_marked(manager: &CSBulletManager) -> u32 {
+    let base = manager as *const CSBulletManager as *const u8;
+    let buffer = unsafe { (base.add(0x20) as *const u64).read() } as usize;
+    if buffer == 0 {
+        return 0;
+    }
+    (0..64)
+        .filter(|i| {
+            let first = unsafe { ((buffer + i * 0x9D0) as *const u64).read() };
+            first & 0xff00 == 0xff00
+        })
+        .count() as u32
 }
 
 /// Distance along the view to what's under the crosshair: map (ray) or a character (cylinder), up to the range.
@@ -570,7 +645,7 @@ fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {
         bullet.set_bullet_sfx_delete_type_by_hit(v.sfx_delete_by_hit);
         bullet.set_bullet_sfx_delete_type_by_life_dead(v.sfx_delete_by_life_end);
     }
-    if let Some(atk) = params.get_mut::<AtkParam_Pc>(id) {
+    if let Some(atk) = params.get_mut::<AtkParam_Pc>(v.atk_row) {
         atk.set_atk_phys(v.atk_phys);
     }
 }
