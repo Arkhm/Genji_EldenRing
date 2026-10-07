@@ -1,8 +1,10 @@
 //! genji.dll: Genji's kit inside Elden Ring.
 //!
 //! Step 1 (lab setup): boot, then log the player's state once per second. No gameplay changes yet.
+//! Also: ultrawide fix (no black bars).
 
 mod log;
+mod ultrawide;
 
 use std::ffi::c_void;
 use std::panic::{self, AssertUnwindSafe};
@@ -46,6 +48,7 @@ pub unsafe extern "system" fn DllMain(module: *mut c_void, reason: u32, _reserve
 
     // Nothing that touches the game may run on the loader's thread.
     std::thread::spawn(boot);
+    std::thread::spawn(ultrawide::apply);
     1
 }
 
