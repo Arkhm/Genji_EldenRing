@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5e tested in game: PASSED (step 5 done)
+
+**Changed:** Nothing in code. Test of commit `b523430` (three sessions). `README.md`, `docs/DESIGN.md` updated.
+**Why:** Step 5e pass condition.
+**Tested how:** (1) flask and weapon swaps while running; (2) a door and a chest; (3) getting hit by enemies.
+I read `logs/genji.prev.log` and `logs/genji.log`.
+**Result:**
+- You saw: flask and weapon swap work while running; door and chest work; getting hit doesn't break anything.
+- Log: item pickup `63000` handed over for 0.48 to 0.64 s; chest (probably `101012`, root motion 0.0049) 1.23 s;
+  door `60370` (root motion 0.0094, then 0.0028) 1.00 s + 2.99 s; one more `12020100` (root motion 0.0756) 0.61 s.
+  Each time we drove again afterwards. 5 hits taken in session 3, none triggered a hand-over (their root motion
+  stayed below the threshold). Animations starting `12...` (`12000000`, `12020100`, `12022100`) appear to be a
+  different weapon stance; they don't interfere.
+**Still broken / not tested:** Being grabbed (no grabbing enemy nearby). Heavy knockback is not handed to the
+game (only root motion above 0.002 is).
+**Next:** Step 6, Shuriken and Fan of Blades.
+
 ## 2026-10-07 Step 5e, second try: step aside only when the game's animation moves the character
 
 **Changed:** `genji/src/movement.rs`: a non-idle animation now hands control to the game only while its root

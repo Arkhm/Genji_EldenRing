@@ -29,7 +29,9 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   sensitivity (6.90), walking at Overwatch speed (5.5 m/s) relative to where you look, walls stop you, steps and
   slopes work; you can't walk through other characters. Jumping with Space (step 5b, tested 2026-10-07), with
   Overwatch-like height and air control, and no fall damage in Genji mode. Double jump and wall climb (hold Space
-  facing a wall) (steps 5c and 5d, tested 2026-10-07).
+  facing a wall) (steps 5c and 5d, tested 2026-10-07). Doors, chests, item pickups, flask and weapon swaps work
+  in Genji mode: the game moves the character for its own animations and you keep the first-person view
+  (step 5e, tested 2026-10-07; being grabbed not tested).
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once
@@ -39,4 +41,4 @@ Keep the default key bindings and the HUD on.
 
 ## What doesn't work yet
 
-Genji's abilities, movement and looks: steps 2 and 5 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).
+Genji's abilities and looks: steps 2 and 6 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).

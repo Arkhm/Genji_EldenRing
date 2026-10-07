@@ -157,7 +157,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 2 | **Asset recon**: DataTool lists heroes and extracts Genji (model, animations, sounds) from your Steam Overwatch into `owassets/`. **Blocked since 2026-10-07** until DataTool supports Overwatch 2.25; steps 3 to 9 go first. | `tools\extract_genji.ps1` | file counts and names logged; Genji's first-person model found (or not) |
 | 3 | **Done 2026-10-07.** **Input**: our DLL reads keys and mouse; Elden Ring stops seeing Genji's keys | press each key in game | each key logged once per press; Elden Ring doesn't roll on Shift |
 | 4 | **Done 2026-10-07.** **First-person camera** | look around, walk | camera at head height follows the mouse; your character body hidden |
-| 5 | **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
+| 5 | **Done 2026-10-07** (see 5b). **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
 | 7 | **Swift Strike** with kill reset | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
 | 8 | **Deflect** | block an archer | frontal hits blocked while active; returned projectiles logged |
@@ -203,7 +203,7 @@ mode is captured:** where you look, where the character is, how fast it moves, g
 | 5b | **Done 2026-10-07** (no fall damage, your choice). Our gravity, falling off ledges, fall damage, jump | drop from ledges of different heights, jump | landing speeds logged; damage only from big falls; no scripted fall death |
 | 5c | **Done 2026-10-07.** Double jump | jump twice | second jump only in the air, once per airtime |
 | 5d | **Done 2026-10-07.** Wall climb | hold Space facing a wall | climbs about 1 s, then stops; resets on landing |
-| 5e | Hand back to the game for ladders, Torrent, doors, levers, cutscenes, death | use each one | each one works as in plain Elden Ring |
+| 5e | **Done 2026-10-07** (grabs untested). Hand back to the game for ladders, Torrent, doors, levers, cutscenes, death | use each one | each one works as in plain Elden Ring |
 
 **Risks:** the axis conventions and the ray-cast filter are taken from the CS2 note and the library, not yet seen
 on this machine; slopes and stairs are the usual pain point; if the game moves the character itself (knockback,
