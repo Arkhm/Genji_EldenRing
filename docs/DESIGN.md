@@ -167,6 +167,49 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 12 | **HUD**: health, cooldowns, ult meter, crosshair | play | (visual check by you) |
 | 13 | Polish: Torrent, ladders, menus, death, balance | play the game | |
 
+## 5b. Step 5 in detail: movement
+
+**Why the look and the movement come together.** Today Elden Ring still does the mouse look and moves the
+character relative to *its* camera. As soon as our DLL decides where you look, it must also decide where W goes,
+or the two drift apart. So step 5 takes over both at once.
+
+**What the game keeps:** the world, collision geometry, enemies, damage to you. **What we take over while Genji
+mode is captured:** where you look, where the character is, how fast it moves, gravity.
+
+**How (from the CS2 field note, which did the same on this game version):**
+- **Look:** mouse movement (the game's own raw mouse counts, `MouseDevice.di_mouse_state.lx/ly`) turns into yaw
+  (left/right) and pitch (up/down), Overwatch-style: degrees = counts x 0.0066 x sensitivity. We build the whole
+  camera matrix ourselves instead of copying the game's direction. The axis conventions are taken from the game's
+  own camera at the moment we take over, and logged.
+- **Moving:** WASD from our keyboard hook, relative to our yaw, Overwatch ground speed (about 5.5 m/s). Each frame
+  (after physics, `ChrIns_PostPhysics`) we read the character's current position, add our movement, and write it
+  back with `chr_proxy_pos_update_requested`. We never store the absolute position, because the engine re-centres
+  its coordinates while you play (seen in our step 1 log).
+- **Collision:** rays against the map (`CSPhysWorld::cast_ray`, filter `0x2000058` from the CS2 note): one down to
+  find the ground (and climb small steps and slopes), several forward at knee, waist and head height to stop at
+  walls and slide along them.
+- **Gravity:** while we drive, the game's own gravity is off (`gravity_multiplier = 0`, `gravity_disabled = true`),
+  restored when we hand back. The CS2 field note found that leaving it on builds a hidden fall speed that kills
+  you on landing. We do our own gravity and our own fall damage.
+- **Elden Ring's movement keys are switched off** in its gameplay input reader (the same way as the weapon actions):
+  move forward/back/left/right, dodge/backstep, jump.
+- **Character facing:** the body turns to our yaw (it's hidden in first person anyway).
+
+**Sub-steps (each one tested in game before the next):**
+
+| | What | You test by | Pass condition (log) |
+|---|---|---|---|
+| 5a | Own mouse look + walking on flat ground and slopes, walls stop you, game gravity off | walk, look, walk into walls, up a hill | yaw/pitch follow the mouse; speed about 5.5 m/s; no walking through walls; no falling through the ground |
+| 5b | Our gravity, falling off ledges, fall damage, jump | drop from ledges of different heights, jump | landing speeds logged; damage only from big falls; no scripted fall death |
+| 5c | Double jump | jump twice | second jump only in the air, once per airtime |
+| 5d | Wall climb | hold Space facing a wall | climbs about 1 s, then stops; resets on landing |
+| 5e | Hand back to the game for ladders, Torrent, doors, levers, cutscenes, death | use each one | each one works as in plain Elden Ring |
+
+**Risks:** the axis conventions and the ray-cast filter are taken from the CS2 note and the library, not yet seen
+on this machine; slopes and stairs are the usual pain point; if the game moves the character itself (knockback,
+being grabbed by an enemy), we must notice and step aside. All numbers go into constants first and into
+`genji.toml` once they're tuned.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.
