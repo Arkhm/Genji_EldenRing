@@ -149,9 +149,9 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | # | Step | You test by | Pass condition (from the log) |
 |---|---|---|---|
 | 0 | Repo, rules, this plan | reading this file | |
-| 1 | **Lab setup**: build tools, me3 profile with separate save, save backup script, "hello" DLL that logs boot and the player's position once per second | launch through me3, walk around, quit | `genji.log` shows boot OK and positions changing; your normal save untouched |
+| 1 | **Done 2026-10-07.** **Lab setup**: build tools, me3 profile with separate save, save backup script, "hello" DLL that logs boot and the player's position once per second | launch through me3, walk around, quit | `genji.log` shows boot OK and positions changing; your normal save untouched |
 | 2 | **Asset recon**: DataTool lists heroes and extracts Genji (model, animations, sounds) from your Steam Overwatch into `owassets/`. **Blocked since 2026-10-07** until DataTool supports Overwatch 2.25; steps 3 to 9 go first. | `tools\extract_genji.ps1` | file counts and names logged; Genji's first-person model found (or not) |
-| 3 | **Input**: our DLL reads keys and mouse; Elden Ring stops seeing Genji's keys | press each key in game | each key logged once per press; Elden Ring doesn't roll on Shift |
+| 3 | **Done 2026-10-07.** **Input**: our DLL reads keys and mouse; Elden Ring stops seeing Genji's keys | press each key in game | each key logged once per press; Elden Ring doesn't roll on Shift |
 | 4 | **First-person camera** | look around, walk | camera at head height follows the mouse; your character body hidden |
 | 5 | **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |

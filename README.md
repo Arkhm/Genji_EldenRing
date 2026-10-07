@@ -19,16 +19,12 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   own save (`ER0000.genji.sl2`). The DLL loads, and logs the player's position, map block and HP to
   `logs/genji.log` (tested in game 2026-10-07).
 - Ultrawide: no black bars (tested 2026-10-07).
-- Genji's controls (step 3, tested 2026-10-07): during gameplay, E, Q and Left Shift are hidden from Elden Ring
-  and logged as Genji actions; F does Elden Ring's interact; F9 switches Genji mode off and on; menus are left
-  alone (Q and Esc back out). Mouse clicks are logged as Genji actions.
-
-## Not tested yet
-
-- Blocking Elden Ring's mouse attacks in Genji mode (third try, written in the right stage of the game's frame).
-  No key rebinding should be needed; keep Elden Ring's default keyboard and mouse bindings.
-- `tools/play_nomod.ps1`: the Genji save without our DLL, for telling mod problems from game behaviour.
+- Genji's controls (step 3, tested 2026-10-07): during gameplay, Elden Ring's weapon actions are off (clicks
+  don't attack, guard or use skills) and E, Q and Left Shift are hidden from it; all Genji keys and clicks are
+  logged as Genji actions; F does Elden Ring's interact; F9 switches Genji mode off and on (plain Elden Ring,
+  attacks work again); menus are left alone (Q and Esc back out). Keep Elden Ring's default key bindings.
+- `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## What doesn't work yet
 
-All of Genji: steps 2 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).
+Genji's abilities, movement, camera and looks: steps 2 and 4 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).

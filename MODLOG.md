@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3 tested in game: PASSED (step 3 done)
+
+**Changed:** Removed `STATUS.md` (resolved; it stays in git history at commit `c4d13ab`). `README.md` and
+`docs/DESIGN.md` updated. No code change. Test of commit `c4d13ab`.
+**Why:** Step 3 pass condition: Genji's keys and clicks reach our DLL, not Elden Ring, during gameplay only.
+**Tested how:** You clicked in Genji mode, toggled F9 and clicked, backed out of menus. I read `logs/genji.log`
+(410 lines).
+**Result:**
+- You saw: clicks don't attack in Genji mode; with F9 off they attack again; everything else working.
+- Log: `weapon actions blocked in GameFlowStep: 4 mapped inputs` every time capture started, `weapon actions
+  released` every time it ended (menu at 47.0 s, F9 at 53.6 s). Game's Attack check on left click:
+  `Some(false)` 22 of 22 times while captured, `Some(true)` 13 of 13 times while released.
+- The keybinding test without the mod was skipped as no longer needed. Whether Elden Ring only accepts mouse
+  buttons for Attack stays unconfirmed.
+**Still broken / not tested:** Controller play (not tried). NPC dialogue and grace menus: Esc doesn't close them,
+Q does; capture is released there, so very likely Elden Ring's own behaviour (not checked with F9 off).
+**Next:** Step 4, first-person camera.
+
 ## 2026-10-07 Step 3, third try: weapon blocking moved to the right stage of the frame; no-mod launcher
 
 **Changed:** `genji/src/gamepad.rs` (blocker restored, now runs in its own task in the `GameFlowStep` stage),
