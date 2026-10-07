@@ -5,56 +5,23 @@
 //! and each mapped input has an enable check (`input_code_check`: usable when `state_1 && !state_2`). We switch
 //! actions off by setting `state_2` on their mapped inputs, and restore the saved values afterwards. Because
 //! only the gameplay pad is touched, menus can never be affected.
+//!
+//! Tested 2026-10-07: this blocks attacks, but the game resets the flags every frame (about 240 resets per
+//! second for 4 inputs); it works because we set them again each frame before the game checks them. If
+//! attacks ever leak through, this timing is the first suspect.
+//!
+//! Also tested: the gameplay pad stays enabled and polling while menus are open, so it can't tell us
+//! whether a menu is open (see `controls.rs` for the HUD rule used instead).
 
 use std::collections::HashMap;
 
-use eldenring::cs::{CSInGamePad, CSMenuViewerPad, CSPad, UserInputKey};
+use eldenring::cs::{CSInGamePad, UserInputKey};
 use eldenring::fd4::FD4PadManager;
-use fromsoftware_shared::{FromStatic, Superclass};
+use fromsoftware_shared::FromStatic;
 
 /// Elden Ring actions switched off while Genji mode captures input: all weapon use.
 pub const BLOCKED_ACTIONS: [UserInputKey; 4] =
     [UserInputKey::Attack, UserInputKey::StrongAttack, UserInputKey::Guard, UserInputKey::Skill];
-
-/// The signals that could mean "gameplay, no menu". Logged on every change to learn which one is reliable.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct PadSignals {
-    pub in_game_found: bool,
-    pub in_game_allow_polling: bool,
-    pub in_game_enable_use: bool,
-    pub menu_allow_polling: bool,
-    pub menu_enable_use: bool,
-}
-
-impl PadSignals {
-    /// Current rule for "gameplay": the gameplay pad is enabled and allowed to poll.
-    pub fn gameplay(&self) -> bool {
-        self.in_game_found && self.in_game_allow_polling && self.in_game_enable_use
-    }
-}
-
-pub fn signals() -> PadSignals {
-    let Ok(manager) = (unsafe { FD4PadManager::instance() }) else {
-        return PadSignals::default();
-    };
-    let mut s = PadSignals::default();
-    for map_ptr in manager.pad_entry_map_list.iter() {
-        let map = unsafe { map_ptr.as_ref() };
-        for pair in map.iter() {
-            let entry = &pair.second;
-            let pad: &CSPad = unsafe { entry.entry.as_ref() };
-            if pad.as_subclass::<CSInGamePad>().is_some() {
-                s.in_game_found = true;
-                s.in_game_allow_polling = pad.allow_polling;
-                s.in_game_enable_use = entry.enable_use;
-            } else if pad.as_subclass::<CSMenuViewerPad>().is_some() {
-                s.menu_allow_polling = pad.allow_polling;
-                s.menu_enable_use = entry.enable_use;
-            }
-        }
-    }
-    s
-}
 
 /// Raw mouse buttons as the game itself read them (bit i = DirectInput button i).
 pub fn mouse_buttons() -> u8 {
@@ -67,6 +34,11 @@ pub fn mouse_buttons() -> u8 {
         .iter()
         .enumerate()
         .fold(0u8, |acc, (i, b)| if b & 0x80 != 0 { acc | (1 << i) } else { acc })
+}
+
+/// What the gameplay pad currently answers for "is Attack pressed?" (the library's copy of the game's check).
+pub fn attack_polled() -> Option<bool> {
+    Some(in_game_pad()?.poll_digital_input(UserInputKey::Attack))
 }
 
 fn in_game_pad() -> Option<&'static CSInGamePad> {

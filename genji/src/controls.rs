@@ -2,20 +2,24 @@
 //!
 //! - Turns raw key and button changes into Genji actions (logged as `ACTION`).
 //! - F9 switches Genji mode on and off.
-//! - "Captures" Genji's input while Genji mode is on, the player exists and the game's gameplay input reader is
-//!   active (it isn't while a menu is open). While captured:
+//! - "Captures" Genji's input while Genji mode is on, the player exists and the HUD is visible. While
+//!   captured:
 //!   - the keyboard hook hides E, Q, Left Shift and F from the game, and passes F on as E (interact);
 //!   - Elden Ring's weapon actions (Attack, Strong Attack, Guard, Skill) are switched off in the gameplay input
 //!     reader, which covers the mouse buttons.
 //!
-//! First try (2026-10-07) decided "menu open" from the game's UI-state table; it treated pop-ups and prompts
-//! as menus and released the keys every few seconds. UI-state changes are still logged, to map them later.
+//! "HUD visible" = UI state 0x07 in the game's UI-state table (`CSMenuManImp.ui_states`). In two test sessions
+//! (2026-10-07) it was hidden whenever a real menu was open (Esc menu, inventory, map, grace) and during
+//! loading, and stayed visible through pop-ups, item pickups and interaction prompts.
+//! Rules that failed: "any UI state beyond a baseline" (pop-ups counted as menus) and "gameplay input reader
+//! enabled" (it stays enabled in menus). If you set Elden Ring's HUD to "Auto" or "Off", this rule breaks.
+//! UI-state changes are still logged, to map them later.
 
 use eldenring::cs::CSMenuManImp;
 use fromsoftware_shared::FromStatic;
 
 use crate::dinput::{self, dik};
-use crate::gamepad::{self, ActionBlocker, PadSignals};
+use crate::gamepad::{self, ActionBlocker};
 use crate::glog;
 
 /// DirectInput mouse button indexes.
@@ -55,13 +59,15 @@ const BINDINGS: [(Action, Input); 8] = [
 ];
 
 const TOGGLE_KEY: usize = dik::F9;
+/// UI state that is visible exactly while the in-game HUD is on screen.
+const HUD_UI_STATE: u32 = 0x07;
 
 pub struct Controls {
     enabled: bool,
     capturing: bool,
     held: [Option<f32>; BINDINGS.len()],
     toggle_was_down: bool,
-    last_signals: Option<PadSignals>,
+    click_was_down: bool,
     last_ui: Option<u128>,
     blocker: ActionBlocker,
     block_logged: bool,
@@ -76,7 +82,7 @@ impl Default for Controls {
             capturing: false,
             held: [None; BINDINGS.len()],
             toggle_was_down: false,
-            last_signals: None,
+            click_was_down: false,
             last_ui: None,
             blocker: ActionBlocker::default(),
             block_logged: false,
@@ -100,27 +106,15 @@ impl Controls {
         }
         self.toggle_was_down = toggle_down;
 
-        // Is the game in gameplay (gameplay input reader active)?
-        let signals = gamepad::signals();
-        if Some(signals) != self.last_signals {
-            glog!(
-                "PAD",
-                "in-game pad found {} polling {} enabled {} | menu pad polling {} enabled {}",
-                signals.in_game_found as u8,
-                signals.in_game_allow_polling as u8,
-                signals.in_game_enable_use as u8,
-                signals.menu_allow_polling as u8,
-                signals.menu_enable_use as u8
-            );
-            self.last_signals = Some(signals);
-        }
+        // In gameplay = HUD visible.
         let ui = visible_ui_states();
         if ui != self.last_ui {
             log_ui_change(self.last_ui, ui);
             self.last_ui = ui;
         }
+        let hud = ui.is_some_and(|bits| bits & (1 << HUD_UI_STATE) != 0);
 
-        let capturing = self.enabled && player_present && signals.gameplay();
+        let capturing = self.enabled && player_present && hud;
         if capturing != self.capturing {
             self.capturing = capturing;
             dinput::set_blocking(capturing);
@@ -128,8 +122,8 @@ impl Controls {
                 "Genji mode off"
             } else if !player_present {
                 "no player"
-            } else if !signals.gameplay() {
-                "gameplay input inactive (menu?)"
+            } else if !hud {
+                "HUD hidden: menu or loading"
             } else {
                 "gameplay"
             };
@@ -146,12 +140,17 @@ impl Controls {
             self.block_logged = false;
         }
 
+        let click_now = buttons & (1 << mouse::LEFT) != 0;
         // Actions: only while capturing, so menus and plain Elden Ring never trigger Genji.
         for (i, (action, input)) in BINDINGS.iter().enumerate() {
             let down = match input {
                 Input::Key(code) => dinput::key_down(&keys, *code),
                 Input::Mouse(button) => buttons & (1 << button) != 0,
             };
+            // Diagnostic: with capture off, does the game see left click as Attack?
+            if !self.capturing && *action == Action::Shuriken && down && self.held[i].is_none() && !self.click_was_down {
+                glog!("PAD", "left click while released: game's Attack check says {:?}", gamepad::attack_polled());
+            }
             match (down && self.capturing, self.held[i]) {
                 (true, None) => {
                     self.held[i] = Some(self.clock);
@@ -164,6 +163,7 @@ impl Controls {
                 _ => {}
             }
         }
+        self.click_was_down = click_now;
     }
 
     /// Once per second.

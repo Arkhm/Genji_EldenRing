@@ -3,6 +3,40 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3, menu fix: capture only while the HUD is visible
+
+**Changed:** `genji/src/controls.rs` (capture rule, diagnostic), `genji/src/gamepad.rs` (removed the pad-signal
+code, added notes and an Attack check for the diagnostic).
+**Why:** The second test showed the gameplay input reader stays enabled while menus are open, so Q was
+captured in menus. In both test logs, UI state `0x07` behaves like the HUD: hidden whenever a real menu is
+open (Esc menu `0x1d`/`0x1e`, map `0x3d`, grace or map `0x25`) and during loading; visible through pop-ups,
+item pickups and prompts (`0x13`, `0x17`, `0x1c`, `0x2b`). New rule: capture = Genji mode on, player present,
+HUD visible. Added a diagnostic: with capture off, a left click logs what the game's Attack check answers.
+**Tested how:** Build OK, no warnings; unit test passes.
+**Result:** Not tested in game.
+**Still broken / not tested:** If Elden Ring's HUD option is "Auto" or "Off", this rule fails (no capture when
+the HUD hides). Cutscenes and NPC dialogue not checked.
+**Next:** Your test: Q backs out of menus; attack works with F9 off.
+
+## 2026-10-07 Step 3, second try, tested in game: MOSTLY PASSED
+
+**Changed:** Nothing. Test of commit `a1a9456`.
+**Why:** Step 3 pass condition.
+**Tested how:** You played through the test list; I read `logs/genji.log` (492 lines).
+**Result:**
+- Left and right click no longer attack. Shift, E and Q do nothing in the game. All Genji actions were logged
+  once per press (`Shuriken`, `FanOfBlades`, `SwiftStrike`, `Deflect`, `Dragonblade`, `Melee` on mouse 5,
+  `Jump`, `Interact`).
+- F interacts. With F9 (Genji off), F jumps again, as in plain Elden Ring.
+- Weapon actions: `4 mapped inputs (original flags 827:10 831:10 835:10 839:10)`. The game resets our
+  "disabled" flag every frame (15,544 resets by 97 s), yet attacks were blocked: we set it again every frame
+  before the game checks. Works, but depends on timing.
+- **Failed:** Q did not back out of menus (Esc did). Cause: the "gameplay input reader enabled" signal stayed
+  on in menus (`in-game pad found 1 polling 1 enabled 1` the whole time a menu was open), so Q stayed captured.
+- Unclear from the report: whether left click attacked with Genji mode off. The new diagnostic answers it.
+**Still broken / not tested:** Menu detection (fixed in the entry above, not tested).
+**Next:** Menu fix.
+
 ## 2026-10-07 Step 3, second try: block Elden Ring's actions in its gameplay input reader
 
 **Changed:** New `genji/src/gamepad.rs`; `genji/src/controls.rs` rewritten; mouse handling removed from
