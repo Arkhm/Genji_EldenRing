@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6 hit-effect fix tested in game: FAILED; stopped, STATUS.md written
+
+**Changed:** New `STATUS.md`. No code change. Test of commit `479075c`.
+**Why:** Fifth failed attempt at "throwing stops"; AGENTS.md says stop and write `STATUS.md`.
+**Tested how:** Many throws at a wall. I read `logs/genji.log`.
+**Result:** You saw: no effects on the wall any more, but throwing still stops after a while. Log: all values
+applied (bounce, hit effect none, flight visual deleted); the effect pool still filled: `0/0` at 46 s, `80/80` at
+56 s, `165/165` at 66 s, `192/192` at 68.8 s; throw #257 failed at 68.8 s; 28 failures in 284 throws. So the pool
+that fills is not visual effects. Options in `STATUS.md` (recommended: a read-only diagnostic that names the class
+of the objects filling the pool).
+**Still broken / not tested:** Unlimited throwing.
+**Next:** Your choice of option in `STATUS.md`.
+
 ## 2026-10-07 Step 6: shuriken hit effect switched off (fifth attempt at "throwing stops")
 
 **Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's hit effect (`sfxId_Hit`, vanilla

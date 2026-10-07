@@ -1,0 +1,57 @@
+# STATUS: shuriken throwing stops after 256 wall hits (engine error 4)
+
+Date: 2026-10-07
+Step: 6 (Shuriken), see `docs/DESIGN.md` section 5c
+
+## Goal
+Throw shuriken without limit. Pass condition: hundreds of throws at walls and tough enemies, never refused.
+
+## What happens instead
+After roughly 256 shuriken have hit walls (or a living enemy), every further throw is refused by the engine:
+`CSBulletManager::spawn_bullet` returns error 4 ("construction failed"). It recovers when the area reloads (death)
+and, slowly, by itself (entries expire after a while).
+
+## What we know for sure (from the logs)
+- The bullet manager has three pools (fromsoftware-rs `BufferAndAllocLinkedList`: buffer + extra allocations).
+  The second one (fromsoftware-rs calls it `unk_bullet_sfx_related`, 0x9D0-byte entries, 64 in the buffer + up to
+  192 extra) is the limit: **the first refused throw happens exactly when its extra count reaches 192/192**, in every
+  session since we started logging it (4 sessions).
+- It grows only when shuriken **hit something** (walls; enemies that don't die). Throws at the sky don't grow it.
+  When an enemy dies, entries tied to it go away.
+- It is **not** our projectiles: they are removed by the engine right after hitting (`live 0`, `ended = thrown`).
+- It is **not** a visual effect: with the bounce effect, the hit effect and the flight visual all switched off
+  (`sfxId_Flick`, `sfxId_Hit` = none, flight visual "Deletion"), nothing is visible on the wall, and the pool still
+  fills at the same rate (0 -> 80 -> 165 -> 192 in about 20 s of throwing).
+- The rest of the shuriken work is verified in game: aim at the crosshair target, Overwatch hand position, no drop,
+  hit detection, 27/54 damage, headshots (19 in one session), runes for kills.
+
+## Attempts
+1. Gravity after 80 m (projectiles that hit nothing never ended). Real problem, real fix, but not this one.
+2. Remove "stuck" projectiles. Never triggered: no projectile stays alive.
+3. Bounce effect off. Daggers stopped hanging in the air; pool still filled.
+4. Flight visual set to "Deletion". Applied; pool still filled.
+5. Hit effect off. Nothing visible any more; pool still filled.
+
+## What we don't know
+- What object the 0x9D0-byte entries are. The name "sfx related" in fromsoftware-rs is a guess by its authors.
+- Which Bullet/AtkParam setting makes the engine create one per hit, and how long it lives. Candidates seen in the
+  Bullet row: `dmgHitRecordLifeTime` (0 for the dagger; "0" might mean "until removed"), hit records against map
+  collision, the bullet's targeting/homing data.
+- Whether every projectile does this, or the Throwing Dagger row in particular.
+
+## Options from here
+
+| | Option | What it does | Cost | Risk |
+|---|---|---|---|---|
+| **A (recommended first)** | **Identify the entries.** A diagnostic build reads the first live entry of that pool and looks up its C++ class name (every such object starts with a pointer whose RTTI data names the class), and logs it with its first bytes. One short test session: throw at a wall 20 times, quit. | Tells us *what* fills the pool; often the class name alone points to the setting (e.g. a "hit record" class -> `dmgHitRecordLifeTime`). | Small | Low: read-only |
+| B | **Try other projectile rows.** A debug key cycles through a few other Elden Ring projectiles (another throwable, an arrow, a sorcery bolt) while the log shows how much the pool grows per wall hit. | Finds a row that doesn't leave anything behind; we'd then give it the shuriken values. | Small to medium, one or two sessions | The best row may look different in flight |
+| C | **Reverse-engineer the hit path** with Ghidra (ghidra-mcp): where `spawn_bullet`'s hit handling allocates into that pool, and what controls the entry's lifetime. | The real answer, independent of guesses. | Medium to large; needs Ghidra 12 installed | Elden Ring's exe is partly obfuscated |
+| D | **Try `dmgHitRecordLifeTime`** directly (set it to a short time, e.g. 0.5 s). | Might be the fix outright. | Tiny | A guess; that's what the rule says not to do without evidence. Best done *after* A says it's a hit record. |
+
+My recommendation: **A**, then D or B depending on the class name. A costs one short session and turns the next
+change from a guess into a decision.
+
+## State of the repo
+All work is committed and pushed (last code commit `479075c`). The game runs normally; Genji mode works (movement,
+first person, shuriken until the pool fills). In Genji mode shuriken currently have no hit effect (attempt 5); I'd
+keep it off until we know more, or restore it, your choice.
