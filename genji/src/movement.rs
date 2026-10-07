@@ -18,8 +18,13 @@
 //! - The game keeps the character's feet about 8 cm above the surface our rays hit (we wrote 1.13, the game
 //!   showed 1.21, every frame). Snapping exactly onto the hit pushed the body into the ground every frame and
 //!   the game pushed it back out (2.4 m of "outside push" per 0.5 s while standing still). We now keep that gap.
-//! - An unexplained instant death (HP 760 -> 0 in one second, no damage) while walking downhill. A record of the
-//!   last 60 frames is written to the log whenever HP drops, to find out why.
+//! - Instant deaths with full HP: the black box showed the game's fall timer (`CSChrFallModule.fall_timer`)
+//!   counting up the whole time we drove, even standing still with the game saying "on ground", and every death
+//!   came at fall timer 12.03 s: the game's "fell into a pit" kill. We zero it every frame while driving (we do
+//!   our own falling). This is a different death from the CS2 note's landing death, which zeroing didn't stop
+//!   and which the gravity switch-off prevents.
+//! - All 32 filter bits see the same surface (no separate low-detail layer); the 0.9 m gap in one test was the
+//!   character still dropping onto the ground after the loading screen.
 
 use eldenring::cs::{CSHavokMan, PlayerIns};
 use eldenring::position::{HavokPosition, PositionDelta};
@@ -237,6 +242,7 @@ impl Mover {
         physics.position = HavokPosition(pos.x, pos.y, pos.z, w);
         physics.chr_proxy_pos_update_requested = true;
         face(physics, look);
+        player.chr_ins.modules.fall.fall_timer = 0.0;
         self.last_written = Some(pos);
         self.record(player, pos, frame_push);
 
@@ -274,11 +280,13 @@ impl Mover {
             physics.gravity_multiplier = multiplier;
             physics.gravity_disabled = disabled;
         }
+        let multiplier = physics.gravity_multiplier;
+        player.chr_ins.modules.fall.fall_timer = 0.0;
         self.active = false;
         self.last_written = None;
         self.waiting_frames = 0;
         self.black_box.clear();
-        glog!("MOVE", "controller OFF, game gravity restored (x{:.2})", physics.gravity_multiplier);
+        glog!("MOVE", "controller OFF, game gravity restored (x{multiplier:.2})");
     }
 
     /// Adds this frame to the black box; dumps the black box to the log when HP drops.

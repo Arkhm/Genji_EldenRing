@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a: zero the game's fall timer while driving
+
+**Changed:** `genji/src/movement.rs`: `CSChrFallModule.fall_timer` is set to 0 every frame while our controller
+drives, and once more when it hands back. Notes in the file updated.
+**Why:** Fourth 5a test (entry below): every death came at fall timer 12.03 s.
+**Tested how:** Build OK, no warnings; unit test passes.
+**Result:** Not tested in game.
+**Still broken / not tested:** No fall damage at all while our controller drives (the game's fall logic is
+neutralised); our own fall damage is part of 5b.
+**Next:** Your test.
+
+## 2026-10-07 Step 5a fourth test: first person and movement work; deaths explained (fall timer)
+
+**Changed:** Nothing. Test of commit `a599be0`.
+**Why:** Step 5a pass condition.
+**Tested how:** You stood, looked right, died; respawned, walked, died. I read `logs/genji.log` (634 lines), and
+the black box.
+**Result:**
+- First person, Space doing nothing, mouse look: working.
+- Filter table: after 23 frames of waiting (feet still settling 16 cm above ground after loading), **all bits
+  hit the same surface** (except `0x1`, `0x10`, `0x40000000`, which hit nothing). There is no separate
+  low-detail layer; the 0.9 m gap in the third test was the character still dropping onto the ground after the
+  loading screen. Filter `0x2000058` chosen.
+- Ground fight fixed: outside push 0.00 m in the walking reports; walking reached 5.50 m/s.
+- **Deaths:** both with full HP, both at the game's **fall timer 12.03 s**. The black box shows the fall timer
+  rising every frame the whole time (10.73 to 12.03 s over the last 60 frames) while the game itself reported
+  "on ground 1, falling 0" and the position didn't change at all. This is the game's "fell into a pit" kill.
+  Looking right was a coincidence.
+- The two 800 -> 760 HP changes right after respawning had fall timer 0; the same 800 -> 760 appears in the step
+  1 log in plain Elden Ring, so it's not damage from us.
+**Still broken / not tested:** The deaths (fix above).
+**Next:** Fix above.
+
 ## 2026-10-07 Step 5a: choose the ray filter from 32 candidates at takeover
 
 **Changed:** `genji/src/movement.rs`: at takeover, a 3 m ray down from 1 m above the feet is cast with each of
