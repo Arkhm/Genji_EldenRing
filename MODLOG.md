@@ -3,6 +3,34 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6c (early): shuriken flight and damage values set in memory; throw from the right hand
+
+**Changed:** `genji/src/shuriken.rs`: (1) commit `d981cbd`: the throw starts 0.4 m forward, 0.18 m right and
+0.15 m down from the eye (Genji's right hand) and is aimed at the crosshair point 20 m ahead; (2) while Genji mode
+is active, the dagger's Bullet row `10170000` gets 60 m/s at constant speed, no gravity, 80 m range (life 1.43 s),
+and its AtkParam_Pc row gets base physical attack 150 (vanilla 67); the vanilla values are restored whenever Genji
+mode lets go (menus, F9, death, Torrent, ladders). In memory only, through fromsoftware-rs `SoloParamRepository`;
+nothing on disk changes. `genji/src/camera.rs` switches the values on and off. `docs/DESIGN.md`: 6c now uses
+in-memory edits instead of a modified `regulation.bin`.
+**Why:** Your 6a test (entry below): the dagger's hilt showed in the middle of the view; the projectile drops.
+Speed and damage values are approximate (Overwatch), the damage a first guess.
+**Tested how:** Build OK, no warnings; 8 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether projectiles already spawned keep their values (they should). The real
+Throwing Dagger item, if you throw it in Genji mode with R, gets the shuriken values too. Damage needs tuning.
+**Next:** Your test.
+
+## 2026-10-07 Step 6a tested in game: PASSED
+
+**Changed:** Nothing. Test of commit `70d37c8`.
+**Why:** Step 6a pass condition.
+**Tested how:** You threw daggers at walls, ground, sky and an animal. I read `logs/genji.log`.
+**Result:** You saw: daggers fly and hit enemies, nothing odd; the dagger's hilt shows in the view at spawn;
+the projectile drops. Log: 157 throws, all `ok` (no engine errors); 37 `HIT` lines on an animal at 12 to 18 m,
+3 to 5 damage each.
+**Still broken / not tested:** Hilt in view, drop, low damage (entry above).
+**Next:** Fixes above.
+
 ## 2026-10-07 Step 6a: left click throws a projectile (Elden Ring's Throwing Dagger) from the eye
 
 **Changed:** New `genji/src/shuriken.rs`; `genji/src/camera.rs` throws on each left-click press while our

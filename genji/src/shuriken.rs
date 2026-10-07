@@ -15,7 +15,9 @@
 
 use std::collections::HashMap;
 
-use eldenring::cs::{BulletSpawnData, CSBulletManager, PlayerIns, WorldChrMan};
+use eldenring::cs::{
+    AtkParam_Pc, Bullet as BulletParam, BulletSpawnData, CSBulletManager, PlayerIns, SoloParamRepository, WorldChrMan,
+};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
@@ -32,6 +34,15 @@ const HAND_DOWN: f32 = 0.15;
 /// The throw is aimed at the crosshair point this far ahead, so it still lands where you look, metres.
 /// The miss from the hand offset is about 0.13 m at 5 m and none at this distance.
 const AIM_DISTANCE: f32 = 20.0;
+/// Shuriken flight, set in memory on the dagger's Bullet row while Genji mode is active (6c): straight (no
+/// gravity, no slow-down), fast and long range. Approximate Overwatch values, not verified. The game's file is
+/// never changed; the original values are restored whenever Genji mode lets go (menus, F9), so a real Throwing
+/// Dagger thrown in plain Elden Ring is unchanged.
+const SHURIKEN_SPEED: f32 = 60.0;
+const SHURIKEN_RANGE: f32 = 80.0;
+/// Base physical attack of the dagger's attack row while Genji mode is active (vanilla 67; the 6a test did 3 to 5
+/// damage per hit on an animal). A first guess, to be tuned in game.
+const SHURIKEN_ATK_PHYS: u16 = 150;
 /// How long after a throw HP drops are attributed to it, seconds.
 const HIT_WATCH_SECONDS: f32 = 2.0;
 /// Characters further than this from the player are not watched, metres.
@@ -75,8 +86,24 @@ const _: () = {
     assert!(offset_of!(SpawnRequest, position) == 0x80);
 };
 
+/// The vanilla values we change, kept to restore them.
+#[derive(Clone, Copy)]
+struct VanillaValues {
+    init_velocity: f32,
+    max_velocity: f32,
+    min_velocity: f32,
+    accel_out_range: f32,
+    gravity_in_range: f32,
+    gravity_out_range: f32,
+    life: f32,
+    dist: f32,
+    atk_phys: u16,
+}
+
 #[derive(Default)]
 pub struct Thrower {
+    /// Some while our shuriken values are applied in memory.
+    vanilla: Option<VanillaValues>,
     clock: f32,
     throws: u32,
     watch_until: f32,
@@ -85,6 +112,61 @@ pub struct Thrower {
 }
 
 impl Thrower {
+    /// Applies (true) or restores (false) the shuriken values on the dagger's rows in memory.
+    pub fn set_shuriken_values(&mut self, on: bool) {
+        if on == self.vanilla.is_some() {
+            return;
+        }
+        let Ok(params) = (unsafe { SoloParamRepository::instance_mut() }) else {
+            return;
+        };
+        let id = THROWING_DAGGER_BULLET as u32;
+        match (on, self.vanilla) {
+            (true, None) => {
+                // Read the vanilla values first, then write ours.
+                let (Some(bullet), Some(atk)) = (params.get::<BulletParam>(id), params.get::<AtkParam_Pc>(id)) else {
+                    glog!("THROW", "Bullet or AtkParam_Pc row {id} not found; shuriken values not applied");
+                    return;
+                };
+                let vanilla = VanillaValues {
+                    init_velocity: bullet.init_vellocity(),
+                    max_velocity: bullet.max_vellocity(),
+                    min_velocity: bullet.min_vellocity(),
+                    accel_out_range: bullet.accel_out_range(),
+                    gravity_in_range: bullet.gravity_in_range(),
+                    gravity_out_range: bullet.gravity_out_range(),
+                    life: bullet.life(),
+                    dist: bullet.dist(),
+                    atk_phys: atk.atk_phys(),
+                };
+                let shuriken = VanillaValues {
+                    init_velocity: SHURIKEN_SPEED,
+                    max_velocity: SHURIKEN_SPEED,
+                    min_velocity: SHURIKEN_SPEED,
+                    accel_out_range: 0.0,
+                    gravity_in_range: 0.0,
+                    gravity_out_range: 0.0,
+                    life: SHURIKEN_RANGE / SHURIKEN_SPEED + 0.1,
+                    dist: SHURIKEN_RANGE,
+                    atk_phys: SHURIKEN_ATK_PHYS,
+                };
+                write_values(params, id, &shuriken);
+                glog!(
+                    "THROW",
+                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {}/{} -> 0, range {} -> {SHURIKEN_RANGE} m, atk {} -> {SHURIKEN_ATK_PHYS}",
+                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.gravity_out_range, vanilla.dist, vanilla.atk_phys
+                );
+                self.vanilla = Some(vanilla);
+            }
+            (false, Some(vanilla)) => {
+                write_values(params, id, &vanilla);
+                glog!("THROW", "shuriken values OFF: vanilla Throwing Dagger restored");
+                self.vanilla = None;
+            }
+            _ => {}
+        }
+    }
+
     /// Throws one projectile from `eye` along where `look` points.
     pub fn throw(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
         let view_forward = look.forward();
@@ -169,6 +251,23 @@ impl Thrower {
                 _ => {}
             }
         }
+    }
+}
+
+/// Writes flight and damage values to the Bullet and AtkParam_Pc rows `id` in memory.
+fn write_values(params: &mut SoloParamRepository, id: u32, v: &VanillaValues) {
+    if let Some(bullet) = params.get_mut::<BulletParam>(id) {
+        bullet.set_init_vellocity(v.init_velocity);
+        bullet.set_max_vellocity(v.max_velocity);
+        bullet.set_min_vellocity(v.min_velocity);
+        bullet.set_accel_out_range(v.accel_out_range);
+        bullet.set_gravity_in_range(v.gravity_in_range);
+        bullet.set_gravity_out_range(v.gravity_out_range);
+        bullet.set_life(v.life);
+        bullet.set_dist(v.dist);
+    }
+    if let Some(atk) = params.get_mut::<AtkParam_Pc>(id) {
+        atk.set_atk_phys(v.atk_phys);
     }
 }
 

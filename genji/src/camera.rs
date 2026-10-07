@@ -83,6 +83,9 @@ pub fn camera_step(dt: f32) {
         view.handback_reason = reason;
     }
 
+    // Shuriken flight and damage values on the dagger's rows: on in Genji mode, vanilla otherwise.
+    view.thrower.set_shuriken_values(reason.is_none());
+
     if reason.is_some() {
         view.mover.release(player);
         view.look = None;

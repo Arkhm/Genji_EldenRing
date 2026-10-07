@@ -228,9 +228,11 @@ damage, hit effects, enemies reacting and fighting back. This is what the CS2 pr
   eye. To pick the row, a copy of your `regulation.bin` is unpacked with **WitchyBND** (official GitHub release,
   into the gitignored `third_party/`) into the gitignored `erdata/` folder; your game file is only read.
 - **6b:** the Overwatch timing: burst of 3, fan of 3, ammo and reload.
-- **6c:** our own rows (shuriken speed, no drop, damage scaled for Elden Ring, a fitting hit effect) in a modified
-  copy of `regulation.bin` that me3 loads as a package (`profile/genji.me3`); the game's own file stays untouched.
-  The build script will create it from your vanilla copy, so nothing from the game is committed.
+- **6c (changed 2026-10-07):** instead of a modified copy of `regulation.bin`, the DLL edits the dagger's rows
+  **in the game's memory** while Genji mode is active (fromsoftware-rs gives typed access: `SoloParamRepository`):
+  no drop, 60 m/s, 80 m range, more damage; the vanilla values are restored whenever Genji mode lets go, and
+  nothing on disk changes. A separate row of our own (so the real Throwing Dagger item is never affected) would
+  need the modified-file route; kept as an option if needed.
 
 **Library gap:** `BulletSpawnData` (the spawn request) has private fields and no constructor in fromsoftware-rs.
 We build our own copy of its memory layout (taken from the library source, 0x110 bytes) and pass that.
@@ -240,7 +242,7 @@ characters near where a shuriken lands (`HIT` lines), so damage is checked from 
 
 | | What | You test by | Pass condition (log) |
 |---|---|---|---|
-| 6a | One existing projectile per left click, from the eye along the view | throw at walls and an enemy | `THROW ... ok`; you see it fly; `HIT` with HP lost |
+| 6a | **Done 2026-10-07.** One existing projectile per left click, from the eye along the view | throw at walls and an enemy | `THROW ... ok`; you see it fly; `HIT` with HP lost |
 | 6b | Burst of 3, fan of 3, 30 ammo, reload | hold and click both buttons, empty the ammo | 3 throws per click at the right spacing; reload logged |
 | 6c | Our own shuriken rows (speed, damage, look) | fight a few enemies | damage per hit as configured |
 
