@@ -25,6 +25,11 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   attacks work again); menus are left alone (Q and Esc back out). Keep Elden Ring's default key bindings.
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
+## Settings the Genji save needs once
+
+In Elden Ring's System menu, Camera options: **Camera Auto Rotate Off** and **Camera Auto Wall Recovery Off**.
+Keep the default key bindings and the HUD on.
+
 ## What doesn't work yet
 
 Genji's abilities, movement, camera and looks: steps 2 and 4 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).

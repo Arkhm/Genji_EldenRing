@@ -125,6 +125,10 @@ Overwatch changes numbers every season. The values below are approximate referen
 | (Elden Ring interact) | F | The mod passes F to the game as E, so doors, graces, items and talking still work |
 | Genji mode on/off | F9 | Off = plain Elden Ring |
 
+**One-time settings in the Genji save** (Elden Ring's System menu, Camera options): Camera Auto Rotate **Off**,
+Camera Auto Wall Recovery **Off**. Until our own movement and look control (step 5), the first-person view uses
+the game's camera direction, and auto-rotate swings it around when you strafe.
+
 **Elden Ring's weapon actions** (Attack, Strong Attack, Guard, Skill) are switched off in the game's gameplay input
 reader while Genji mode captures input, in the `GameFlowStep` stage right after the game reads input. (Rebinding
 them away from the mouse was tried first; Elden Ring's key settings only accepted mouse buttons for them.)

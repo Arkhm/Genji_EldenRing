@@ -9,9 +9,12 @@
 //!     input reader (`gamepad.rs`, applied in the `GameFlowStep` stage), which covers the mouse buttons. The
 //!     left-click diagnostic below logs what the game's Attack check says.
 //!
-//! "HUD visible" = UI state 0x07 in the game's UI-state table (`CSMenuManImp.ui_states`). In two test sessions
-//! (2026-10-07) it was hidden whenever a real menu was open (Esc menu, inventory, map, grace) and during
-//! loading, and stayed visible through pop-ups, item pickups and interaction prompts.
+//! "HUD visible" = UI state 0x07 in the game's UI-state table (`CSMenuManImp.ui_states`). In the test sessions
+//! (2026-10-07) it was hidden whenever a menu tab was open (inventory, map, grace, ...) and during loading,
+//! and stayed visible through pop-ups, item pickups and interaction prompts.
+//! Exception: the Esc menu itself (the bar of tabs) keeps the HUD visible. It shows UI state 0x1c (always
+//! together with 0x17); choosing a tab replaces 0x1c with the tab's own state (0x1d, 0x25, 0x34 seen) and hides
+//! the HUD. So "gameplay" = 0x07 visible and 0x1c not visible.
 //! Rules that failed: "any UI state beyond a baseline" (pop-ups counted as menus) and "gameplay input reader
 //! enabled" (it stays enabled in menus). If you set Elden Ring's HUD to "Auto" or "Off", this rule breaks.
 //! UI-state changes are still logged, to map them later.
@@ -63,6 +66,8 @@ const BINDINGS: [(Action, Input); 8] = [
 const TOGGLE_KEY: usize = dik::F9;
 /// UI state that is visible exactly while the in-game HUD is on screen.
 const HUD_UI_STATE: u32 = 0x07;
+/// UI state of the Esc menu's tab bar (the HUD stays visible behind it).
+const ESC_MENU_UI_STATE: u32 = 0x1c;
 
 pub struct Controls {
     enabled: bool,
@@ -110,7 +115,7 @@ impl Controls {
             log_ui_change(self.last_ui, ui);
             self.last_ui = ui;
         }
-        let hud = ui.is_some_and(|bits| bits & (1 << HUD_UI_STATE) != 0);
+        let hud = ui.is_some_and(|bits| bits & (1 << HUD_UI_STATE) != 0 && bits & (1 << ESC_MENU_UI_STATE) == 0);
 
         let capturing = self.enabled && player_present && hud;
         if capturing != self.capturing {
@@ -123,7 +128,7 @@ impl Controls {
             } else if !player_present {
                 "no player"
             } else if !hud {
-                "HUD hidden: menu or loading"
+                "menu or loading (HUD hidden or Esc menu)"
             } else {
                 "gameplay"
             };

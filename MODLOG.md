@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 4: Esc menu counts as a menu; camera settings for the Genji save
+
+**Changed:** `genji/src/controls.rs`: gameplay now means UI state `0x07` (HUD) visible **and** `0x1c` (Esc menu
+tab bar) not visible. `docs/DESIGN.md` and `README.md` list two Elden Ring camera settings for the Genji save.
+**Why:** From the first camera test: (1) in the Esc menu the view stayed first person (and Genji's keys stayed
+captured), and switched to third person only after choosing a tab. The log shows the Esc menu keeps the HUD
+visible and adds `0x1c` (with `0x17`); a tab replaces `0x1c` with its own state (`0x1d`, `0x25`, `0x34`) and hides
+the HUD; going back shows `0x1c` again (for example 184.158 to 184.822 s). (2) Strafing (A, D, W+A, W+D) turned
+the view by itself: that is Elden Ring's Camera Auto Rotate (an option since patch 1.04). Our first-person view
+uses the game's camera direction for now, so: Camera Auto Rotate Off and Camera Auto Wall Recovery Off.
+**Tested how:** Build OK, no warnings.
+**Result:** Not tested in game.
+**Still broken / not tested:** If `0x1c` turns out to appear outside the Esc menu, capture would drop there.
+Whether the two settings fully stop the strafing drift.
+**Next:** Your test.
+
+## 2026-10-07 Step 4 first version tested in game: MOSTLY PASSED
+
+**Changed:** Nothing. Test of commit `0b7bc83`.
+**Why:** Step 4 pass condition: first-person view at head height following the mouse, body hidden.
+**Tested how:** You walked, jumped, looked around fast and up/down, opened menus, toggled F9. I read
+`logs/genji.log` (699 lines).
+**Result:**
+- You saw: overall good; walking, jumping, looking fast, up and down all normal; looking straight ahead does
+  **not** tilt down. Problems: strafing turns the view by itself; the Esc menu stays first person.
+- Log: `pers_cam_1` is the camera the game draws with (your first-person view came from writing it); `pers_cam_2`
+  holds the game's own follow camera and is copied into slot 1 each frame (`mask 0x00`). No feedback: the next
+  frame's game camera never followed our eye position (for example game cam `(2.98, 3.88, -2.36)` vs eye
+  `(-0.65, 4.03, -1.92)`). Field of view 0.838 rad (about 48 degrees vertical), near plane 0.05 m. The camera
+  task ran 79 to 120 frames per 2 s report (the frame rate).
+**Still broken / not tested:** Strafing drift, Esc menu (entry above).
+**Next:** Fixes above.
+
 ## 2026-10-07 Step 4, first version: first-person camera
 
 **Changed:** New `genji/src/camera.rs`; `genji/src/lib.rs` registers a third per-frame task (stage
