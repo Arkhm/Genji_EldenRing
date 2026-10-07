@@ -1,7 +1,7 @@
 //! Genji's controls, read once per frame on the game's thread.
 //!
 //! - Turns raw key and button changes into Genji actions (logged as `ACTION`).
-//! - F9 switches Genji mode on and off.
+//! - F9 switches Genji mode on and off. The game starts in plain Elden Ring (Genji mode off).
 //! - "Captures" Genji's input while Genji mode is on, the player exists and the HUD is visible. While
 //!   captured:
 //!   - the keyboard hook hides E, Q, Left Shift and F from the game, and passes F on as E (interact).
@@ -87,7 +87,7 @@ pub struct Controls {
 impl Default for Controls {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             capturing: false,
             held: [None; BINDINGS.len()],
             toggle_was_down: false,

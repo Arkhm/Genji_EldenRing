@@ -1,6 +1,6 @@
 # STATUS: shuriken throwing stops after 256 wall hits (engine error 4)
 
-## Resolved (2026-10-07, option C1, fix not tested in game yet)
+## Resolved (2026-10-07, option C1; tested in game: 510 throws, 0 refused)
 Ghidra 12.1.4 (headless, no full analysis; project and output in the gitignored `third_party/ghidra-work/`)
 decompiled `spawn_bullet` (RVA 0x3A2CB0) and the code that frees the second pool's records:
 - `spawn_bullet` -> RVA 0x3A5A20 allocates a record (0x9D0 bytes, RVA 0x3A7CC0; heap allocations count +0x38) and

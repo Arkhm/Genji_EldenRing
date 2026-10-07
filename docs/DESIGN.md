@@ -123,7 +123,7 @@ Overwatch changes numbers every season. The values below are approximate referen
 | Ultimate charge | | Built from damage dealt, shown on the HUD |
 | Health ~250 | | Mapped onto Elden Ring HP (configurable) |
 | (Elden Ring interact) | F | The mod passes F to the game as E, so doors, graces, items and talking still work |
-| Genji mode on/off | F9 | Off = plain Elden Ring |
+| Genji mode on/off | F9 | Off = plain Elden Ring (the game starts with it off) |
 
 **One-time settings in the Genji save** (Elden Ring's System menu, Camera options): Camera Auto Rotate **Off**,
 Camera Auto Wall Recovery **Off**. Until our own movement and look control (step 5), the first-person view uses

@@ -3,6 +3,25 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Game starts in plain Elden Ring (Genji mode off until F9)
+
+**Changed:** `genji/src/controls.rs`: Genji mode starts off. `README.md`, `docs/DESIGN.md`: noted.
+**Why:** You asked for the game to start in normal Elden Ring.
+**Tested how:** Build OK; unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Startup in plain mode, F9 turning Genji mode on.
+**Next:** Your test, then step 6b.
+
+## 2026-10-07 Shuriken limit fix tested in game: no limit
+
+**Changed:** Nothing. Test of commit `9e55321`.
+**Why:** Check the one-shot flag fix.
+**Tested how:** You threw at walls and enemies. I read `logs/genji.log`.
+**Result:** You saw it working. Log: 510 clicks, 510 throws `ok`, 0 refused; 22 hits, 9 headshots; the second
+pool never needed an extra allocation (`effects 0/0` all session), so its 64 reserved slots are freed and reused.
+**Still broken / not tested:** Nothing for this fix.
+**Next:** Step 6b.
+
 ## 2026-10-07 Shuriken limit fixed (one-shot flag found with Ghidra); P debug switch removed
 
 **Changed:** `genji/src/shuriken.rs`: every throw sets bit 0 of the spawn request's flags field (`unk44 = 1`,
