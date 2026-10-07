@@ -69,6 +69,16 @@ const MAP_FILTER: u32 = 0x0200_0058;
 /// Entries of the game's distance-sorted character list to consider.
 const CHARACTERS_MAX: usize = 64;
 const REPORT_EVERY: f32 = 2.0;
+/// Test of 2026-10-07: a shuriken that hits a wall "flicks" (the dagger's bounce) and, with our zero gravity, hangs
+/// in the air in front of the wall for good, keeping its slot in the bullet manager (screenshot: a wall full of
+/// daggers; throwing stopped after the pool filled; killing an enemy freed the ones stuck in it). Impact is now
+/// the first frame a shuriken slows below IMPACT_SPEED; afterwards, below STUCK_SPEED it counts as stuck and we
+/// remove it: first by setting its remaining life to 0, and if it is still there after PUSH_AFTER seconds, by
+/// sending it straight down so it hits the ground like a vanilla dagger. Both are logged to see which works.
+const IMPACT_SPEED: f32 = 0.5 * SHURIKEN_SPEED;
+const STUCK_SPEED: f32 = 1.0;
+const PUSH_AFTER: f32 = 0.5;
+const PUSH_DOWN_SPEED: f32 = 30.0;
 
 /// Our copy of the engine's bullet spawn request (same layout as fromsoftware-rs `BulletSpawnData`).
 #[repr(C, align(16))]
@@ -120,13 +130,21 @@ struct RowValues {
     atk_phys: u16,
 }
 
-/// A shuriken in flight, as last seen.
+/// One of our shuriken, as tracked frame to frame.
 struct Flying {
+    /// Position and velocity on the last frame it was still flying at speed. At 60 m/s a shuriken moves about
+    /// 1 m per frame, so the impact lies in the stretch after this position; the hit test covers that stretch.
     pos: Vec3,
-    /// Velocity, m/s: at 60 m/s a shuriken moves about 1 m per frame, so its last seen position can be well short
-    /// of where it hit; the hit test covers the stretch it flew after that.
     vel: Vec3,
     age: f32,
+    /// Seen flying at speed at least once (a brand-new bullet may report no speed on its first frame).
+    was_flying: bool,
+    /// The impact has been handled (hit or miss).
+    resolved: bool,
+    /// Removal attempts for a shuriken that stopped after hitting something (see STUCK_SPEED).
+    stuck_for: f32,
+    life_zeroed: bool,
+    pushed_down: bool,
 }
 
 /// A character as a target: collision cylinder and a pointer to change its HP.
@@ -148,6 +166,8 @@ pub struct Thrower {
     ended: u32,
     hits: u32,
     headshots: u32,
+    removed_after_life_zero: u32,
+    removed_after_push: u32,
 }
 
 impl Thrower {
@@ -255,74 +275,123 @@ impl Thrower {
             match result {
                 Ok(()) => "ok".to_string(),
                 Err(code) => format!(
-                    "FAILED, engine error {code} (3 = invalid bullet id, 4 = construction failed); {} of ours flying",
+                    "FAILED, engine error {code} (3 = invalid bullet id, 4 = construction failed); {} of ours alive",
                     self.flying.len()
                 ),
             }
         );
     }
 
-    /// Every frame: follows our shuriken in flight; when one ends next to a character, applies Overwatch damage.
+    /// Every frame: follows our shuriken; at impact applies Overwatch damage; removes shuriken that got stuck.
     pub fn tick(&mut self, player: &PlayerIns, dt: f32) {
         self.clock += dt;
-        let Ok(manager) = (unsafe { CSBulletManager::instance() }) else {
+        let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
             return;
         };
-        let mut now: HashMap<u64, Flying> = HashMap::new();
-        let mut sample_life = None;
-        for bullet in manager.bullets() {
-            if bullet.fly_state.base.param.param_id != THROWING_DAGGER_BULLET {
+        let mut seen = std::collections::HashSet::new();
+        let mut impacts: Vec<(Vec3, Vec3, f32)> = Vec::new();
+        let (mut live, mut stuck, mut sample_life) = (0u32, 0u32, None);
+        for bullet in manager.bullets_mut() {
+            let ids = [
+                bullet.wait_state.base.param.param_id,
+                bullet.fly_state.base.param.param_id,
+                bullet.exp_state.base.param.param_id,
+            ];
+            if !ids.contains(&THROWING_DAGGER_BULLET) {
                 continue;
             }
             let handle = unsafe { std::ptr::read(&bullet.field_ins_handle as *const _ as *const u64) };
             let p = &bullet.physics.position;
-            // `life` and `life_max` follow `time_alive` in CSBulletIns (private in fromsoftware-rs).
-            let life_ptr = &bullet.time_alive as *const f32;
-            sample_life.get_or_insert_with(|| unsafe { (life_ptr.add(1).read(), life_ptr.add(2).read()) });
             let v = &bullet.physics.velocity;
-            now.insert(
-                handle,
-                Flying { pos: Vec3::new(p.0, p.1, p.2), vel: Vec3::new(v.0, v.1, v.2), age: bullet.time_alive },
-            );
+            let (pos, vel) = (Vec3::new(p.0, p.1, p.2), Vec3::new(v.0, v.1, v.2));
+            let speed = vel.length();
+            // `life` and `life_max` follow `time_alive` in CSBulletIns (private in fromsoftware-rs).
+            let life_ptr = &mut bullet.time_alive as *mut f32;
+            sample_life.get_or_insert_with(|| unsafe { (life_ptr.add(1).read(), life_ptr.add(2).read()) });
+            live += 1;
+            seen.insert(handle);
+            let entry = self.flying.entry(handle).or_insert(Flying {
+                pos,
+                vel,
+                age: 0.0,
+                was_flying: false,
+                resolved: false,
+                stuck_for: 0.0,
+                life_zeroed: false,
+                pushed_down: false,
+            });
+            entry.age += dt;
+            if !entry.resolved {
+                if speed >= IMPACT_SPEED {
+                    entry.pos = pos;
+                    entry.vel = vel;
+                    entry.was_flying = true;
+                } else if entry.was_flying {
+                    // Slowed sharply: it hit something between the last fast position and here.
+                    impacts.push((entry.pos, entry.vel, entry.age));
+                    entry.resolved = true;
+                }
+            }
+            if entry.resolved && speed < STUCK_SPEED {
+                stuck += 1;
+                entry.stuck_for += dt;
+                if !entry.life_zeroed {
+                    unsafe { life_ptr.add(1).write(0.0) };
+                    entry.life_zeroed = true;
+                } else if entry.stuck_for >= PUSH_AFTER && !entry.pushed_down {
+                    bullet.physics.velocity.0 = 0.0;
+                    bullet.physics.velocity.1 = -PUSH_DOWN_SPEED;
+                    bullet.physics.velocity.2 = 0.0;
+                    entry.pushed_down = true;
+                }
+            }
         }
-        let ended: Vec<Flying> = self
-            .flying
-            .drain()
-            .filter(|(handle, _)| !now.contains_key(handle))
-            .map(|(_, f)| f)
-            .collect();
-        self.flying = now;
-        for shuriken in ended {
+        // Shuriken the engine removed since the last frame.
+        let gone: Vec<Flying> = {
+            let handles: Vec<u64> = self.flying.keys().filter(|h| !seen.contains(h)).copied().collect();
+            handles.into_iter().filter_map(|h| self.flying.remove(&h)).collect()
+        };
+        for shuriken in gone {
             self.ended += 1;
-            self.resolve(player, &shuriken, dt);
+            if !shuriken.resolved && shuriken.was_flying {
+                impacts.push((shuriken.pos, shuriken.vel, shuriken.age));
+            }
+            if shuriken.pushed_down {
+                self.removed_after_push += 1;
+            } else if shuriken.life_zeroed {
+                self.removed_after_life_zero += 1;
+            }
+        }
+        for (pos, vel, age) in impacts {
+            self.resolve(player, pos, vel, age, dt);
         }
 
         self.report_timer += dt;
-        if self.report_timer >= REPORT_EVERY && (self.throws > 0) {
+        if self.report_timer >= REPORT_EVERY && self.throws > 0 {
             self.report_timer = 0.0;
-            let oldest = self.flying.values().map(|f| f.age).fold(0.0, f32::max);
             glog!(
                 "SHURIKEN",
-                "flying {} (oldest {oldest:.1} s{}) | thrown {} ended {} hits {} headshots {}",
-                self.flying.len(),
+                "live {live} (stuck {stuck}){} | thrown {} ended {} hits {} headshots {} | stuck ones removed after life=0: {}, after push down: {}",
                 sample_life.map(|(l, m)| format!(", engine life {l:.2} / max {m:.2}")).unwrap_or_default(),
                 self.throws,
                 self.ended,
                 self.hits,
-                self.headshots
+                self.headshots,
+                self.removed_after_life_zero,
+                self.removed_after_push
             );
         }
     }
 
     /// A shuriken ended somewhere between its last seen position and where its velocity would have taken it by
     /// the next frame: if that stretch passes next to a character, it hit it (closest character wins).
-    fn resolve(&mut self, player: &PlayerIns, shuriken: &Flying, dt: f32) {
+    fn resolve(&mut self, player: &PlayerIns, last_pos: Vec3, vel: Vec3, age: f32, dt: f32) {
         const SAMPLES: usize = 8;
-        let reach = shuriken.vel * (dt.max(1.0 / 60.0) * 1.5);
+        let reach = vel * (dt.max(1.0 / 60.0) * 1.5);
         let mut best: Option<(f32, Target, Vec3)> = None;
         for target in targets(player) {
             for i in 0..=SAMPLES {
-                let pos = shuriken.pos + reach * (i as f32 / SAMPLES as f32);
+                let pos = last_pos + reach * (i as f32 / SAMPLES as f32);
                 if pos.y < target.feet.y - 0.3 || pos.y > target.feet.y + target.height + 0.3 {
                     continue;
                 }
@@ -356,7 +425,7 @@ impl Thrower {
             target.chr.as_ptr() as usize,
             data.hp,
             data.max_hp,
-            shuriken.age,
+            age,
             100.0 * (pos.y - target.feet.y) / target.height
         );
     }

@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: remove shuriken that got stuck after hitting a wall; count hits at impact
+
+**Changed:** `genji/src/shuriken.rs`: the tracker now follows our shuriken in every state (wait, fly, explosion),
+not only flying. Impact = the first frame a shuriken slows below 30 m/s (half its speed); the hit test runs then,
+over the stretch it flew since its last fast frame. A shuriken that stays below 1 m/s after impact is "stuck" and
+gets removed: first its remaining life (the engine's private `life`, right after `time_alive`) is set to 0; if it
+is still there 0.5 s later, it is sent straight down at 30 m/s so it hits the ground like a vanilla dagger. The
+`SHURIKEN` report shows live and stuck counts and how many stuck ones went away after each method.
+**Why:** Your test (entry below): shuriken that hit a wall stay there forever.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether either removal method works (the log will say which). A shuriken stuck in a
+moving enemy may move faster than 1 m/s and not count as stuck; it goes when the enemy dies, as before.
+**Next:** Your test.
+
+## 2026-10-07 Step 6 rework tested in game: aim, headshots and runes work; shuriken pile up on walls
+
+**Changed:** Nothing. Test of commit `f05ff79`.
+**Why:** Step 6 checks.
+**Tested how:** You threw at targets near and far, hit bodies and heads, killed enemies, hit walls and the dragon
+near Limgrave. I read `logs/genji.log` and your screenshot (a wall full of daggers).
+**Result:**
+- You saw: **aim centred, runes for kills, headshots working.** But shuriken that hit a wall stay stuck, and
+  throwing stops again after a while (also against the dragon, which has too much HP to die); killing an enemy
+  removes the ones stuck in it and lets you throw again.
+- Log: `SHURIKEN flying 0` most of the time: the tracker only followed bullets in the flying state, so stuck ones
+  were invisible to it. The "oldest" ages it reported (up to 178 s in the first minute) aren't plausible, so
+  `time_alive` isn't seconds since the throw. 35 hits, 3 headshots by 88 s.
+- Cause (my explanation): the dagger's bounce ("flick", effect 300003): a bounced dagger normally falls under
+  gravity and ends on the ground; with our zero gravity it hangs in front of the wall forever.
+**Still broken / not tested:** See entry above.
+**Next:** Fix above.
+
 ## 2026-10-07 Step 6: aim at the crosshair target, Overwatch hand position, no endless shuriken, Overwatch damage
 
 **Changed:** `genji/src/shuriken.rs` rewritten (one commit; the parts depend on each other):
