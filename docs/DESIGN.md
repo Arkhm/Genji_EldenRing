@@ -210,6 +210,44 @@ on this machine; slopes and stairs are the usual pain point; if the game moves t
 being grabbed by an enemy), we must notice and step aside. All numbers go into constants first and into
 `genji.toml` once they're tuned.
 
+## 5c. Step 6 in detail: Shuriken and Fan of Blades
+
+**What Overwatch does** (approximate, from memory, **not verified**; all values become constants, later
+`genji.toml`): left click throws 3 shuriken one after another in a straight line (a short burst); right click throws
+3 at once in a horizontal fan; 30 shuriken, reloaded automatically when empty (about 1.5 s); shuriken fly fast and
+straight, no drop.
+
+**How in Elden Ring:** shuriken are the game's own projectiles ("bullets"). Our DLL decides *when* and *where*
+(burst timing, fan spread, ammo, reload, from the eye along where you look) and asks the engine to spawn them
+(`CSBulletManager::spawn_bullet`). The engine does the rest: flight, collision with the map and with enemies,
+damage, hit effects, enemies reacting and fighting back. This is what the CS2 project did for its guns.
+
+**Which projectile:** every bullet the engine spawns is a row of the game's balance tables (`regulation.bin`):
+`BulletParam` (speed, range, gravity, visual effect) pointing to an `AtkParam` row (damage).
+- **6a:** spawn an *existing* Elden Ring projectile (a throwing-knife-like row) on each click, straight from the
+  eye. To pick the row, a copy of your `regulation.bin` is unpacked with **WitchyBND** (official GitHub release,
+  into the gitignored `third_party/`) into the gitignored `erdata/` folder; your game file is only read.
+- **6b:** the Overwatch timing: burst of 3, fan of 3, ammo and reload.
+- **6c:** our own rows (shuriken speed, no drop, damage scaled for Elden Ring, a fitting hit effect) in a modified
+  copy of `regulation.bin` that me3 loads as a package (`profile/genji.me3`); the game's own file stays untouched.
+  The build script will create it from your vanilla copy, so nothing from the game is committed.
+
+**Library gap:** `BulletSpawnData` (the spawn request) has private fields and no constructor in fromsoftware-rs.
+We build our own copy of its memory layout (taken from the library source, 0x110 bytes) and pass that.
+
+**Logging:** every throw (time, origin, direction, bullet row, result code from the engine); HP changes of
+characters near where a shuriken lands (`HIT` lines), so damage is checked from numbers.
+
+| | What | You test by | Pass condition (log) |
+|---|---|---|---|
+| 6a | One existing projectile per left click, from the eye along the view | throw at walls and an enemy | `THROW ... ok`; you see it fly; `HIT` with HP lost |
+| 6b | Burst of 3, fan of 3, 30 ammo, reload | hold and click both buttons, empty the ammo | 3 throws per click at the right spacing; reload logged |
+| 6c | Our own shuriken rows (speed, damage, look) | fight a few enemies | damage per hit as configured |
+
+**Risks:** the spawn request's fields are only partly documented (some `unk` values may matter); the engine may
+refuse a row without a matching owner or "goods" id (error codes 3 and 4 in the library); picking a good row to
+start from takes reading the params.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.
