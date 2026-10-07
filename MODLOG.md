@@ -3,6 +3,26 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5e: step aside while the game plays its own animations
+
+**Changed:** `genji/src/movement.rs`: the controller now returns one of three results (`Driving`, `GameAction`,
+`NotReady`). Any animation other than standing idle (`2000000`), "none" (`-1`) or the idle seen at the first
+takeover means the game is doing something itself (door, lever, chest, item pickup, flask, hit reaction, being
+grabbed): the controller hands movement and gravity back at once and takes over again when the animation is idle
+and the game reports the character on the ground for 0.3 s. `genji/src/camera.rs`: during a game action the view
+stays first person, following the character as the game moves it (mouse look still works); Elden Ring's own
+movement is unblocked meanwhile. Log lines `ACTION game action: animation N`, `game action continues`, `game
+action over after Xs`.
+**Why:** Step 5e of the plan. Menus, dialogue, cutscenes, ladders, Torrent and death already hand back (third
+person). Evidence for the rule: in the 5b/5c/5d logs the animation was `2000000` in more than 600 movement
+reports while we drove (plus 8 reports of `63000` and 4 of `-1`).
+**Tested how:** Build OK, no warnings; 8 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Unknown: what `63000` is (it would now count as a game action);
+whether other stances (two-handing, different weapons) use a different idle animation (then the controller
+would never drive; the log would show a game action that never ends).
+**Next:** Your test.
+
 ## 2026-10-07 Step 5d: one-climb-per-airtime rolled back
 
 **Changed:** `genji/src/movement.rs` restored to its state at commit `2dceb8e` (before `68a5a2e`). Climbing works

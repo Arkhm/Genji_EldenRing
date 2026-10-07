@@ -22,7 +22,7 @@ use crate::dinput::{self, dik};
 use crate::gamepad;
 use crate::glog;
 use crate::look::Look;
-use crate::movement::{Mover, Wish};
+use crate::movement::{Mover, Step, Wish};
 
 /// Height of the eyes above the character's feet, in metres.
 const EYE_HEIGHT: f32 = 1.6;
@@ -107,16 +107,26 @@ pub fn camera_step(dt: f32) {
         jump: dinput::key_down(&keys, dik::SPACE),
     };
     let look = *look;
-    let Some(feet) = view.mover.step(player, &look, &wish, dt) else {
-        // Waiting for collision to load, or gave up this frame: the game drives.
-        gamepad::set_movement_blocked(false);
-        if view.model_hidden {
-            player.chr_ins.chr_flags1c5.set_enable_render(true);
-            view.model_hidden = false;
+    let feet = match view.mover.step(player, &look, &wish, dt) {
+        Step::Driving(feet) => {
+            gamepad::set_movement_blocked(true);
+            feet
         }
-        return;
+        Step::GameAction(feet) => {
+            // The game moves the character itself (door, pickup, flask, hit...): first person follows it.
+            gamepad::set_movement_blocked(false);
+            feet
+        }
+        Step::NotReady => {
+            // Waiting for collision to load or for the character to settle, or gave up: the game drives.
+            gamepad::set_movement_blocked(false);
+            if view.model_hidden {
+                player.chr_ins.chr_flags1c5.set_enable_render(true);
+                view.model_hidden = false;
+            }
+            return;
+        }
     };
-    gamepad::set_movement_blocked(true);
 
     // 3. Camera and model.
     let eye = feet + Vec3::Y * EYE_HEIGHT + look.flat_forward() * FORWARD_OFFSET;

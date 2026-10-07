@@ -82,6 +82,13 @@ const AIR_WALL_RAY_HEIGHTS: [f32; 4] = [0.1, 0.65, 1.1, 1.6];
 const SETTLE_TIME: f32 = 0.3;
 /// Take over anyway after waiting this long for the game to report the character settled, seconds.
 const SETTLE_GIVE_UP: f32 = 3.0;
+/// The game's "standing idle" animation. While we drive, the game's own locomotion is switched off, so its
+/// animation stays on idle (more than 600 movement reports in the 5b/5c/5d logs). Any other animation means the
+/// game is doing something itself (door, lever, chest, item pickup, flask, hit reaction, being grabbed): we step
+/// aside and let it move the character, with the first-person camera following (step 5e).
+const IDLE_ANIMATION: i32 = 2_000_000;
+/// "No animation" (seen right after loading).
+const NO_ANIMATION: i32 = -1;
 /// Landing ray starts this far above the feet, so a surface we've slightly sunk into is still found, metres.
 const LANDING_RAY_LIFT: f32 = 0.5;
 /// Ray-cast filter from the CS2 field note. It hits *some* map collision, but in one 5a test it hit a surface
@@ -147,10 +154,24 @@ pub struct Mover {
     contacts: ContactMonitor,
     settled_for: f32,
     waited_for: f32,
+    /// Set while the game plays its own animation: (animation, controller clock when it started).
+    game_action: Option<(i32, f32)>,
+    /// The idle animation seen at the first takeover, in case a stance uses a different idle than 2000000.
+    first_idle: Option<i32>,
     character_blocks: u32,
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
     last_hp: Option<i32>,
+}
+
+/// What the controller did this frame.
+pub enum Step {
+    /// We drive; the character's feet are here.
+    Driving(Vec3),
+    /// The game is doing something itself (see IDLE_ANIMATION); the feet are here. Keep the first-person view.
+    GameAction(Vec3),
+    /// Not ready (collision loading, settling after a loading screen) or gave up: the game drives, normal view.
+    NotReady,
 }
 
 /// Movement wish from the keyboard: forward (+1 W / -1 S), right (+1 D / -1 A), jump held (Space).
@@ -161,15 +182,43 @@ pub struct Wish {
 }
 
 impl Mover {
-    /// Moves the character one frame. Returns the new feet position, or None if the controller is not driving.
-    pub fn step(&mut self, player: &mut PlayerIns, look: &Look, wish: &Wish, dt: f32) -> Option<Vec3> {
+    /// Moves the character one frame (see `Step`).
+    pub fn step(&mut self, player: &mut PlayerIns, look: &Look, wish: &Wish, dt: f32) -> Step {
+        let feet_now = {
+            let p = player.chr_ins.modules.physics.position;
+            Vec3::new(p.0, p.1, p.2)
+        };
         if self.gave_up || dt <= 0.0 {
-            return None;
+            return Step::NotReady;
         }
-        let world = unsafe { CSHavokMan::instance() }.ok()?;
+        self.clock += dt;
+
+        // 5e: the game's own actions.
+        let animation = current_animation(player);
+        let free = animation == IDLE_ANIMATION || animation == NO_ANIMATION || Some(animation) == self.first_idle;
+        if !free {
+            match self.game_action {
+                None => {
+                    glog!("ACTION", "game action: animation {animation}; the game drives (first person stays)");
+                    self.release(player);
+                    self.game_action = Some((animation, self.clock));
+                }
+                Some((last, since)) if last != animation => {
+                    glog!("ACTION", "game action continues: animation {last} -> {animation}");
+                    self.game_action = Some((animation, since));
+                }
+                _ => {}
+            }
+            return Step::GameAction(feet_now);
+        }
+        // While waiting to take over again after a game action, keep the first-person view.
+        let not_ready = if self.game_action.is_some() { Step::GameAction(feet_now) } else { Step::NotReady };
+
+        let Some(world) = (unsafe { CSHavokMan::instance() }).ok() else {
+            return not_ready;
+        };
         let phys_world: &eldenring::cs::CSPhysWorld = &world.phys_world;
 
-        self.clock += dt;
         if !self.active {
             let p = player.chr_ins.modules.physics.position;
             let feet = Vec3::new(p.0, p.1, p.2);
@@ -185,7 +234,7 @@ impl Mover {
                         glog!("MOVE", "waiting: no collision surface found right under the feet yet");
                     }
                     self.waiting_frames += 1;
-                    return None;
+                    return not_ready;
                 }
             }
             self.ever_hit = true;
@@ -196,7 +245,7 @@ impl Mover {
             self.settled_for = if settled { self.settled_for + dt } else { 0.0 };
             if self.settled_for < SETTLE_TIME {
                 if self.waited_for < SETTLE_GIVE_UP {
-                    return None;
+                    return not_ready;
                 }
                 glog!("MOVE", "game never reported the character settled in {SETTLE_GIVE_UP}s; taking over anyway");
             }
@@ -211,6 +260,13 @@ impl Mover {
             );
             self.settled_for = 0.0;
             self.waited_for = 0.0;
+            if self.first_idle.is_none() && animation != NO_ANIMATION {
+                self.first_idle = Some(animation);
+                glog!("ACTION", "idle animation at first takeover: {animation}");
+            }
+            if let Some((last, since)) = self.game_action.take() {
+                glog!("ACTION", "game action over after {:.2}s (last animation {last}); we drive again", self.clock - since);
+            }
             if self.waiting_frames > 0 {
                 glog!("MOVE", "collision ready after {} frames of waiting", self.waiting_frames);
                 self.waiting_frames = 0;
@@ -386,12 +442,12 @@ impl Mover {
         if !self.ever_hit && self.frames_since_start >= NO_HIT_GIVE_UP_FRAMES {
             glog!("MOVE", "GAVE UP: no ray hit anything in {} frames (collision filter wrong?)", self.frames_since_start);
             self.give_up(player);
-            return None;
+            return Step::NotReady;
         }
         if self.fall_time > MAX_FALL_SECONDS {
             glog!("MOVE", "GAVE UP: falling for {:.1}s; handing back to the game", self.fall_time);
             self.give_up(player);
-            return None;
+            return Step::NotReady;
         }
 
         let physics = &mut player.chr_ins.modules.physics;
@@ -429,7 +485,7 @@ impl Mover {
             self.wall_hits = 0;
             self.character_blocks = 0;
         }
-        Some(pos)
+        Step::Driving(pos)
     }
 
     /// Gives control back to the game (menus, Torrent, ladders, death, F9).
