@@ -24,8 +24,14 @@ use crate::look::Look;
 
 /// Elden Ring's Throwing Dagger projectile (Bullet and AtkParam_Pc row).
 const THROWING_DAGGER_BULLET: i32 = 10_170_000;
-/// Spawn this far in front of the eye, metres.
-const SPAWN_FORWARD: f32 = 0.5;
+/// The throw starts from Genji's right hand, not the middle of the view (6a test: the dagger's hilt showed in the
+/// middle of the screen at spawn): this far forward, right and down from the eye, metres.
+const HAND_FORWARD: f32 = 0.4;
+const HAND_RIGHT: f32 = 0.18;
+const HAND_DOWN: f32 = 0.15;
+/// The throw is aimed at the crosshair point this far ahead, so it still lands where you look, metres.
+/// The miss from the hand offset is about 0.13 m at 5 m and none at this distance.
+const AIM_DISTANCE: f32 = 20.0;
 /// How long after a throw HP drops are attributed to it, seconds.
 const HIT_WATCH_SECONDS: f32 = 2.0;
 /// Characters further than this from the player are not watched, metres.
@@ -81,11 +87,16 @@ pub struct Thrower {
 impl Thrower {
     /// Throws one projectile from `eye` along where `look` points.
     pub fn throw(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
-        let forward = look.forward();
-        let right = look.right(); // horizontal right is perpendicular to any pitched forward (no roll)
+        let view_forward = look.forward();
+        let view_right = look.right(); // horizontal right is perpendicular to any pitched forward (no roll)
+        let view_up = look.up();
+        let from = eye + view_forward * HAND_FORWARD + view_right * HAND_RIGHT - view_up * HAND_DOWN;
+        let aim = eye + view_forward * AIM_DISTANCE;
+        let forward = (aim - from).normalize_or(view_forward);
+        let right = Vec3::Y.cross(forward).normalize_or(view_right);
+        let right = if right.dot(view_right) < 0.0 { -right } else { right };
         let up = forward.cross(right).normalize_or(Vec3::Y);
         let up = if up.y < 0.0 { -up } else { up };
-        let from = eye + forward * SPAWN_FORWARD;
         let owner = unsafe { std::ptr::read(&player.chr_ins.field_ins_handle as *const _ as *const u64) };
         let request = SpawnRequest {
             owner,
