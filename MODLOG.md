@@ -29,8 +29,9 @@ you couldn't reproduce the bug yourself, so it may stay unverified.
 read `logs/genji.log` (1,389 lines) and your screenshot.
 **Result:**
 - You saw: jumps feel similar to Overwatch; fall damage works. Log: 84 jumps, 1 ceiling hit, landings from 0 to
-  3.5 m with no damage, and two damaging falls exactly on the formula (10.5 m -> 159 of 760 HP; 10.0 m -> 124 of
-  601 at that time... formula uses max HP, see code).
+  3.5 m with no damage, and two damaging falls: 10.5 m -> 159 (exactly the formula with max HP 760) and
+  10.0 m -> 124 (the formula with max HP 760 gives 127; the max HP at that moment wasn't logged, so the difference
+  is unexplained; moot now that fall damage is removed).
 - Issues: (1) you prefer **no fall damage** in Genji mode; (2) a specifically timed jump into a rock (screenshot)
   got you inside it, not reproducible afterwards; (3) **walking into an animal dealt it repeated damage**.
 **Still broken / not tested:** See entry above.
