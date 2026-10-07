@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: STATUS.md option A, name what fills the bullet manager's second pool; hit effect back on
+
+**Changed:** New `genji/src/pooldiag.rs` (read-only diagnostic), called from `genji/src/shuriken.rs` at most every
+10 s while the second pool holds anything; `genji/src/lib.rs` registers it. `genji/src/shuriken.rs`: the hit effect
+(SFX 300002) is back on (your choice); bounce effect stays off, flight visual stays on "Deletion".
+- The diagnostic reads C++ class names from RTTI (each object's virtual table is preceded by a pointer to RTTI data
+  holding the name, `.?AV...@@`): for all 64 buffer slots (counted by class), for the head entry and any objects
+  embedded in its first 0x200 bytes; it logs the head entry's first bytes and plausible float fields (timers); it
+  looks for the entry's "next" pointer (a field pointing to another entry of the same class) and walks the live list,
+  counting by class. Every table and RTTI pointer is checked to lie inside the exe image, every other read is checked
+  with VirtualQuery. Log lines `POOLDIAG`.
+**Why:** You chose option A in `STATUS.md`, and to keep the hit effect.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Throwing still stops after the pool fills (this build only diagnoses). The entries
+may not carry a class name (then the log says "(no class)" and we use the raw bytes and timers instead).
+**Next:** Your short test: about 20 throws at a wall, then quit.
+
 ## 2026-10-07 Step 6 hit-effect fix tested in game: FAILED; stopped, STATUS.md written
 
 **Changed:** New `STATUS.md`. No code change. Test of commit `479075c`.

@@ -62,11 +62,8 @@ const NO_SFX: i32 = -1;
 /// the effect pool's live count only climbed (9, 23, 43 ... 170 in 22 s, about 7 per second of wall hits): the
 /// flight visuals were never removed. Shuriken use 1.
 const SFX_DELETE: i8 = 1;
-/// The dagger's hit effect (SFX 300002, played where it lands) is switched off for shuriken too. Test of
-/// 2026-10-07 with the flight visual already set to delete: the effect pool still reached 192/192 and the 257th
-/// throw failed; the pool only grows while shuriken hit walls (not when thrown at the sky), stuck-looking daggers
-/// appear where they land and vanish after a while: the hit effect, which outlives the projectile. No spark on hit
-/// until Genji's own visuals replace the dagger's.
+/// The dagger's hit effect (SFX 300002) stays on (your choice, 2026-10-07). Switching it off (attempt 5) removed the
+/// stuck daggers from walls but did not stop the second pool from filling, so it isn't the cause.
 
 /// The engine's own damage is reduced to almost nothing (it still gives the hit reaction, aggro and the "last hit
 /// by" record); the Overwatch damage below is applied by us when a shuriken ends next to a character.
@@ -189,6 +186,7 @@ pub struct Thrower {
     headshots: u32,
     removed_after_life_zero: u32,
     removed_after_push: u32,
+    pool_diag_timer: f32,
 }
 
 impl Thrower {
@@ -207,6 +205,7 @@ impl Thrower {
                     glog!("THROW", "Bullet or AtkParam_Pc row {id} not found; shuriken values not applied");
                     return;
                 };
+                let vanilla_hit = bullet.sfx_id_hit();
                 let vanilla = RowValues {
                     init_velocity: bullet.init_vellocity(),
                     max_velocity: bullet.max_vellocity(),
@@ -232,7 +231,7 @@ impl Thrower {
                     life: SHURIKEN_LIFE,
                     dist: SHURIKEN_RANGE,
                     sfx_flick: NO_SFX,
-                    sfx_hit: NO_SFX,
+                    sfx_hit: vanilla_hit,
                     sfx_delete_by_hit: SFX_DELETE,
                     sfx_delete_by_life_end: SFX_DELETE,
                     atk_phys: ENGINE_ATK_PHYS,
@@ -240,7 +239,7 @@ impl Thrower {
                 write_values(params, id, &shuriken);
                 glog!(
                     "THROW",
-                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, hit effect {} -> none, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, hit effect {} kept, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
                     vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick, vanilla.sfx_hit,
                     vanilla.sfx_delete_by_hit, vanilla.sfx_delete_by_life_end, vanilla.atk_phys
                 );
@@ -397,6 +396,14 @@ impl Thrower {
         }
         for (pos, vel, age) in impacts {
             self.resolve(player, pos, vel, age, dt);
+        }
+
+        // STATUS.md option A: name what fills the second pool, at most every 10 s while it holds anything.
+        self.pool_diag_timer -= dt;
+        let pool2_alive = unsafe { ((manager as *const CSBulletManager as *const u8).add(0x38) as *const u32).read() };
+        if pool2_alive > 0 && self.pool_diag_timer <= 0.0 {
+            self.pool_diag_timer = 10.0;
+            crate::pooldiag::report(manager);
         }
 
         self.report_timer += dt;

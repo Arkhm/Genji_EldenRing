@@ -15,6 +15,7 @@ mod log;
 mod look;
 mod movement;
 mod obstacles;
+mod pooldiag;
 mod shuriken;
 mod ultrawide;
 
