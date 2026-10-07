@@ -36,8 +36,18 @@ use crate::look::Look;
 
 /// Overwatch ground speed for most heroes, metres per second.
 const RUN_SPEED: f32 = 5.5;
-/// Placeholder gravity until 5b tunes jumps, metres per second squared.
+/// Gravity, metres per second squared. Approximate Overwatch feel, not verified against Overwatch.
 const GRAVITY: f32 = 17.0;
+/// Jump height, metres. Approximate Overwatch value, not verified.
+const JUMP_HEIGHT: f32 = 1.2;
+/// After walking off an edge you can still jump for this long, seconds ("coyote time").
+const COYOTE_TIME: f32 = 0.1;
+/// Height of the top of the head above the feet, for ceiling checks, metres.
+const HEAD_HEIGHT: f32 = 1.75;
+/// Fall damage (Elden Ring-style; Overwatch has none): none below SAFE_FALL, rising linearly to all of max HP at
+/// LETHAL_FALL. Heights are from the highest point of the jump or the edge you walked off, in metres.
+const SAFE_FALL: f32 = 8.0;
+const LETHAL_FALL: f32 = 20.0;
 const MAX_FALL_SPEED: f32 = 55.0;
 /// Highest step the character walks up without jumping, metres.
 const MAX_STEP: f32 = 0.5;
@@ -101,15 +111,21 @@ pub struct Mover {
     outside_push: f32,
     /// Waiting for the map's collision to load before taking over.
     waiting_frames: u32,
+    /// Highest point since leaving the ground (for fall damage).
+    apex_y: f32,
+    /// Time since leaving the ground without jumping (coyote time).
+    since_left_ground: f32,
+    jump_was_down: bool,
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
     last_hp: Option<i32>,
 }
 
-/// Movement wish from the keyboard: forward (+1 W / -1 S), right (+1 D / -1 A).
+/// Movement wish from the keyboard: forward (+1 W / -1 S), right (+1 D / -1 A), jump held (Space).
 pub struct Wish {
     pub forward: f32,
     pub right: f32,
+    pub jump: bool,
 }
 
 impl Mover {
@@ -171,6 +187,8 @@ impl Mover {
             let moved = (start - last).length();
             if moved > 3.0 {
                 glog!("MOVE", "position jumped {moved:.1} m since our last write (engine re-centred coordinates, or a teleport)");
+                // Keep the fall-damage reference in the new coordinates.
+                self.apex_y += start.y - last.y;
             } else {
                 self.outside_push += moved;
                 frame_push = moved;
@@ -186,6 +204,19 @@ impl Mover {
         let horizontal = self.clip_horizontal(phys_world, player, start, wanted, w);
         let mut pos = start + horizontal;
 
+        // Jump: Space pressed (not held) while on the ground, or just after walking off an edge.
+        let jump_pressed = wish.jump && !self.jump_was_down;
+        self.jump_was_down = wish.jump;
+        let can_jump = self.grounded || (self.vy <= 0.0 && self.since_left_ground < COYOTE_TIME);
+        if jump_pressed && can_jump {
+            self.vy = (2.0 * GRAVITY * JUMP_HEIGHT).sqrt();
+            self.grounded = false;
+            self.since_left_ground = f32::INFINITY; // no coyote jump after a real jump
+            self.fall_time = 0.0;
+            self.apex_y = pos.y;
+            glog!("MOVE", "jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
+        }
+
         // Vertical: stick to the ground, or fall.
         if self.grounded {
             match ray(phys_world, player, self.filter, pos + Vec3::Y * MAX_STEP, Vec3::NEG_Y * (MAX_STEP + SNAP_DOWN), w) {
@@ -197,12 +228,23 @@ impl Mover {
                 None => {
                     self.grounded = false;
                     self.ground_misses += 1;
+                    self.since_left_ground = 0.0;
+                    self.apex_y = pos.y;
                     glog!("MOVE", "left the ground at ({:.2}, {:.2}, {:.2}); what each filter sees here:", pos.x, pos.y, pos.z);
                     choose_filter(phys_world, player, pos, w, true);
                 }
             }
         }
         if !self.grounded {
+            self.since_left_ground += dt;
+            // Ceiling: stop rising when the head would hit something.
+            if self.vy > 0.0
+                && ray(phys_world, player, self.filter, pos + Vec3::Y * (HEAD_HEIGHT - 0.2), Vec3::Y * (self.vy * dt + 0.25), w)
+                    .is_some()
+            {
+                glog!("MOVE", "hit a ceiling at {:.1} m/s", self.vy);
+                self.vy = 0.0;
+            }
             self.vy = (self.vy - GRAVITY * dt).max(-MAX_FALL_SPEED);
             self.fall_time += dt;
             let drop = (-self.vy * dt).max(0.0);
@@ -216,11 +258,16 @@ impl Mover {
                         self.fall_time, -self.vy, hit.x, hit.y, hit.z
                     );
                     pos.y = hit.y + GROUND_GAP;
+                    let fallen = self.apex_y - pos.y;
                     self.vy = 0.0;
                     self.grounded = true;
                     self.fall_time = 0.0;
+                    apply_fall_damage(player, fallen);
                 }
-                _ => pos.y += self.vy * dt,
+                _ => {
+                    pos.y += self.vy * dt;
+                    self.apex_y = self.apex_y.max(pos.y);
+                }
             }
         }
 
@@ -375,6 +422,23 @@ impl Mover {
     }
 }
 
+/// Elden Ring-style fall damage from the height fallen (see SAFE_FALL / LETHAL_FALL). Logged on every landing.
+fn apply_fall_damage(player: &mut PlayerIns, fallen: f32) {
+    let data = &mut player.chr_ins.modules.data;
+    let damage = fall_damage(fallen, data.max_hp);
+    let before = data.hp;
+    if damage > 0 {
+        data.hp = (data.hp - damage).max(0);
+    }
+    glog!("MOVE", "fell {fallen:.1} m: fall damage {damage} (hp {before} -> {})", data.hp);
+}
+
+/// Damage for a fall of `fallen` metres with `max_hp` maximum HP.
+fn fall_damage(fallen: f32, max_hp: i32) -> i32 {
+    let share = ((fallen - SAFE_FALL) / (LETHAL_FALL - SAFE_FALL)).clamp(0.0, 1.0);
+    (share * max_hp as f32).ceil() as i32
+}
+
 /// Picks the ray filter whose surface is right under the feet: casts a 3 m ray down from 1 m above the feet with
 /// each of the 32 single bits (and the CS2 filter), and keeps the one whose hit (+ the 8 cm gap) is closest to the
 /// feet, if within `FILTER_TOLERANCE`. Logs the whole table when `log` is set.
@@ -431,4 +495,33 @@ fn face(physics: &mut eldenring::cs::CSChrPhysicsModule, look: &Look) {
     let angle = (-f.x).atan2(-f.z);
     let q = glam::Quat::from_rotation_y(angle);
     physics.orientation = eldenring::rotation::Quaternion(q.x, q.y, q.z, q.w);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fall_damage_curve() {
+        assert_eq!(fall_damage(-1.0, 800), 0, "landing higher than the jump start");
+        assert_eq!(fall_damage(1.2, 800), 0, "a normal jump");
+        assert_eq!(fall_damage(8.0, 800), 0, "safe limit");
+        assert_eq!(fall_damage(14.0, 800), 400, "halfway: half of max HP");
+        assert_eq!(fall_damage(20.0, 800), 800, "lethal");
+        assert_eq!(fall_damage(80.0, 800), 800, "never more than max HP");
+    }
+
+    #[test]
+    fn jump_reaches_jump_height() {
+        // Simulate a jump at 60 fps with the same integration as `step` and check the apex.
+        let dt = 1.0 / 60.0;
+        let mut vy = (2.0 * GRAVITY * JUMP_HEIGHT).sqrt();
+        let (mut y, mut apex) = (0.0f32, 0.0f32);
+        for _ in 0..200 {
+            vy -= GRAVITY * dt;
+            y += vy * dt;
+            apex = apex.max(y);
+        }
+        assert!((apex - JUMP_HEIGHT).abs() < 0.08, "apex {apex:.3} m vs {JUMP_HEIGHT} m");
+    }
 }

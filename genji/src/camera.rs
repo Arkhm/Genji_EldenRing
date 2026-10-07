@@ -101,7 +101,11 @@ pub fn camera_step(dt: f32) {
     let axis = |plus: usize, minus: usize| {
         (dinput::key_down(&keys, plus) as i32 - dinput::key_down(&keys, minus) as i32) as f32
     };
-    let wish = Wish { forward: axis(dik::W, dik::S), right: axis(dik::D, dik::A) };
+    let wish = Wish {
+        forward: axis(dik::W, dik::S),
+        right: axis(dik::D, dik::A),
+        jump: dinput::key_down(&keys, dik::SPACE),
+    };
     let look = *look;
     let Some(feet) = view.mover.step(player, &look, &wish, dt) else {
         // Waiting for collision to load, or gave up this frame: the game drives.

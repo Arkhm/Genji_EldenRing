@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5b: jump, ceiling check, fall damage
+
+**Changed:** `genji/src/movement.rs`: Space jumps when on the ground, or up to 0.1 s after walking off an edge;
+jump height 1.2 m, gravity 17 m/s^2 (approximate Overwatch feel, **not verified** against Overwatch); full air
+control at running speed; a ray above the head stops the rise under ceilings; landing applies Elden Ring-style
+fall damage, none up to 8 m fallen, rising linearly to all of max HP at 20 m (measured from the highest point of
+the jump, or from the edge you walked off); the fall-damage reference moves along when the engine re-centres its
+coordinates. `genji/src/camera.rs` passes Space to the controller. Unit tests for the damage curve and the jump
+height.
+**Why:** Step 5b of the plan. Fall damage kept on purpose although Overwatch has none, so Elden Ring's world
+stays dangerous; easy to change.
+**Tested how:** Build OK, no warnings; 3 unit tests pass (fall damage: 0 at 1.2 m and 8 m, 400 of 800 at 14 m,
+800 at 20 m and above; a simulated 60 fps jump peaks within 8 cm of 1.2 m).
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Setting HP directly for fall damage: whether the game shows
+the damage and handles death normally is not verified.
+**Next:** Your test.
+
 ## 2026-10-07 Step 5a tested in game: PASSED (5a done)
 
 **Changed:** Nothing. Test of commit `7a2ef25`. `README.md`, `docs/DESIGN.md` updated.
