@@ -1,7 +1,7 @@
 //! Swift Strike (step 7): cooldown, kill reset and damage along the dash. The dash movement itself is in
 //! `movement.rs` (DASH_*). Values from memory of Overwatch, **not verified** (DESIGN.md, 5d).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use eldenring::cs::PlayerIns;
 use glam::Vec3;
@@ -13,6 +13,9 @@ use crate::targets::{self, Target};
 const DAMAGE: i32 = 50;
 /// Cooldown after a dash starts, seconds.
 const COOLDOWN: f32 = 8.0;
+/// Characters that came this close (gap between the cylinders, metres) without being hit are logged at the end of
+/// the dash (diagnostic for missed dashes, test of 2026-10-07).
+const NEAR_MISS: f32 = 2.0;
 /// Our body as seen by the dash's hit test: radius and height in metres (same as the movement controller).
 const BODY_RADIUS: f32 = 0.35;
 const BODY_HEIGHT: f32 = 1.75;
@@ -23,6 +26,8 @@ pub struct Swift {
     cooldown: f32,
     /// Characters already hit by the current dash (each only once).
     hit: HashSet<usize>,
+    /// Closest approach of characters not hit in the current dash: gap in metres, vertical overlap, their radius.
+    near: HashMap<usize, (f32, bool, f32)>,
     dashes: u32,
 }
 
@@ -44,6 +49,7 @@ impl Swift {
     pub fn started(&mut self) {
         self.cooldown = COOLDOWN;
         self.hit.clear();
+        self.near.clear();
         self.dashes += 1;
         glog!("SWIFT", "dash #{} started, cooldown {COOLDOWN} s", self.dashes);
     }
@@ -52,31 +58,60 @@ impl Swift {
     pub fn sweep(&mut self, player: &PlayerIns, from: Vec3, to: Vec3) {
         for target in targets::living(player) {
             let id = target.chr.as_ptr() as usize;
-            if self.hit.contains(&id) || !touches(from, to, &target) {
+            if self.hit.contains(&id) {
                 continue;
             }
+            let (gap, overlaps) = closest(from, to, &target);
+            if gap > 0.0 || !overlaps {
+                let entry = self.near.entry(id).or_insert((f32::INFINITY, false, target.radius));
+                if gap < entry.0 {
+                    *entry = (gap, overlaps, target.radius);
+                }
+                continue;
+            }
+            self.near.remove(&id);
             self.hit.insert(id);
             if let Some((before, after, max)) = targets::damage(&target, DAMAGE) {
                 glog!("DASH", "HIT {DAMAGE} on character {id:#x}: hp {before} -> {after} / {max}");
             }
         }
     }
+
+    /// The dash ended: log characters that came close but weren't hit.
+    pub fn ended(&mut self) {
+        let mut near: Vec<_> = self.near.iter().filter(|(_, n)| n.0 <= NEAR_MISS).collect();
+        near.sort_by(|a, b| a.1.0.total_cmp(&b.1.0));
+        for (id, (gap, overlaps, radius)) in near {
+            glog!(
+                "DASH",
+                "near miss: character {id:#x} (radius {radius:.2}) passed {gap:.2} m outside our reach{}",
+                if *overlaps { "" } else { ", and not at our height" }
+            );
+        }
+        glog!("DASH", "dash #{}: {} hit, {} near misses within {NEAR_MISS} m", self.dashes, self.hit.len(), self.near.values().filter(|n| n.0 <= NEAR_MISS).count());
+        self.near.clear();
+    }
 }
 
 /// Does our body, moving with its feet from `from` to `to`, touch the target's cylinder?
+#[cfg(test)]
 fn touches(from: Vec3, to: Vec3, target: &Target) -> bool {
-    // Vertical overlap anywhere along the stretch.
+    let (gap, overlaps) = closest(from, to, target);
+    gap <= 0.0 && overlaps
+}
+
+/// Closest approach of our body moving with its feet from `from` to `to` to the target's cylinder: horizontal gap
+/// between the two (negative or 0 = touching) and whether they overlap vertically along the stretch.
+fn closest(from: Vec3, to: Vec3, target: &Target) -> (f32, bool) {
     let (low, high) = (from.y.min(to.y), from.y.max(to.y) + BODY_HEIGHT);
-    if high < target.feet.y || low > target.feet.y + target.height {
-        return false;
-    }
+    let overlaps = high >= target.feet.y && low <= target.feet.y + target.height;
     // Horizontal distance from the target's axis to the stretch.
     let a = Vec3::new(from.x, 0.0, from.z);
     let b = Vec3::new(to.x, 0.0, to.z);
     let p = Vec3::new(target.feet.x, 0.0, target.feet.z);
     let ab = b - a;
     let t = if ab.length_squared() < 1e-8 { 0.0 } else { ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) };
-    (a + ab * t - p).length() <= target.radius + BODY_RADIUS
+    ((a + ab * t - p).length() - target.radius - BODY_RADIUS, overlaps)
 }
 
 #[cfg(test)]

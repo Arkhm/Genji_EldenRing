@@ -186,6 +186,7 @@ pub struct Mover {
     /// This frame: a dash started / the stretch the dash moved our feet (for its damage, `swift.rs`).
     pub dash_started: bool,
     pub dash_segment: Option<(Vec3, Vec3)>,
+    pub dash_ended: bool,
 }
 
 /// What the controller did this frame.
@@ -216,6 +217,7 @@ impl Mover {
         };
         self.dash_started = false;
         self.dash_segment = None;
+        self.dash_ended = false;
         if self.gave_up || dt <= 0.0 {
             return Step::NotReady;
         }
@@ -523,6 +525,7 @@ impl Mover {
             self.dash_travelled += (pos - start).length();
             self.dash_left -= dt;
             if self.dash_left <= 0.0 {
+                self.dash_ended = true;
                 if !self.grounded {
                     self.vy = 0.0; // fall from here
                 }

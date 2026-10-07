@@ -3,6 +3,22 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 7 tested; dash near-miss logging
+
+**Changed:** `genji/src/swift.rs`, `genji/src/movement.rs`, `genji/src/camera.rs`: at the end of every dash, each
+character that came within 2 m of our reach without being hit is logged (`DASH near miss: ... passed X m outside our
+reach`, and whether it was at our height), plus a summary line per dash.
+**Why:** Your test of commit `031aec1`: dash, dash from jumps, runes for dash kills and the kill reset (dash and
+shuriken kills) all work; but sometimes a dash doesn't hit the enemy. The log only had hits (15 dashes, 11 hits, 7
+kills), so it couldn't say why.
+**Tested how:** Build OK; 22 unit tests pass.
+**Result:** Not tested in game. Also seen in that log: dashes that hit an enemy were often shorter (8-13 m, with
+"wall hits"), and after dash #13 something moved the character 5 m without us ("outside push 5.27 m"); not yet
+explained.
+**Still broken / not tested:** Missed dashes; open question whether a dash into the ground should stop there (asked
+you).
+**Next:** A session dashing at enemies, then fix from the numbers.
+
 ## 2026-10-07 Step 7: Swift Strike (dash, damage, cooldown, kill reset)
 
 **Changed:** `genji/src/movement.rs`: Left Shift starts a dash of 15 m at 50 m/s (about 0.3 s) along the view: through

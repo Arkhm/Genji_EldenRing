@@ -163,6 +163,9 @@ fn camera_step_inner(dt: f32) -> bool {
             if let Some((from, to)) = view.mover.dash_segment {
                 view.swift.sweep(player, from, to);
             }
+            if view.mover.dash_ended {
+                view.swift.ended();
+            }
             feet
         }
         Step::GameAction(feet) => {
