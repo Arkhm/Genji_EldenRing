@@ -3,6 +3,20 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6b: burst of 3, Fan of Blades, 30 shuriken, automatic reload
+
+**Changed:** New `genji/src/firing.rs` (timing only, 6 unit tests): hold left click = bursts of 3 (0.1 s apart,
+new burst every 0.68 s); hold right click = 3 at once, centre and 9 degrees to each side (every 0.75 s); shared
+recovery; 30 shuriken, 1.5 s automatic reload at 0. `genji/src/shuriken.rs`: `throw` takes a sideways angle, logged
+as `side ... deg`. `genji/src/camera.rs`: uses `firing` instead of one throw per click. `docs/DESIGN.md`: 6b plan.
+Earlier test: you confirmed the game now starts in plain Elden Ring.
+**Why:** Step 6b.
+**Tested how:** Build OK, no warnings; 17 unit tests pass (burst spacing and cycle, fan spread, no fan during a
+burst, reload, burst dropped when the controller lets go).
+**Result:** Not tested in game. Timing values are from memory of Overwatch, not verified.
+**Still broken / not tested:** Everything in game; how the values feel compared with Overwatch.
+**Next:** Your test, then step 7 (Swift Strike).
+
 ## 2026-10-07 Game starts in plain Elden Ring (Genji mode off until F9)
 
 **Changed:** `genji/src/controls.rs`: Genji mode starts off. `README.md`, `docs/DESIGN.md`: noted.

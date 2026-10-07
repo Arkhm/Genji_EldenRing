@@ -242,13 +242,26 @@ We build our own copy of its memory layout (taken from the library source, 0x110
 flags field (`unk44`) is set and its bullets are gone; otherwise it lives until the area reloads and after 256
 throws every spawn is refused. We always set that bit. Bit 3 of the same field asks for network sync: never set.
 
+**6b plan (2026-10-07):** a small timing module (`genji/src/firing.rs`, no game access, unit-tested) decides each
+frame how many shuriken to throw and at which sideways angle; `shuriken.rs` throws them as in 6a.
+- Hold left click: bursts of 3 straight shuriken, 0.1 s apart, a new burst every 0.68 s while held.
+- Hold right click: Fan of Blades, 3 at once (centre and 9 degrees to each side, turned around the view's up
+  axis), every 0.75 s while held.
+- Both share one recovery: no fan during a burst, no burst right after a fan.
+- 30 shuriken, one used per throw; at 0 the reload starts by itself and takes 1.5 s. No reload key: Elden Ring
+  uses R for items, which you use in Genji mode.
+- Throws happen only while our movement controller drives (as in 6a); a burst still in progress is dropped
+  otherwise. Timers keep running.
+- Values from memory of Overwatch, **not verified** against the current game: all are constants in `firing.rs`.
+- Log: `FIRE` lines for burst start, fan, reload start and end, with ammo left.
+
 **Logging:** every throw (time, origin, direction, bullet row, result code from the engine); HP changes of
 characters near where a shuriken lands (`HIT` lines), so damage is checked from numbers.
 
 | | What | You test by | Pass condition (log) |
 |---|---|---|---|
 | 6a | **Done 2026-10-07.** One existing projectile per left click, from the eye along the view | throw at walls and an enemy | `THROW ... ok`; you see it fly; `HIT` with HP lost |
-| 6b | Burst of 3, fan of 3, 30 ammo, reload | hold and click both buttons, empty the ammo | 3 throws per click at the right spacing; reload logged |
+| 6b | Burst of 3, fan of 3, 30 ammo, reload (built 2026-10-07, not tested in game) | hold and click both buttons, empty the ammo | 3 throws per click at the right spacing; reload logged |
 | 6c | Our own shuriken rows (speed, damage, look) | fight a few enemies | damage per hit as configured |
 
 **Risks:** the spawn request's fields are only partly documented (some `unk` values may matter); the engine may

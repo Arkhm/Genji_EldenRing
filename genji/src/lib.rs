@@ -10,6 +10,7 @@
 mod camera;
 mod controls;
 mod dinput;
+mod firing;
 mod gamepad;
 mod log;
 mod look;

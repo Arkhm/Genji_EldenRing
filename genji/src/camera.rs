@@ -19,6 +19,7 @@ use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::dinput::{self, dik};
+use crate::firing::Firing;
 use crate::gamepad;
 use crate::glog;
 use crate::look::Look;
@@ -45,7 +46,7 @@ struct View {
     model_hidden: bool,
     handback_reason: Option<&'static str>,
     thrower: Thrower,
-    left_was_down: bool,
+    firing: Firing,
 }
 
 pub fn camera_step(dt: f32) {
@@ -64,9 +65,8 @@ pub fn camera_step(dt: f32) {
 
     view.mover.watch_hp(player);
     view.thrower.tick(player, dt);
-    let left_down = gamepad::mouse_buttons() & 1 != 0;
-    let left_pressed = left_down && !view.left_was_down;
-    view.left_was_down = left_down;
+    let buttons = gamepad::mouse_buttons();
+    let (left_down, right_down) = (buttons & 1 != 0, buttons & 2 != 0);
 
     let reason = if !WANTED.load(Ordering::Relaxed) {
         Some("Genji input not captured")
@@ -87,6 +87,7 @@ pub fn camera_step(dt: f32) {
     view.thrower.set_shuriken_values(reason.is_none());
 
     if reason.is_some() {
+        view.firing.tick(dt, false, false, false);
         view.mover.release(player);
         view.look = None;
         gamepad::set_movement_blocked(false);
@@ -131,6 +132,7 @@ pub fn camera_step(dt: f32) {
             feet
         }
         Step::NotReady => {
+            view.firing.tick(dt, false, false, false);
             // Waiting for collision to load or for the character to settle, or gave up: the game drives.
             gamepad::set_movement_blocked(false);
             if view.model_hidden {
@@ -147,9 +149,9 @@ pub fn camera_step(dt: f32) {
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
-    // 4. Shuriken (step 6a): one throw per left click while we drive.
-    if driving && left_pressed {
-        view.thrower.throw(player, &look, eye);
+    // 4. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive.
+    for angle in view.firing.tick(dt, left_down, right_down, driving) {
+        view.thrower.throw(player, &look, eye, angle);
     }
 }
 

@@ -35,6 +35,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
 - Shuriken, first part (step 6a, tested 2026-10-07): left click throws one (an Elden Ring Throwing Dagger with
   Overwatch values: 60 m/s, no drop, 27 damage, 54 on headshots) from just right of and below the centre, toward
   what's under the crosshair; kills give runes. No throw limit (510 throws in a row, tested 2026-10-07).
+  Bursts of 3, Fan of Blades on right click, 30 shuriken and the automatic reload (step 6b) are built, **not
+  tested** yet.
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once

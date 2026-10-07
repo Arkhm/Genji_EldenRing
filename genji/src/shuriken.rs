@@ -284,8 +284,9 @@ impl Thrower {
         CANDIDATES[self.candidate].0
     }
 
-    /// Throws one shuriken from Genji's hand toward what is under the crosshair.
-    pub fn throw(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
+    /// Throws one shuriken from Genji's hand toward what is under the crosshair, turned `angle` radians to the
+    /// side around the view's up axis (positive = left; Fan of Blades).
+    pub fn throw(&mut self, player: &PlayerIns, look: &Look, eye: Vec3, angle: f32) {
         let view_forward = look.forward();
         let view_right = look.right(); // horizontal right is perpendicular to any pitched forward (no roll)
         let view_up = look.up();
@@ -293,6 +294,7 @@ impl Thrower {
         let aim = eye + view_forward * aim_distance;
         let from = eye + view_forward * HAND_FORWARD + view_right * HAND_RIGHT - view_up * HAND_DOWN;
         let forward = (aim - from).normalize_or(view_forward);
+        let forward = glam::Quat::from_axis_angle(view_up, angle) * forward;
         let right = Vec3::Y.cross(forward).normalize_or(view_right);
         let right = if right.dot(view_right) < 0.0 { -right } else { right };
         let up = forward.cross(right).normalize_or(Vec3::Y);
@@ -331,8 +333,9 @@ impl Thrower {
         }
         glog!(
             "THROW",
-            "#{} aim {aim_distance:.1} m, from ({:.2}, {:.2}, {:.2}) dir ({:.2}, {:.2}, {:.2}): {}",
+            "#{} aim {aim_distance:.1} m, side {:.1} deg, from ({:.2}, {:.2}, {:.2}) dir ({:.2}, {:.2}, {:.2}): {}",
             self.throws,
+            angle.to_degrees(),
             from.x, from.y, from.z,
             forward.x, forward.y, forward.z,
             match result {
