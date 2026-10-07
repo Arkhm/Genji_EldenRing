@@ -3,6 +3,20 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5d: one-climb-per-airtime rolled back
+
+**Changed:** `genji/src/movement.rs` restored to its state at commit `2dceb8e` (before `68a5a2e`). Climbing works
+as in the passed 5d test again: a 1 s budget per airtime that can be split across several climbs.
+**Why:** You tested the one-climb change: "climbing got way worse", and asked for the rollback (you just won't
+use the repeat climb).
+**Tested how:** Build OK, no warnings; 8 unit tests pass. The test log (25 climb starts) doesn't show clearly
+what felt worse: the ones that finished reached the top normally (0.32 to 0.49 s). One climb ended after 0.02 s,
+which fits a guess (not verified): on uneven rock the wall check can miss for a single frame, and with the
+change that one frame ended the climb for the whole airtime.
+**Result:** Rollback not tested in game (the code is identical to the version you tested and passed).
+**Still broken / not tested:** Repeat climbs in one airtime are possible again, by your choice.
+**Next:** 5e.
+
 ## 2026-10-07 Step 5d: one wall climb per airtime
 
 **Changed:** `genji/src/movement.rs`: however a climb ends (Space released, top reached, time up, ceiling), the

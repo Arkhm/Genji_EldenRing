@@ -29,7 +29,7 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   sensitivity (6.90), walking at Overwatch speed (5.5 m/s) relative to where you look, walls stop you, steps and
   slopes work; you can't walk through other characters. Jumping with Space (step 5b, tested 2026-10-07), with
   Overwatch-like height and air control, and no fall damage in Genji mode. Double jump and wall climb (hold Space
-  facing a wall; one climb until you touch the ground again) (steps 5c and 5d, tested 2026-10-07).
+  facing a wall) (steps 5c and 5d, tested 2026-10-07).
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once
