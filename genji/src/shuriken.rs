@@ -62,6 +62,11 @@ const NO_SFX: i32 = -1;
 /// the effect pool's live count only climbed (9, 23, 43 ... 170 in 22 s, about 7 per second of wall hits): the
 /// flight visuals were never removed. Shuriken use 1.
 const SFX_DELETE: i8 = 1;
+/// The dagger's hit effect (SFX 300002, played where it lands) is switched off for shuriken too. Test of
+/// 2026-10-07 with the flight visual already set to delete: the effect pool still reached 192/192 and the 257th
+/// throw failed; the pool only grows while shuriken hit walls (not when thrown at the sky), stuck-looking daggers
+/// appear where they land and vanish after a while: the hit effect, which outlives the projectile. No spark on hit
+/// until Genji's own visuals replace the dagger's.
 
 /// The engine's own damage is reduced to almost nothing (it still gives the hit reaction, aggro and the "last hit
 /// by" record); the Overwatch damage below is applied by us when a shuriken ends next to a character.
@@ -140,6 +145,7 @@ struct RowValues {
     life: f32,
     dist: f32,
     sfx_flick: i32,
+    sfx_hit: i32,
     sfx_delete_by_hit: i8,
     sfx_delete_by_life_end: i8,
     atk_phys: u16,
@@ -211,6 +217,7 @@ impl Thrower {
                     life: bullet.life(),
                     dist: bullet.dist(),
                     sfx_flick: bullet.sfx_id_flick(),
+                    sfx_hit: bullet.sfx_id_hit(),
                     sfx_delete_by_hit: bullet.bullet_sfx_delete_type_by_hit(),
                     sfx_delete_by_life_end: bullet.bullet_sfx_delete_type_by_life_dead(),
                     atk_phys: atk.atk_phys(),
@@ -225,6 +232,7 @@ impl Thrower {
                     life: SHURIKEN_LIFE,
                     dist: SHURIKEN_RANGE,
                     sfx_flick: NO_SFX,
+                    sfx_hit: NO_SFX,
                     sfx_delete_by_hit: SFX_DELETE,
                     sfx_delete_by_life_end: SFX_DELETE,
                     atk_phys: ENGINE_ATK_PHYS,
@@ -232,8 +240,8 @@ impl Thrower {
                 write_values(params, id, &shuriken);
                 glog!(
                     "THROW",
-                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
-                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick,
+                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, hit effect {} -> none, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick, vanilla.sfx_hit,
                     vanilla.sfx_delete_by_hit, vanilla.sfx_delete_by_life_end, vanilla.atk_phys
                 );
                 self.vanilla = Some(vanilla);
@@ -560,6 +568,7 @@ fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {
         bullet.set_life(v.life);
         bullet.set_dist(v.dist);
         bullet.set_sfx_id_flick(v.sfx_flick);
+        bullet.set_sfx_id_hit(v.sfx_hit);
         bullet.set_bullet_sfx_delete_type_by_hit(v.sfx_delete_by_hit);
         bullet.set_bullet_sfx_delete_type_by_life_dead(v.sfx_delete_by_life_end);
     }

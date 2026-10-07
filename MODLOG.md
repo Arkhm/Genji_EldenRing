@@ -3,6 +3,35 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: shuriken hit effect switched off (fifth attempt at "throwing stops")
+
+**Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's hit effect (`sfxId_Hit`, vanilla
+300002) is set to none, restored with the other values. Consequence: no spark where a shuriken lands, until
+Genji's own visuals replace the dagger's.
+**Why:** Your test (entry below): with the flight visual set to "Deletion", the effect pool still filled. What
+creates effects, and what's been ruled out: the projectiles (removed right after hitting, attempt 2), the bounce
+effect (off, attempt 3), the flight visual (set to delete, attempt 4, applied per the log). The pool only grows when
+shuriken hit walls, not when thrown at the sky, and the stuck-looking daggers vanish after a while: that matches the
+hit effect, the last effect this projectile creates. **If this doesn't stop the pool from filling, I stop and write
+`STATUS.md` (AGENTS.md rule).**
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game.
+**Next:** Your test; the pool line should stay low while you hit walls.
+
+## 2026-10-07 Step 6 flight-visual deletion tested in game: FAILED (effect pool still fills)
+
+**Changed:** Nothing. Test of commit `bdc4955`.
+**Why:** Step 6 checks.
+**Tested how:** Many throws at a wall, then at the dragons. I read `logs/genji.log` and your screenshot (daggers
+stuck in the wall).
+**Result:** The new values were applied (`visual on hit/life end 0/0 -> deleted`). Still: effect pool `6/6` at
+64.8 s, `145/145` at 80.9 s, `192/192` from 86.5 s; throw #257 failed at 86.5 s; 40 failed throws. After your
+death the pool was back to 0 (149.6 s) and climbed again (140 at 200 s). You saw stuck daggers that disappear after
+some time, and throwing stops, also at the dragons.
+**Still broken / not tested:** See entry above.
+**Next:** Fix above.
+
 ## 2026-10-07 Step 6: shuriken flight visual deleted on hit (the effect-pool leak)
 
 **Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's Bullet row also gets
