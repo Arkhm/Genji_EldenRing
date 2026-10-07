@@ -1,8 +1,9 @@
 //! genji.dll: Genji's kit inside Elden Ring.
 //!
 //! Step 1 (lab setup): boot, then log the player's state once per second. No gameplay changes yet.
-//! Also: ultrawide fix (no black bars).
+//! Also: ultrawide fix (no black bars) and input diagnostics.
 
+mod inputdiag;
 mod log;
 mod ultrawide;
 
@@ -14,6 +15,8 @@ use std::time::{Duration, Instant};
 use eldenring::cs::{CSTaskGroupIndex, CSTaskImp, WorldChrMan};
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::{FromStatic, SharedTaskImpExt};
+
+use inputdiag::InputDiag;
 
 const DLL_PROCESS_ATTACH: u32 = 1;
 
@@ -87,12 +90,14 @@ struct Monitor {
     frames: u32,
     elapsed: f32,
     player_present: bool,
+    input: InputDiag,
 }
 
 impl Monitor {
     fn tick(&mut self, data: &FD4TaskData) {
         self.frames += 1;
         self.elapsed += data.delta_time.time;
+        self.input.tick(data.delta_time.time);
 
         let world = unsafe { WorldChrMan::instance() }.ok();
         let player = world.and_then(|w| w.main_player.as_ref());
@@ -106,6 +111,7 @@ impl Monitor {
             return;
         }
         let fps = self.frames as f32 / self.elapsed;
+        self.input.summary();
         self.frames = 0;
         self.elapsed = 0.0;
 
