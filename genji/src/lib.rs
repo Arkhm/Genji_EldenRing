@@ -6,6 +6,7 @@
 
 mod controls;
 mod dinput;
+mod gamepad;
 mod log;
 mod ultrawide;
 

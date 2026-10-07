@@ -3,6 +3,51 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3, second try: block Elden Ring's actions in its gameplay input reader
+
+**Changed:** New `genji/src/gamepad.rs`; `genji/src/controls.rs` rewritten; mouse handling removed from
+`genji/src/dinput.rs` (and from its unit test); `genji/src/lib.rs` registers the new module.
+**Why:** The first try failed in game (entry below). Two fixes:
+1. **Mouse:** Elden Ring has separate input readers for gameplay (`CSInGamePad`) and menus
+   (`CSMenuViewerPad`). The gameplay one turns keys and buttons into actions like Attack, Guard, Event Action
+   and Jump. While captured, we now switch off Attack, Strong Attack, Guard and Skill there. Each action has
+   enable flags (`input_code_check`), and we set the "disabled" flag on them and restore the saved values on
+   release. This covers the mouse buttons, and can't affect menus because only the gameplay reader is touched.
+   Mouse buttons for Genji's actions are read from the game's own mouse state.
+2. **Menus:** "In gameplay" now means the gameplay input reader is enabled and allowed to poll, instead of
+   comparing UI-state numbers. The keyboard part (hide E, Q, Left Shift, F; F arrives as E) is unchanged and
+   now follows this new signal.
+New log lines: `PAD` (every change of the four reader signals), `PAD weapon actions blocked: N mapped inputs
+(original flags ...)`, and every 10 s whether the game switched our flags back on by itself.
+**Tested how:** Build OK, no warnings; unit test still passes (keyboard filter and hook path).
+**Result:** Not tested in game.
+**Still broken / not tested:** Both fixes are untested guesses based on the fromsoftware-rs descriptions of
+these structures. In particular: whether the game's real input check uses those enable flags the way the
+library describes, and whether the reader signals change when a menu opens. The log will show both.
+**Next:** Your test.
+
+## 2026-10-07 Step 3 tested in game: FAILED (nothing changed)
+
+**Changed:** Nothing. Test of commit `7ccc067`.
+**Why:** Step 3 pass condition.
+**Tested how:** You played, pressed the Genji keys, F at an object, opened menus, toggled F9. I read
+`logs/genji.log` (424 lines).
+**Result:** You saw: clicks and keys still did Elden Ring things, F jumped, menus worked, F9 changed nothing
+visible. The log shows why:
+- The keyboard hook works: `keyboard 60-61` reads per second through it. **The mouse never goes through it:
+  `mouse 0` the whole session.** So clicks always reached the game.
+- The menu rule was wrong. UI state `0x13` turns on and off every few seconds during normal play, and
+  `0x17`, `0x1c` and `0x2b` appear for prompts and pop-ups. Each one counted as "menu open" and gave the keys
+  back. Keys were captured only for a few seconds at a time (for example 167.4 to 167.9 s, 170.2 to 180.7 s).
+- While captured, it did work: `SwiftStrike`, `Deflect` and `Dragonblade` were logged at 171 to 173 s, and at
+  221.6 s F was captured and reached the game as E (an interaction followed). F jumped whenever the keys were
+  released.
+- UI states seen (for later mapping): 0x05 always; 0x04 0x06 0x08 during loading; 0x07 in gameplay (hidden
+  when 0x25 opened, probably the map or grace menu, before a fast travel); 0x13 flickering; 0x17, 0x1c, 0x2b
+  short-lived pop-ups or prompts.
+**Still broken / not tested:** Everything in step 3.
+**Next:** Second try (entry above).
+
 ## 2026-10-07 Step 3: Genji's controls (keys captured from the game)
 
 **Changed:** New `genji/src/dinput.rs` (DirectInput hook) and `genji/src/controls.rs` (actions, F9 toggle, menu
