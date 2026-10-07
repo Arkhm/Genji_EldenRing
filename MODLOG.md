@@ -3,6 +3,21 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5b tested in game: PASSED (5b done)
+
+**Changed:** Nothing. Test of commit `fa6e894`. `README.md`, `docs/DESIGN.md` updated.
+**Why:** Step 5b pass condition, and the damage-to-characters fix.
+**Tested how:** You played without F9, walked and jumped into enemies, died and respawned. I read
+`logs/genji.log` (1,146 lines).
+**Result:** You saw: no damage to enemies, even after dying; no third-person moment noticed. Log: 16 contacts
+with characters, **0 HP lost** by them; animation while touching mostly `2000000` (most likely standing idle).
+Takeover waited for the game to settle: 0.34 s after loading, 1.62 s after the first respawn, 0.30 s later.
+All HP drops in the log were enemies hitting you.
+**Still broken / not tested:** After the first respawn the floor didn't render for a moment; the log shows the
+game took 1.6 s that time before its collision was ready, so probably the game still streaming the area (not
+verified).
+**Next:** 5c double jump, 5d wall climb.
+
 ## 2026-10-07 Step 5b: take over only after the game has landed the character; log our animation
 
 **Changed:** `genji/src/movement.rs`: before taking over, the game itself must report the character standing on

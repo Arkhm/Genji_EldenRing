@@ -200,7 +200,7 @@ mode is captured:** where you look, where the character is, how fast it moves, g
 | | What | You test by | Pass condition (log) |
 |---|---|---|---|
 | 5a | **Done 2026-10-07.** Own mouse look + walking on flat ground and slopes, walls stop you, game gravity off | walk, look, walk into walls, up a hill | yaw/pitch follow the mouse; speed about 5.5 m/s; no walking through walls; no falling through the ground |
-| 5b | Our gravity, falling off ledges, fall damage, jump | drop from ledges of different heights, jump | landing speeds logged; damage only from big falls; no scripted fall death |
+| 5b | **Done 2026-10-07** (no fall damage, your choice). Our gravity, falling off ledges, fall damage, jump | drop from ledges of different heights, jump | landing speeds logged; damage only from big falls; no scripted fall death |
 | 5c | Double jump | jump twice | second jump only in the air, once per airtime |
 | 5d | Wall climb | hold Space facing a wall | climbs about 1 s, then stops; resets on landing |
 | 5e | Hand back to the game for ladders, Torrent, doors, levers, cutscenes, death | use each one | each one works as in plain Elden Ring |
