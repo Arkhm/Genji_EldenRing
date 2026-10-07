@@ -3,6 +3,37 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: switch off the dagger's bounce effect for shuriken; log the bullet manager's pools
+
+**Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's Bullet row also gets "bounce effect"
+(`sfxId_Flick`, vanilla 300003) set to none, restored with the other values. Every 2 s, and on any failed throw,
+the log shows the fill levels of the bullet manager's first three pools (alive / heap allocations ever), read from
+fromsoftware-rs's layout: bullets (128 + 128), bullet effects (64 + 192), other (4 + 28).
+**Why:** Your test (entry below): the projectiles were all removed after hitting, yet daggers still hung on the
+wall and throw #257 failed again. My explanation (not verified; the pool levels in the next log will show it): what
+hangs on the wall is the bounce *effect*, which falls under the projectile's gravity (0 for shuriken) and so never
+ends; effects have their own pool of 64 + 192 = 256. The stuck-removal from the previous change never ran (no
+projectile was ever stuck), and stays as a safety net.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** If the pools' "ever allocated" counter turns out to be the real limit (the library
+says it never decreases), extra effects beyond the 64-slot buffer would eventually run out even when they end; the
+log will show it.
+**Next:** Your test.
+
+## 2026-10-07 Step 6 stuck-shuriken fix tested in game: daggers still hang on the wall, throw #257 fails
+
+**Changed:** Nothing. Test of commit `9325717`.
+**Why:** Step 6 checks.
+**Tested how:** You threw at walls and enemies. I read `logs/genji.log` and your screenshot (daggers still on the
+wall).
+**Result:** You saw: daggers disappear (some), but throwing stops again; enemies get hit; headshots probably work.
+Log: `live` was 0 or 1 in every report and `ended` always equalled `thrown`: **every projectile was removed by
+the engine shortly after its throw**; no stuck projectile was ever found (`stuck 0`, nothing removed by either
+method). Throw #257 failed with error 4 at 131.5 s, with 0 of ours alive. 12 hits by 129 s.
+**Still broken / not tested:** See entry above.
+**Next:** Fix above.
+
 ## 2026-10-07 Step 6: remove shuriken that got stuck after hitting a wall; count hits at impact
 
 **Changed:** `genji/src/shuriken.rs`: the tracker now follows our shuriken in every state (wait, fly, explosion),

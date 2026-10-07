@@ -50,6 +50,11 @@ const SHURIKEN_RANGE: f32 = 80.0;
 const OUT_OF_RANGE_GRAVITY: f32 = 20.0;
 /// Life the engine is told, seconds (logged against what the engine actually uses).
 const SHURIKEN_LIFE: f32 = 3.0;
+/// The dagger's bounce effect ("flick", SFX 300003) is switched off for shuriken. Test of 2026-10-07: the
+/// projectiles themselves were all removed after hitting ("live 0"), yet daggers still hung on the wall and the
+/// 257th throw failed again. What hangs is the bounce *effect*: it falls under the projectile's gravity, which is 0
+/// for shuriken, so it never ends. The bullet manager keeps those effects in a second pool of 64 + 192 = 256.
+const NO_SFX: i32 = -1;
 
 /// The engine's own damage is reduced to almost nothing (it still gives the hit reaction, aggro and the "last hit
 /// by" record); the Overwatch damage below is applied by us when a shuriken ends next to a character.
@@ -127,6 +132,7 @@ struct RowValues {
     gravity_out_range: f32,
     life: f32,
     dist: f32,
+    sfx_flick: i32,
     atk_phys: u16,
 }
 
@@ -195,6 +201,7 @@ impl Thrower {
                     gravity_out_range: bullet.gravity_out_range(),
                     life: bullet.life(),
                     dist: bullet.dist(),
+                    sfx_flick: bullet.sfx_id_flick(),
                     atk_phys: atk.atk_phys(),
                 };
                 let shuriken = RowValues {
@@ -206,13 +213,14 @@ impl Thrower {
                     gravity_out_range: OUT_OF_RANGE_GRAVITY,
                     life: SHURIKEN_LIFE,
                     dist: SHURIKEN_RANGE,
+                    sfx_flick: NO_SFX,
                     atk_phys: ENGINE_ATK_PHYS,
                 };
                 write_values(params, id, &shuriken);
                 glog!(
                     "THROW",
-                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, engine atk {} -> {ENGINE_ATK_PHYS}",
-                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.atk_phys
+                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick, vanilla.atk_phys
                 );
                 self.vanilla = Some(vanilla);
             }
@@ -266,6 +274,9 @@ impl Thrower {
         let data = unsafe { &*(&request as *const SpawnRequest as *const BulletSpawnData) };
         let result = manager.spawn_bullet(data);
         self.throws += 1;
+        if result.is_err() {
+            glog!("THROW", "{}", pool_levels(manager));
+        }
         glog!(
             "THROW",
             "#{} aim {aim_distance:.1} m, from ({:.2}, {:.2}, {:.2}) dir ({:.2}, {:.2}, {:.2}): {}",
@@ -369,6 +380,7 @@ impl Thrower {
         self.report_timer += dt;
         if self.report_timer >= REPORT_EVERY && self.throws > 0 {
             self.report_timer = 0.0;
+            glog!("SHURIKEN", "{}", pool_levels(manager));
             glog!(
                 "SHURIKEN",
                 "live {live} (stuck {stuck}){} | thrown {} ended {} hits {} headshots {} | stuck ones removed after life=0: {}, after push down: {}",
@@ -429,6 +441,19 @@ impl Thrower {
             100.0 * (pos.y - target.feet.y) / target.height
         );
     }
+}
+
+/// Fill levels of the bullet manager's first three pools, read from fromsoftware-rs's layout (the counters are
+/// private there): each `BufferAndAllocLinkedList` is 0x20 bytes, `allocated_count` (alive) at +0x18 and
+/// `allocations_counter` (heap allocations ever, "doesn't decrease") at +0x1C. Pools: bullets (128 + 128),
+/// bullet effects (64 + 192), unknown (4 + 28).
+fn pool_levels(manager: &CSBulletManager) -> String {
+    let base = manager as *const CSBulletManager as *const u8;
+    let read = |offset: usize| unsafe { (base.add(offset) as *const u32).read() };
+    format!(
+        "pools alive/ever-allocated: bullets {}/{} effects {}/{} other {}/{}",
+        read(0x18), read(0x1C), read(0x38), read(0x3C), read(0x58), read(0x5C)
+    )
 }
 
 /// Distance along the view to what's under the crosshair: map (ray) or a character (cylinder), up to the range.
@@ -520,6 +545,7 @@ fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {
         bullet.set_gravity_out_range(v.gravity_out_range);
         bullet.set_life(v.life);
         bullet.set_dist(v.dist);
+        bullet.set_sfx_id_flick(v.sfx_flick);
     }
     if let Some(atk) = params.get_mut::<AtkParam_Pc>(id) {
         atk.set_atk_phys(v.atk_phys);
