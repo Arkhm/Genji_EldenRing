@@ -118,10 +118,16 @@ Overwatch changes numbers every season. The values below are approximate referen
 | Fan of Blades (3 spread) | Right mouse | Same projectiles, spread pattern |
 | Swift Strike (dash ~15 m, ~50 dmg, ~8 s cooldown, resets on kill) | Shift | Movement controller dash + damage along the path; listen for kills to reset |
 | Deflect (~2 s, ~8 s cooldown) | E | Block frontal hits; send enemy projectiles back where we can |
-| Quick melee | V | Short-range hit |
+| Quick melee | Mouse button 5 (your choice) | Short-range hit |
 | Dragonblade (~5 s, ~110 dmg swings) | Q | Sword mode: swings with a wide hitbox; Swift Strike resets on kill |
 | Ultimate charge | | Built from damage dealt, shown on the HUD |
 | Health ~250 | | Mapped onto Elden Ring HP (configurable) |
+| (Elden Ring interact) | F | The mod passes F to the game as E, so doors, graces, items and talking still work |
+| Genji mode on/off | F9 | Off = plain Elden Ring |
+
+Keys chosen 2026-10-07: Overwatch layout, melee on mouse button 5. Genji's keys are hidden from the game only
+during gameplay; in menus everything passes through (Q stays "Back"). R stays Elden Ring's flask; Genji
+reloads automatically.
 
 **Movement** is Overwatch-style (constant speed, fast air control) instead of Elden Ring's animation-driven
 movement. Per the CS2 field note, a movement controller that writes the position every frame **must turn off

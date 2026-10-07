@@ -1,8 +1,11 @@
 //! genji.dll: Genji's kit inside Elden Ring.
 //!
-//! Step 1 (lab setup): boot, then log the player's state once per second. No gameplay changes yet.
-//! Also: ultrawide fix (no black bars).
+//! - Logs the player's state once per second (step 1).
+//! - Ultrawide fix (no black bars).
+//! - Genji's controls: captures Genji's keys from the game during gameplay, F9 toggles (step 3).
 
+mod controls;
+mod dinput;
 mod log;
 mod ultrawide;
 
@@ -14,6 +17,8 @@ use std::time::{Duration, Instant};
 use eldenring::cs::{CSTaskGroupIndex, CSTaskImp, WorldChrMan};
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::{FromStatic, SharedTaskImpExt};
+
+use controls::Controls;
 
 const DLL_PROCESS_ATTACH: u32 = 1;
 
@@ -62,6 +67,7 @@ fn boot() {
         }
     };
     glog!("BOOT", "CSTask ready after {:.1}s", started.elapsed().as_secs_f32());
+    dinput::install();
 
     let mut monitor = Monitor::default();
     let mut disabled = false;
@@ -73,6 +79,7 @@ fn boot() {
             // A bug in our code must never take the game down: log it and switch ourselves off.
             if panic::catch_unwind(AssertUnwindSafe(|| monitor.tick(data))).is_err() {
                 glog!("ERROR", "per-frame task panicked; genji.dll disabled for this session");
+                dinput::set_blocking(false); // never leave the player's keys captured
                 disabled = true;
             }
         },
@@ -87,6 +94,7 @@ struct Monitor {
     frames: u32,
     elapsed: f32,
     player_present: bool,
+    controls: Controls,
 }
 
 impl Monitor {
@@ -101,10 +109,12 @@ impl Monitor {
             self.player_present = player.is_some();
             glog!("STATE", "player {}", if self.player_present { "appeared" } else { "gone (loading or menu)" });
         }
+        self.controls.tick(data.delta_time.time, self.player_present);
 
         if self.elapsed < 1.0 {
             return;
         }
+        self.controls.report();
         let fps = self.frames as f32 / self.elapsed;
         self.frames = 0;
         self.elapsed = 0.0;

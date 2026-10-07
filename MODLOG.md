@@ -3,6 +3,35 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3: Genji's controls (keys captured from the game)
+
+**Changed:** New `genji/src/dinput.rs` (DirectInput hook) and `genji/src/controls.rs` (actions, F9 toggle, menu
+rule), wired in `genji/src/lib.rs`. `docs/DESIGN.md` key table updated. Removed the input diagnostic
+(`genji/src/inputdiag.rs`) in a separate commit before this one.
+**Why:** Step 3 of the plan. Layout chosen by you: Overwatch keys, melee on mouse button 5.
+- Left click Shuriken, right click Fan of Blades, Left Shift Swift Strike, E Deflect, Q Dragonblade, mouse 5
+  Melee, Space Jump (logged only; the game still gets Space until the movement step), F = Elden Ring's interact
+  (the game sees E), F9 = Genji mode on/off.
+- How: Elden Ring reads keyboard and mouse through DirectInput's `GetDeviceState`. We swap that entry in
+  DirectInput's function table for ours. Ours calls the real one, records the raw keys, and, only while
+  "captured", blanks Genji's keys and turns F into E. No game code is changed.
+- Menus (provisional rule): 2 s after the player appears, the set of visible UI states is recorded as the
+  gameplay baseline; any extra visible UI state = menu open = all keys go to the game. Every change is logged
+  (`UI visible [...] (shown [...], hidden [...])`) so we can learn the numbers.
+- If our per-frame code ever crashes, capture is switched off so your keys can't stay blocked.
+**Tested how:** Offline unit test (`cargo test --release` in `genji/`): installs the real hook in a test
+process, checks the function table points at our hook and that calls reach the real DirectInput (an
+unacquired device answers `DIERR_NOTACQUIRED`), installing twice is harmless, and the filter: not captured =
+nothing changes; captured = E, Q, Left Shift, F hidden, F arrives as E, Space untouched; left, right and mouse 5
+hidden, middle and mouse 4 kept.
+**Result:** Test passed (1 test, 0.04 s). Build OK, no warnings, `build/genji.dll` 291,840 bytes.
+**Still broken / not tested:** **Not tested in game.** Unknown: whether Elden Ring uses the hooked interface
+(the log's `DINPUT reads` line answers it), whether the menu rule is right (boss health bars, item pickup
+pop-ups or messages may count as "menus" and briefly hand the keys back to the game), and whether F→E works
+for all interactions. The keys are fixed in code for now; the settings file (`genji.toml`) comes in a later
+step.
+**Next:** Your in-game test, then step 4 (first-person camera).
+
 ## 2026-10-07 Step 2 (Overwatch assets): BLOCKED, waiting for a DataTool update
 
 **Changed:** New `tools/get_datatool.ps1` (downloads the latest official DataTool release into
