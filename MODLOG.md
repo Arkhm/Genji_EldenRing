@@ -3,6 +3,69 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Input diagnostics, and the "controller-only prompts" report
+
+**Changed:** New `genji/src/inputdiag.rs`, wired into `genji/src/lib.rs` (commit `0da4be5`). Read-only: while the
+game window is focused it logs each key and mouse button press (`INPUT key down Q`), polls the four XInput
+controller slots 4 times per second, logs connects and disconnects, and writes a once-per-second activity
+summary for connected pads.
+**Why:** You reported that the game showed only controller buttons and the keyboard couldn't back out of the
+options; you had to plug in a controller. Likely causes found:
+1. **Back on keyboard is Q, not Esc.** Esc is hard-bound to opening and closing the main menu, so it can't back
+   out of options screens. (Source: Steam community / PC controls guides.)
+2. **Elden Ring has a setting for which button icons it shows:** System → Sound and Display → "Device for
+   On-Screen Prompts" (Game Pad or Keyboard and Mouse). It is stored in the save, and `ER0000.genji.sl2` is a
+   copy of your `ER0000.sl2`, so it carried that setting over.
+3. Possible but unconfirmed: Steam Input is forced on for Elden Ring in your Steam settings
+   (`UseSteamControllerConfig = 2` in your `localconfig.vdf`, read only), and the ViGEm virtual-gamepad driver
+   is installed and running. Either could present a virtual controller. The diagnostic will show whether one
+   exists.
+**Tested how:** Built without warnings. Not run in game yet.
+**Result:** Not tested.
+**Still broken / not tested:** Everything in game. GetAsyncKeyState sees what Windows sees, not necessarily what
+Elden Ring accepts; good enough to tell "the key never arrived" from "the game ignored it".
+**Next:** You test (see the next entry's procedure, one launch covers both).
+
+## 2026-10-07 Ultrawide fix inside genji.dll
+
+**Changed:** New `genji/src/ultrawide.rs`, started from `genji/src/lib.rs`; `pelite` and `windows` added to
+`genji/Cargo.toml` (commit `df286b8`).
+**Why:** You asked for ultrawide support back (your main monitor is 3440×1440). Instead of loading the old
+2022 `UltrawideFix.dll`, the same patch now lives in our DLL: techiew's UltrawideFix (MIT licence) finds one
+byte pattern in the game's code and changes the jump 0x94 bytes after it from `74` to `EB`, which removes the
+forced 16:9 picture. In memory only; no game file is changed. Retries for up to 60 s, checks the original byte
+before writing, logs every outcome with the `WIDE` tag.
+**Tested how:** Offline: searched `eldenring.exe` 2.7.1.0 on disk (read only) for the pattern.
+**Result:** Pattern found exactly once (file offset `0x19ecfca`), byte at +0x94 is `74` (`test eax,eax; je`),
+which is the expected original. Build OK, no warnings.
+**Still broken / not tested:** Not tested in game. The HUD will probably stay at 16:9 in the middle of the
+screen (the original fix behaved the same way).
+**Next:** Your test run. Expect a log line like `WIDE   patched 0x7ff...: 0x74 -> 0xeb (scan 1, 0.0s)` and
+no black bars.
+
+## 2026-10-07 Step 1 tested in game: PASSED
+
+**Changed:** Nothing. Test of commit `601a681`.
+**Why:** Step 1 pass condition: the DLL loads through me3, boots, and logs the player's state.
+**Tested how:** You launched with `tools/play.ps1`, loaded your character, walked, fast travelled once, quit to
+the title screen. I read `logs/genji.log` (374 lines, 387 s).
+**Result:**
+- Loaded and booted: `CSTask ready after 0.0s` at 0.029 s. No `PANIC` or `ERROR` lines.
+- `player appeared` at 61.5 s; `player gone` at 242.6 s and back at 244.8 s (the fast travel); gone again at
+  271.4 s (quit to title).
+- 200 position ticks, 195 in block `m60_42_36_00` (Limgrave). Five ticks during loading showed block
+  `m255_255_255_255` with local position 0,0,0: the game hadn't placed the player in a block yet.
+- Positions changed while walking (for example local `(-47.34, 92.38, 80.18)` to `(-46.22, 92.36, 78.78)` over
+  three seconds).
+- **Finding:** the engine's own physics position (`pos`) jumps between two frames of reference: `(-11.48, 90.59,
+  -56.89)` before the fast travel and `(-2.76, 2.51, 1.80)` a few minutes later at almost the same block-local
+  spot. The engine re-centres its physics world while you play. Block-local coordinates are the stable ones;
+  the movement step must resync after these jumps (the CS2 field note warned about the same thing).
+- HP read 760/800, then 760/760 most of the time; the maximum changes with what's equipped, so this looks right.
+- Frame rate 20 to 60 fps, mostly 45 to 60.
+**Still broken / not tested:** Controller-only prompts (entry above). Black bars on ultrawide (entry above).
+**Next:** Step 2 (Overwatch asset recon), after the test of the two entries above.
+
 ## 2026-10-07 Step 1: hello DLL, me3 profile, save backup
 
 **Changed:** New Rust crate `genji/` (`Cargo.toml`, `src/lib.rs`, `src/log.rs`), me3 profile

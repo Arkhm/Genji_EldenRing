@@ -15,8 +15,15 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
 
 ## What works
 
-Nothing yet. Step 0 (plan and repo setup) is done.
+- `tools/play.ps1` backs up your saves, builds `genji.dll` and starts Elden Ring offline through me3 with its
+  own save (`ER0000.genji.sl2`). The DLL loads, and logs the player's position, map block and HP to
+  `logs/genji.log` (tested in game 2026-10-07).
+
+## Not tested yet
+
+- Ultrawide fix (no black bars) built into `genji.dll`.
+- Input diagnostics in the log.
 
 ## What doesn't work yet
 
-Everything in the plan, steps 1 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).
+All of Genji: steps 2 to 13 of [docs/DESIGN.md](docs/DESIGN.md#5-the-plan-step-by-step).
