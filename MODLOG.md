@@ -3,6 +3,28 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5d: one wall climb per airtime
+
+**Changed:** `genji/src/movement.rs`: however a climb ends (Space released, top reached, time up, ceiling), the
+rest of the climb time is used up; the next climb needs the feet on the ground.
+**Why:** Your request: jumping off a wall and going back let you climb again with the time left over.
+**Tested how:** Build OK, no warnings; 8 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game.
+**Next:** Your quick check, then 5e.
+
+## 2026-10-07 Steps 5c and 5d tested in game: PASSED
+
+**Changed:** Nothing. Test of commits `44a6178` and `2dceb8e`.
+**Why:** Steps 5c and 5d pass conditions.
+**Tested how:** You double jumped and climbed walls. I read `logs/genji.log` (1,268 lines).
+**Result:** You: "perfect", except that a second climb was possible after jumping off a wall (entry above).
+Log: 65 jumps, 40 double jumps, 31 wall climbs (18 reached the top and vaulted, 3 ended by releasing Space,
+4 ran out of time, the rest ended at ceilings; 7 ceiling hits in total), no `GAVE UP`, no HP lost by anyone,
+no damage to you.
+**Still broken / not tested:** Nothing reported.
+**Next:** One climb per airtime (entry above).
+
 ## 2026-10-07 Steps 5c and 5d: double jump and wall climb
 
 **Changed:** `genji/src/movement.rs`, two commits. 5c (`44a6178`): a second Space press in the air jumps again at

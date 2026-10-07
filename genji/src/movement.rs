@@ -45,7 +45,9 @@ const JUMP_HEIGHT: f32 = 1.2;
 /// not verified), restored on landing.
 const AIR_JUMPS: u32 = 1;
 /// Genji's wall climb: hold Space in the air while facing a wall to climb it at CLIMB_SPEED for up to
-/// CLIMB_TIME seconds (about 7.5 m), restored on landing. Approximate Overwatch values, not verified.
+/// CLIMB_TIME seconds (about 7.5 m). One climb per airtime: however it ends (Space released, top reached, time
+/// up, ceiling), the next climb needs the feet on the ground first (your request, 2026-10-07).
+/// Approximate Overwatch values, not verified.
 const CLIMB_SPEED: f32 = 7.5;
 const CLIMB_TIME: f32 = 1.0;
 /// How far in front of the body (beyond its radius) a wall counts as climbable, metres.
@@ -326,15 +328,16 @@ impl Mover {
                 self.apex_y = self.apex_y.max(pos.y);
             } else if self.climbing {
                 self.climbing = false;
+                let used = self.climb_used;
+                self.climb_used = CLIMB_TIME; // no second climb until we touch the ground
                 if wish.jump && time_left {
                     // The wall ended in front of the chest: we reached the top. Hop over the edge.
                     self.vy = self.vy.max(VAULT_SPEED);
-                    glog!("MOVE", "wall climb: reached the top after {:.2}s, vault", self.climb_used);
+                    glog!("MOVE", "wall climb: reached the top after {used:.2}s, vault");
                 } else {
                     glog!(
                         "MOVE",
-                        "wall climb end after {:.2}s ({})",
-                        self.climb_used,
+                        "wall climb end after {used:.2}s ({})",
                         if !wish.jump { "Space released" } else { "out of climb time" }
                     );
                 }
