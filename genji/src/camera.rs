@@ -59,6 +59,8 @@ pub fn camera_step(dt: f32) {
         return;
     };
 
+    view.mover.watch_hp(player);
+
     let reason = if !WANTED.load(Ordering::Relaxed) {
         Some("Genji input not captured")
     } else if view.mover.gave_up {
@@ -101,10 +103,16 @@ pub fn camera_step(dt: f32) {
     };
     let wish = Wish { forward: axis(dik::W, dik::S), right: axis(dik::D, dik::A) };
     let look = *look;
-    gamepad::set_movement_blocked(true);
     let Some(feet) = view.mover.step(player, &look, &wish, dt) else {
-        return; // gave up this frame; next frame hands everything back
+        // Waiting for collision to load, or gave up this frame: the game drives.
+        gamepad::set_movement_blocked(false);
+        if view.model_hidden {
+            player.chr_ins.chr_flags1c5.set_enable_render(true);
+            view.model_hidden = false;
+        }
+        return;
     };
+    gamepad::set_movement_blocked(true);
 
     // 3. Camera and model.
     let eye = feet + Vec3::Y * EYE_HEIGHT + look.flat_forward() * FORWARD_OFFSET;

@@ -10,6 +10,16 @@
 //!
 //! Safety nets: if no ray ever hits anything (wrong collision filter), or the character falls for more than
 //! 5 s, the controller gives up and hands control back to the game for the rest of the session.
+//!
+//! Learned in the 5a tests (2026-10-07):
+//! - Right after a loading screen the map's collision isn't loaded yet: every ray misses for the first frames
+//!   (probe: all miss on frame 1, filter 0x2000058 hits on frame 20). So we only take over once a ray straight
+//!   down hits the ground; until then the game keeps control.
+//! - The game keeps the character's feet about 8 cm above the surface our rays hit (we wrote 1.13, the game
+//!   showed 1.21, every frame). Snapping exactly onto the hit pushed the body into the ground every frame and
+//!   the game pushed it back out (2.4 m of "outside push" per 0.5 s while standing still). We now keep that gap.
+//! - An unexplained instant death (HP 760 -> 0 in one second, no damage) while walking downhill. A record of the
+//!   last 60 frames is written to the log whenever HP drops, to find out why.
 
 use eldenring::cs::{CSHavokMan, PlayerIns};
 use eldenring::position::{HavokPosition, PositionDelta};
@@ -28,6 +38,8 @@ const MAX_FALL_SPEED: f32 = 55.0;
 const MAX_STEP: f32 = 0.5;
 /// How far below the feet we still "stick" to the ground when walking downhill, metres.
 const SNAP_DOWN: f32 = 0.6;
+/// Gap the game keeps between the feet and the surface our rays hit, metres (measured: 0.08).
+const GROUND_GAP: f32 = 0.08;
 /// Body radius kept between the character's centre and walls, metres.
 const RADIUS: f32 = 0.35;
 /// Heights (above the feet) of the rays that look for walls. All above MAX_STEP so steps don't count as walls.
@@ -38,6 +50,22 @@ const MAP_FILTER: u32 = 0x0200_0058;
 const NO_HIT_GIVE_UP_FRAMES: u32 = 30;
 const MAX_FALL_SECONDS: f32 = 5.0;
 const REPORT_EVERY: f32 = 0.5;
+/// Frames kept in the black box.
+const BLACK_BOX_FRAMES: usize = 60;
+
+/// One frame of movement state, for the black box.
+#[derive(Clone, Copy, Default)]
+struct FrameRecord {
+    time: f32,
+    pos: Vec3,
+    outside_push: f32,
+    vy: f32,
+    grounded: bool,
+    game_falling: bool,
+    game_on_ground: bool,
+    fall_timer: f32,
+    hp: i32,
+}
 
 #[derive(Default)]
 pub struct Mover {
@@ -59,6 +87,11 @@ pub struct Mover {
     /// Distance the character moved since our last write, without us (game movement leaking through,
     /// knockback, ...). Jumps over 3 m are counted as the engine re-centring its coordinates instead.
     outside_push: f32,
+    /// Waiting for the map's collision to load before taking over.
+    waiting_frames: u32,
+    clock: f32,
+    black_box: std::collections::VecDeque<FrameRecord>,
+    last_hp: Option<i32>,
 }
 
 /// Movement wish from the keyboard: forward (+1 W / -1 S), right (+1 D / -1 A).
@@ -76,7 +109,21 @@ impl Mover {
         let world = unsafe { CSHavokMan::instance() }.ok()?;
         let phys_world: &eldenring::cs::CSPhysWorld = &world.phys_world;
 
+        self.clock += dt;
         if !self.active {
+            let p = player.chr_ins.modules.physics.position;
+            let feet = Vec3::new(p.0, p.1, p.2);
+            if ray(phys_world, player, feet + Vec3::Y, Vec3::NEG_Y * 3.0, p.3).is_none() {
+                if self.waiting_frames == 0 {
+                    glog!("MOVE", "waiting for the map's collision to load before taking over");
+                }
+                self.waiting_frames += 1;
+                return None;
+            }
+            if self.waiting_frames > 0 {
+                glog!("MOVE", "collision ready after {} frames of waiting", self.waiting_frames);
+                self.waiting_frames = 0;
+            }
             let physics = &player.chr_ins.modules.physics;
             self.saved_gravity = Some((physics.gravity_multiplier, physics.gravity_disabled));
             self.active = true;
@@ -93,19 +140,21 @@ impl Mover {
             );
         }
         self.frames_since_start += 1;
-        if self.frames_since_start == 1 || self.frames_since_start == 20 {
+        if self.frames_since_start == 1 {
             probe(phys_world, player, world);
         }
 
         let p0 = player.chr_ins.modules.physics.position;
         let w = p0.3;
         let start = Vec3::new(p0.0, p0.1, p0.2);
+        let mut frame_push = 0.0;
         if let Some(last) = self.last_written {
             let moved = (start - last).length();
             if moved > 3.0 {
                 glog!("MOVE", "position jumped {moved:.1} m since our last write (engine re-centred coordinates, or a teleport)");
             } else {
                 self.outside_push += moved;
+                frame_push = moved;
             }
         }
 
@@ -123,7 +172,7 @@ impl Mover {
             match ray(phys_world, player, pos + Vec3::Y * MAX_STEP, Vec3::NEG_Y * (MAX_STEP + SNAP_DOWN), w) {
                 Some(hit) => {
                     self.ever_hit = true;
-                    pos.y = hit.y;
+                    pos.y = hit.y + GROUND_GAP;
                     self.vy = 0.0;
                 }
                 None => {
@@ -146,7 +195,7 @@ impl Mover {
                         "landed after {:.2}s at {:.1} m/s ({:.2}, {:.2}, {:.2})",
                         self.fall_time, -self.vy, hit.x, hit.y, hit.z
                     );
-                    pos.y = hit.y;
+                    pos.y = hit.y + GROUND_GAP;
                     self.vy = 0.0;
                     self.grounded = true;
                     self.fall_time = 0.0;
@@ -174,6 +223,7 @@ impl Mover {
         physics.chr_proxy_pos_update_requested = true;
         face(physics, look);
         self.last_written = Some(pos);
+        self.record(player, pos, frame_push);
 
         // Report.
         self.moved += horizontal.length();
@@ -211,7 +261,50 @@ impl Mover {
         }
         self.active = false;
         self.last_written = None;
+        self.waiting_frames = 0;
+        self.black_box.clear();
         glog!("MOVE", "controller OFF, game gravity restored (x{:.2})", physics.gravity_multiplier);
+    }
+
+    /// Adds this frame to the black box; dumps the black box to the log when HP drops.
+    fn record(&mut self, player: &PlayerIns, pos: Vec3, outside_push: f32) {
+        let modules = &player.chr_ins.modules;
+        let rec = FrameRecord {
+            time: self.clock,
+            pos,
+            outside_push,
+            vy: self.vy,
+            grounded: self.grounded,
+            game_falling: modules.physics.is_falling,
+            game_on_ground: modules.physics.standing_on_solid_ground,
+            fall_timer: modules.fall.fall_timer,
+            hp: modules.data.hp,
+        };
+        if self.black_box.len() == BLACK_BOX_FRAMES {
+            self.black_box.pop_front();
+        }
+        self.black_box.push_back(rec);
+    }
+
+    /// Call every frame, before anything else: when HP drops, writes the black box to the log.
+    pub fn watch_hp(&mut self, player: &PlayerIns) {
+        let hp = player.chr_ins.modules.data.hp;
+        if let Some(last) = self.last_hp
+            && hp < last
+            && !self.black_box.is_empty()
+        {
+            glog!("BLACKBOX", "HP dropped {last} -> {hp}; last {} frames (t = controller clock):", self.black_box.len());
+            for r in &self.black_box {
+                glog!(
+                    "BLACKBOX",
+                    "t {:.3} pos ({:.2}, {:.2}, {:.2}) push {:.3} vy {:.1} ours {} | game falling {} on ground {} fall timer {:.2} | hp {}",
+                    r.time, r.pos.x, r.pos.y, r.pos.z, r.outside_push, r.vy,
+                    if r.grounded { "ground" } else { "air" },
+                    r.game_falling as u8, r.game_on_ground as u8, r.fall_timer, r.hp
+                );
+            }
+        }
+        self.last_hp = Some(hp);
     }
 
     fn give_up(&mut self, player: &mut PlayerIns) {

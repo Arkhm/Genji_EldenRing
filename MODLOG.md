@@ -3,6 +3,46 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a: wait for collision, keep the 8 cm ground gap, death black box
+
+**Changed:** `genji/src/movement.rs`: (1) the controller only takes over once a ray straight down hits the
+ground; until then the game keeps control (`waiting for the map's collision to load`, `collision ready after N
+frames`); the probe now runs once per takeover. (2) Feet are placed 8 cm above the ray hit (`GROUND_GAP`), the
+gap the game keeps. (3) Black box: the last 60 frames (position, outside push, our vertical speed and ground
+state, the game's falling / on-ground flags and fall timer, HP) are written to the log (`BLACKBOX` lines)
+whenever HP drops. `genji/src/camera.rs`: HP is watched before anything else each frame (so the black box is
+written even on the frame of death); Elden Ring's own movement is only switched off once our controller is
+actually driving (before, waiting would have frozen you).
+**Why:** The probe test (entry below).
+**Tested how:** Build OK, no warnings; unit test passes.
+**Result:** Not tested in game.
+**Still broken / not tested:** Cause of the instant death (black box will show it). Whether 8 cm is right
+everywhere (outside push while standing should now be about 0).
+**Next:** Your test.
+
+## 2026-10-07 Step 5a probe tested in game: rays work; two new problems found
+
+**Changed:** Nothing. Test of commit `22613bc`.
+**Why:** Find out why every ray missed.
+**Tested how:** You stood still, walked, died, respawned and walked again. I read `logs/genji.log` (302 lines).
+**Result:**
+- **Rays:** on the first frame after loading, every combination missed. 20 frames later filter `0x2000058` hit
+  the ground at the right height (y 81.14 under feet at 81.18), as did `0x58`, `0x2000000`, `0x0` and `0x40`;
+  `0xFFFFFFFF`, `0x1`, `0x10` missed. The 4th component of the position makes no difference. Cause of the 5a
+  failure: **collision isn't loaded right after a loading screen**, and the 30-frame safety net fired before it
+  loaded. The filter was right.
+- **Fight with the game:** standing still, we wrote feet at y 1.13 (the ray hit), the game showed 1.21 every
+  second: it keeps the feet 8 cm above that surface. Pushing 8 cm into the ground every frame gave 2.4 m of
+  outside push per 0.5 s while standing still. You saw: bugged lighting and the inside of a small hill.
+- **Instant death** at 71.7 s while walking downhill: HP 760 at 71.52 s, 0 at 72.52 s, no damage in between.
+  Cause unknown.
+- **After respawning it worked:** collision ready on frame 1; mouse look; walking at 5.50 m/s (checked from
+  real positions: z 1.98 to 4.72 in 0.5 s); walked off a ledge, fell 0.98 s (about 8 m), landed at 16.7 m/s and
+  survived. Engine re-centring was handled (`position jumped 104.6 m`). Outside push while walking still 3 to 4.5
+  m per 0.5 s (the same 8 cm fight, now also happening sideways on slopes).
+**Still broken / not tested:** See entry above.
+**Next:** Fixes above.
+
 ## 2026-10-07 Step 5a: ray probe, starting direction fix, sensitivity 6.90
 
 **Changed:** `genji/src/movement.rs`: a one-off probe on the 1st and 20th frame of each takeover casts a 3 m ray
