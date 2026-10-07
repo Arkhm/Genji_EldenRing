@@ -103,6 +103,20 @@ pub fn camera_step(dt: f32) {
         let q = glam::Quat::from(player.chr_ins.modules.physics.orientation);
         q * Vec3::NEG_Z
     };
+    if view.look.is_none() {
+        // Field of view as the game draws it (we only replace the camera's position and rotation). The engine
+        // stores the vertical angle in radians; horizontal follows from the aspect ratio.
+        let (fov, aspect) = (camera.pers_cam_1.fov, camera.pers_cam_1.aspect_ratio);
+        let horizontal = 2.0 * ((fov / 2.0).tan() * aspect).atan();
+        let at_16_9 = 2.0 * ((fov / 2.0).tan() * 16.0 / 9.0).atan();
+        glog!(
+            "CAMERA",
+            "fov raw {fov:.4} = {:.1} deg vertical, aspect {aspect:.3}, so {:.1} deg horizontal on this screen, {:.1} deg at 16:9 (Overwatch measures there)",
+            fov.to_degrees(),
+            horizontal.to_degrees(),
+            at_16_9.to_degrees()
+        );
+    }
     let look = view.look.get_or_insert_with(|| Look::from_game_camera(&camera.pers_cam_2.matrix, body_forward));
     let (dx, dy) = gamepad::mouse_delta();
     look.turn(dx, dy);

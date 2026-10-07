@@ -3,6 +3,17 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Log the game's field of view; step 6b tested
+
+**Changed:** `genji/src/camera.rs`: when first person starts, a `CAMERA` line logs the field of view the game draws
+with (raw value, vertical and horizontal degrees, and the horizontal value at 16:9 for comparison with Overwatch).
+**Why:** You asked for the exact FOV of both games, to match Genji exactly. It isn't known yet for Elden Ring.
+**Tested how:** Build OK; 17 unit tests pass. Step 6b in game (commit `627249a`): you said everything works.
+**Result:** FOV line not tested in game.
+**Still broken / not tested:** Whether the engine's value is vertical (assumed, as usual for the engine; the log will
+show whether vertical or horizontal fits the numbers).
+**Next:** One short session to read the value; then exact Genji values for 6b.
+
 ## 2026-10-07 Step 6b: burst of 3, Fan of Blades, 30 shuriken, automatic reload
 
 **Changed:** New `genji/src/firing.rs` (timing only, 6 unit tests): hold left click = bursts of 3 (0.1 s apart,
