@@ -3,6 +3,50 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: aim at the crosshair target, Overwatch hand position, no endless shuriken, Overwatch damage
+
+**Changed:** `genji/src/shuriken.rs` rewritten (one commit; the parts depend on each other):
+- **Hand position** like your Overwatch screenshot: 0.6 m forward, 0.08 m right, 0.06 m down from the eye (just
+  right of and below the centre, not at the far right).
+- **Aim at the real crosshair target:** a ray along the view against the map, plus the characters' collision
+  cylinders, finds what's under the crosshair (up to 80 m); the shuriken flies from the hand to that point. Before,
+  it aimed at a fixed 20 m point, so far shots drifted.
+- **No endless shuriken:** after 80 m they now fall (gravity 20 m/s^2 out of range) so they end on the ground and
+  the engine removes them; life set to 3 s. Every 2 s a `SHURIKEN` line reports how many of ours are flying, the
+  oldest one's age, the life the engine actually uses, and totals.
+- **Overwatch damage:** the engine's own damage is reduced to 1 (it still gives the hit reaction, aggro and the
+  "last hit by" record); we follow each shuriken in flight and, when it ends next to a character (within 0.4 m of
+  its collision cylinder, checking the stretch it flew in its last frame), take 27 HP, or 54 if it hit the top 20%
+  of the character's height (headshot). `DAMAGE_MULTIPLIER` (1.0) scales both. `HIT` lines show body/headshot,
+  damage and HP.
+- The old 2-second HP watcher is replaced by these direct hit lines.
+**Why:** Your test (entry below).
+**Tested how:** Build OK, no warnings; 11 unit tests pass (new: the crosshair ray enters a character straight
+ahead at the right distance; misses beside, above and behind and when looking straight up; works looking down).
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Not sure: whether kills by our damage give runes (the engine's
+1-damage hit just before sets "last hit by" to you; please check runes after a kill); whether a shuriken hitting a
+wall right next to an enemy counts as a hit (it will, within 0.4 m); whether headshot height fits all enemies.
+Elden Ring enemies have far more HP than Overwatch heroes (bosses have thousands), so 27/54 may feel weak; the
+multiplier is there for that. The projectile still looks like a dagger (Genji's visuals come later).
+**Next:** Your test.
+
+## 2026-10-07 Step 6c early version tested in game: three problems
+
+**Changed:** Nothing. Test of commit `80d34c1`.
+**Why:** Step 6 checks.
+**Tested how:** You threw at near and far targets and enemies, died and respawned. I read `logs/genji.log`.
+**Result:**
+- You saw: straight, no drop; not centred far away; looks weird (still a dagger); for a while you couldn't throw
+  (after a headshot or getting hit, not sure which); after dying you hit a dog and an enemy underground took damage;
+  Overwatch numbers: 27 body, 54 headshot; the shuriken should start just right of and below the centre (screenshot).
+- Log: 377 clicks, 373 throws. **Throws #257 to #277 all failed** with engine error 4 (construction failed),
+  from 128.7 s until your death at 140.3 s; after the reload they worked again. 256 successful throws since
+  loading = the bullet manager's 128 bullets + 128 extra: none of ours had been removed (my explanation: without
+  gravity a shuriken that hits nothing never ends). That also explains the far-away "underground" hit.
+**Still broken / not tested:** See entry above.
+**Next:** Fixes above.
+
 ## 2026-10-07 Step 6c (early): shuriken flight and damage values set in memory; throw from the right hand
 
 **Changed:** `genji/src/shuriken.rs`: (1) commit `d981cbd`: the throw starts 0.4 m forward, 0.18 m right and
