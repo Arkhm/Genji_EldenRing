@@ -4,9 +4,10 @@
 //! - F9 switches Genji mode on and off.
 //! - "Captures" Genji's input while Genji mode is on, the player exists and the HUD is visible. While
 //!   captured:
-//!   - the keyboard hook hides E, Q, Left Shift and F from the game, and passes F on as E (interact);
-//!   - Elden Ring's weapon actions (Attack, Strong Attack, Guard, Skill) are switched off in the gameplay input
-//!     reader, which covers the mouse buttons.
+//!   - the keyboard hook hides E, Q, Left Shift and F from the game, and passes F on as E (interact).
+//!   - Mouse buttons are not blocked here: in the Genji save, Elden Ring's Attack, Strong Attack, Guard and
+//!     Skill are bound to Numpad 1-4 (or F5-F8) in the game's own key settings, so clicks do nothing in Elden
+//!     Ring. The diagnostic below checks it.
 //!
 //! "HUD visible" = UI state 0x07 in the game's UI-state table (`CSMenuManImp.ui_states`). In two test sessions
 //! (2026-10-07) it was hidden whenever a real menu was open (Esc menu, inventory, map, grace) and during
@@ -19,7 +20,7 @@ use eldenring::cs::CSMenuManImp;
 use fromsoftware_shared::FromStatic;
 
 use crate::dinput::{self, dik};
-use crate::gamepad::{self, ActionBlocker};
+use crate::gamepad;
 use crate::glog;
 
 /// DirectInput mouse button indexes.
@@ -69,8 +70,6 @@ pub struct Controls {
     toggle_was_down: bool,
     click_was_down: bool,
     last_ui: Option<u128>,
-    blocker: ActionBlocker,
-    block_logged: bool,
     clock: f32,
     report_timer: f32,
 }
@@ -84,8 +83,6 @@ impl Default for Controls {
             toggle_was_down: false,
             click_was_down: false,
             last_ui: None,
-            blocker: ActionBlocker::default(),
-            block_logged: false,
             clock: 0.0,
             report_timer: 0.0,
         }
@@ -129,16 +126,6 @@ impl Controls {
             };
             glog!("MODE", "Genji input {} ({why})", if capturing { "CAPTURED" } else { "released to the game" });
         }
-        if capturing {
-            let count = self.blocker.block();
-            if !self.block_logged {
-                self.block_logged = true;
-                glog!("PAD", "weapon actions blocked: {count} mapped inputs (original flags {})", self.blocker.describe());
-            }
-        } else {
-            self.blocker.release();
-            self.block_logged = false;
-        }
 
         let click_now = buttons & (1 << mouse::LEFT) != 0;
         // Actions: only while capturing, so menus and plain Elden Ring never trigger Genji.
@@ -147,9 +134,9 @@ impl Controls {
                 Input::Key(code) => dinput::key_down(&keys, *code),
                 Input::Mouse(button) => buttons & (1 << button) != 0,
             };
-            // Diagnostic: with capture off, does the game see left click as Attack?
-            if !self.capturing && *action == Action::Shuriken && down && self.held[i].is_none() && !self.click_was_down {
-                glog!("PAD", "left click while released: game's Attack check says {:?}", gamepad::attack_polled());
+            // Diagnostic: does the game see left click as Attack? Expected `false` in the Genji save.
+            if *action == Action::Shuriken && down && !self.click_was_down {
+                glog!("PAD", "left click: game's Attack check says {:?}", gamepad::attack_polled());
             }
             match (down && self.capturing, self.held[i]) {
                 (true, None) => {
@@ -172,11 +159,7 @@ impl Controls {
         self.report_timer += 1.0;
         if self.report_timer >= 10.0 {
             self.report_timer = 0.0;
-            glog!(
-                "DINPUT",
-                "keyboard reads in the last second: {keyboard}; weapon flags re-enabled by the game since start: {}",
-                self.blocker.reenabled_by_game
-            );
+            glog!("DINPUT", "keyboard reads in the last second: {keyboard}");
         }
     }
 }

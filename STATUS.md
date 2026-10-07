@@ -1,5 +1,9 @@
 # STATUS: Elden Ring still attacks on mouse clicks in Genji mode
 
+> **RESOLVED 2026-10-07: option A chosen.** In the Genji save, Elden Ring's Attack, Strong Attack, Guard and
+> Skill are rebound to Numpad 1-4 (or F5-F8). The flag-blocking code from attempt 2 was removed. Kept for the
+> record; option B can still replace A later.
+
 Date: 2026-10-07
 Step: 3 (Genji's controls), see `docs/DESIGN.md`
 

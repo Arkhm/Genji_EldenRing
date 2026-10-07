@@ -3,6 +3,20 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3: option A, Elden Ring's weapon actions unbound from the mouse in the Genji save
+
+**Changed:** Removed the flag-blocking code (`ActionBlocker`) from `genji/src/gamepad.rs` and
+`genji/src/controls.rs`. The left-click diagnostic now logs on every click, in both modes. `STATUS.md` marked
+resolved; `docs/DESIGN.md` and `README.md` describe the one-time key setup.
+**Why:** You chose option A from `STATUS.md`. Recommended bindings: Attack (RH) Numpad 1, Strong Attack (RH)
+Numpad 2, Guard (LH) Numpad 3, Skill Numpad 4; F5 to F8 if there is no numpad.
+**Tested how:** Build OK, no warnings; unit test passes.
+**Result:** Not tested in game. Expected after you rebind: clicks do nothing in Elden Ring, in both modes, and the
+log says `PAD left click: game's Attack check says Some(false)`.
+**Still broken / not tested:** Whether Elden Ring stores key bindings per save (I believe so, not verified). If
+it doesn't, your normal saves would get the numpad bindings too; you'd see it next time you play normally.
+**Next:** Your rebind and a short check, then step 4 (first-person camera).
+
 ## 2026-10-07 Step 3, HUD rule tested in game: menus PASSED, mouse blocking FAILED, stopped (STATUS.md)
 
 **Changed:** New `STATUS.md`. No code change. Test of commit `9fc2568`.
