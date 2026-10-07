@@ -4,12 +4,15 @@
 //! - Ultrawide fix (no black bars).
 //! - Genji's controls: captures Genji's keys from the game during gameplay, F9 toggles (step 3).
 //! - First-person camera while Genji's controls are captured (step 4).
+//! - Genji's own mouse look and movement (step 5).
 
 mod camera;
 mod controls;
 mod dinput;
 mod gamepad;
 mod log;
+mod look;
+mod movement;
 mod ultrawide;
 
 use std::ffi::c_void;

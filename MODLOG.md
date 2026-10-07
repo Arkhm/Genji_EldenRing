@@ -3,6 +3,27 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a: own mouse look and walking (movement controller, first slice)
+
+**Changed:** New `genji/src/look.rs` (mouse to yaw/pitch, Overwatch formula: degrees = counts x 0.0066 x
+sensitivity, placeholder sensitivity 6) and `genji/src/movement.rs` (walking at 5.5 m/s relative to where you
+look; wall rays at 0.65, 1.1, 1.6 m with sliding along walls; ground ray with 0.5 m step-up and 0.6 m snap-down;
+our own gravity, 17 m/s^2 placeholder; game gravity off while driving and restored after). `genji/src/camera.rs`
+now coordinates look, movement and camera each frame, and hands everything back to the game for menus, F9,
+Torrent, ladders and death. `genji/src/gamepad.rs` can now also switch off Elden Ring's own movement actions
+(move forward/back/left/right, dodge, backstep tap, jump) while our controller drives. `genji/src/dinput.rs`:
+WASD codes. `glam` added. Plan written first in `docs/DESIGN.md` section 5b (commit `e45446d`).
+**Why:** Step 5a of the plan.
+**Tested how:** Build OK, no warnings; unit test passes; checked the built DLL contains the new code.
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Unknowns the log will answer: axis conventions (`LOOK start
+... right match / up match / forward match` should all be close to 1.000); whether the collision filter
+`0x2000058` hits this game's ground (if not, the controller gives up after 30 frames: `GAVE UP: no ray hit`);
+whether Elden Ring's own movement is really switched off (`outside push` should stay near 0 while walking);
+real speed (`speed 5.50 m/s`). Safety nets: no ray hits in 30 frames, or falling for 5 s, hands control back to
+the game for the session. No jump in 5a (Space does nothing in Genji mode now); falls do no damage yet.
+**Next:** Your test.
+
 ## 2026-10-07 Step 4 tested in game: PASSED (step 4 done); 0.1 s delay before capture
 
 **Changed:** `genji/src/controls.rs`: capture (and first person) switches on only after gameplay has held for

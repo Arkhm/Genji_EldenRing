@@ -27,6 +27,10 @@ use crate::glog;
 
 /// DirectInput keyboard scan codes ("DIK_" codes) we care about.
 pub mod dik {
+    pub const W: usize = 0x11;
+    pub const A: usize = 0x1E;
+    pub const S: usize = 0x1F;
+    pub const D: usize = 0x20;
     pub const Q: usize = 0x10;
     pub const E: usize = 0x12;
     pub const F: usize = 0x21;

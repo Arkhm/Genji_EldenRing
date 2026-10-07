@@ -25,31 +25,60 @@ use fromsoftware_shared::FromStatic;
 use crate::glog;
 
 /// Elden Ring actions switched off while Genji mode captures input: all weapon use.
-const BLOCKED_ACTIONS: [UserInputKey; 4] =
+const WEAPON_ACTIONS: [UserInputKey; 4] =
     [UserInputKey::Attack, UserInputKey::StrongAttack, UserInputKey::Guard, UserInputKey::Skill];
+/// Elden Ring actions switched off while our movement controller drives: walking, dodging, jumping.
+const MOVEMENT_ACTIONS: [UserInputKey; 7] = [
+    UserInputKey::MoveForwards,
+    UserInputKey::MoveBackwards,
+    UserInputKey::MoveLeft,
+    UserInputKey::MoveRight,
+    UserInputKey::Backstep,
+    UserInputKey::BackstepTapped,
+    UserInputKey::Jump,
+];
 
 static WEAPONS_BLOCKED: AtomicBool = AtomicBool::new(false);
-static BLOCKER: Mutex<Option<ActionBlocker>> = Mutex::new(None);
+static MOVEMENT_BLOCKED: AtomicBool = AtomicBool::new(false);
+static BLOCKERS: Mutex<Option<[ActionBlocker; 2]>> = Mutex::new(None);
 
 /// Ask for Elden Ring's weapon actions to be off (true) or on (false). Applied by `weapon_block_step`.
 pub fn set_weapons_blocked(on: bool) {
     WEAPONS_BLOCKED.store(on, Ordering::Relaxed);
 }
 
+/// Ask for Elden Ring's own movement (walk, dodge, jump) to be off (true) or on (false).
+pub fn set_movement_blocked(on: bool) {
+    MOVEMENT_BLOCKED.store(on, Ordering::Relaxed);
+}
+
 /// Runs every frame in the `GameFlowStep` task group: after the game has read input, before it uses it.
 pub fn weapon_block_step() {
-    let mut guard = BLOCKER.lock().unwrap_or_else(|e| e.into_inner());
-    let blocker = guard.get_or_insert_with(ActionBlocker::default);
-    if WEAPONS_BLOCKED.load(Ordering::Relaxed) {
-        let first = !blocker.active;
-        let count = blocker.block();
-        if first {
-            glog!("PAD", "weapon actions blocked in GameFlowStep: {count} mapped inputs (original flags {})", blocker.describe());
+    let mut guard = BLOCKERS.lock().unwrap_or_else(|e| e.into_inner());
+    let blockers = guard.get_or_insert_with(|| {
+        [ActionBlocker::new("weapon", &WEAPON_ACTIONS), ActionBlocker::new("movement", &MOVEMENT_ACTIONS)]
+    });
+    let wanted = [WEAPONS_BLOCKED.load(Ordering::Relaxed), MOVEMENT_BLOCKED.load(Ordering::Relaxed)];
+    for (blocker, on) in blockers.iter_mut().zip(wanted) {
+        if on {
+            let first = !blocker.active;
+            let count = blocker.block();
+            if first {
+                glog!("PAD", "{} actions blocked in GameFlowStep: {count} mapped inputs (original flags {})", blocker.name, blocker.describe());
+            }
+        } else if blocker.active {
+            blocker.release();
+            glog!("PAD", "{} actions released", blocker.name);
         }
-    } else if blocker.active {
-        blocker.release();
-        glog!("PAD", "weapon actions released");
     }
+}
+
+/// Mouse movement the game read this frame (DirectInput counts; x right, y down).
+pub fn mouse_delta() -> (i32, i32) {
+    let Some(pad) = in_game_pad() else { return (0, 0) };
+    let device = unsafe { pad.pad_device.as_ref() };
+    let mouse = unsafe { device.mouse_device.as_ref() };
+    (mouse.di_mouse_state.lx, mouse.di_mouse_state.ly)
 }
 
 /// Raw mouse buttons as the game itself read them (bit i = DirectInput button i).
@@ -81,19 +110,24 @@ fn in_game_pad_mut() -> Option<&'static mut CSInGamePad> {
 }
 
 /// Switches Elden Ring actions off and on in the gameplay pad, remembering the original enable flags.
-#[derive(Default)]
 struct ActionBlocker {
+    name: &'static str,
+    actions: &'static [UserInputKey],
     saved: HashMap<i32, (bool, bool)>,
     active: bool,
 }
 
 impl ActionBlocker {
+    fn new(name: &'static str, actions: &'static [UserInputKey]) -> Self {
+        Self { name, actions, saved: HashMap::new(), active: false }
+    }
+
     /// Returns how many mapped inputs are blocked.
     fn block(&mut self) -> usize {
         let Some(pad) = in_game_pad_mut() else { return 0 };
         let mapped: Vec<i32> = {
             let groups = unsafe { pad.input_type_group.as_ref() };
-            BLOCKED_ACTIONS
+            self.actions
                 .iter()
                 .filter_map(|action| groups.find(action))
                 .flat_map(|group| group.iter().map(|(input, _)| input).collect::<Vec<_>>())
