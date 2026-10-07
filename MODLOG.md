@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5e, second try: step aside only when the game's animation moves the character
+
+**Changed:** `genji/src/movement.rs`: a non-idle animation now hands control to the game only while its root
+motion (`CSChrBehaviorModule.root_motion`, the movement the animation itself asks for) is above 0.002; in-place
+animations (flask, weapon swap) no longer interrupt our movement. A game action ends when the root motion has
+stayed below the threshold for 0.3 s (or the animation is idle again). Every animation change is logged with its
+root motion (`ACTION animation A -> B (root motion R)`), to learn the unit and tune the threshold.
+`genji/src/camera.rs`: Elden Ring's own walking stays blocked during game actions.
+**Why:** First 5e test (entry below).
+**Tested how:** Not built yet at the time of writing (tool trouble); see the commit for the build result.
+**Result:** Not tested in game.
+**Still broken / not tested:** The meaning and unit of `root_motion` are not documented; the threshold is a guess.
+If it's wrong, either doors and grabs won't hand over (we'd keep driving through them), or in-place animations
+will still interrupt movement. The log will show which.
+**Next:** Your test.
+
+## 2026-10-07 Step 5e first test: item pickup passed; flask and weapon swap broke movement
+
+**Changed:** Nothing. Test of commit `ffb6e98`.
+**Why:** Step 5e pass condition.
+**Tested how:** You picked up items, drank the flask, pressed the arrow keys (weapon/item switching), talked to
+an NPC and rode Torrent. I read `logs/genji.log`.
+**Result:**
+- Item pickup: passed (`63000` -> `2004050`, game action 0.44 s, then we drove again).
+- Flask (`50110`, `50111`, `50112`) and weapon swaps (`2029002`, `29022`, `29001`, `2029021`, `2029031`,
+  `2029051`) started game actions, as designed, but Elden Ring's own walking was unblocked during them; you kept
+  moving, so its walk/run animations (`2020000`, `2020100`, `2022100`, `2202020`, `2202040`, `2202115`) played and,
+  not being idle, kept the game action going: 4.3 s, 14.9 s and longer. You saw "dull" movement and no double jump:
+  that was Elden Ring's own walking.
+- NPC dialogue and Torrent: worked. Doors, levers, chests, hits and grabs: not reached.
+**Still broken / not tested:** See entry above.
+**Next:** Second try (entry above).
+
 ## 2026-10-07 Step 5e: step aside while the game plays its own animations
 
 **Changed:** `genji/src/movement.rs`: the controller now returns one of three results (`Driving`, `GameAction`,

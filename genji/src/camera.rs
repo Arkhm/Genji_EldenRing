@@ -113,8 +113,9 @@ pub fn camera_step(dt: f32) {
             feet
         }
         Step::GameAction(feet) => {
-            // The game moves the character itself (door, pickup, flask, hit...): first person follows it.
-            gamepad::set_movement_blocked(false);
+            // The game moves the character itself (door, grab, knockback...): first person follows it. Elden Ring's
+            // own walking stays blocked; unblocking it let its walk animations keep the game action going.
+            gamepad::set_movement_blocked(true);
             feet
         }
         Step::NotReady => {

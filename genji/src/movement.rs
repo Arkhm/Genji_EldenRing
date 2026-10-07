@@ -89,6 +89,15 @@ const SETTLE_GIVE_UP: f32 = 3.0;
 const IDLE_ANIMATION: i32 = 2_000_000;
 /// "No animation" (seen right after loading).
 const NO_ANIMATION: i32 = -1;
+/// A non-idle animation counts as "the game moves the character" only while its root motion
+/// (`CSChrBehaviorModule.root_motion`, the movement the animation itself asks for) is above this. In-place
+/// animations (flask `5011x`, weapon swaps `29xxx` / `2029xxx`) stay below it and we keep driving through them.
+/// First 5e test (2026-10-07): stepping aside for every non-idle animation, with Elden Ring's walking unblocked,
+/// let its own walk/run animations (`2020100`, `2022100`, `2202xxx`) keep the "game action" going for up to 15 s.
+/// The unit of root_motion isn't known yet; it's logged with every animation change to tune this.
+const ROOT_MOTION_THRESHOLD: f32 = 0.002;
+/// A game action ends when its root motion stayed below the threshold for this long, seconds.
+const ACTION_STILL_TIME: f32 = 0.3;
 /// Landing ray starts this far above the feet, so a surface we've slightly sunk into is still found, metres.
 const LANDING_RAY_LIFT: f32 = 0.5;
 /// Ray-cast filter from the CS2 field note. It hits *some* map collision, but in one 5a test it hit a surface
@@ -158,6 +167,9 @@ pub struct Mover {
     game_action: Option<(i32, f32)>,
     /// The idle animation seen at the first takeover, in case a stance uses a different idle than 2000000.
     first_idle: Option<i32>,
+    last_seen_animation: i32,
+    /// Time the root motion has stayed below the threshold during a game action.
+    action_still_for: f32,
     character_blocks: u32,
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
@@ -193,23 +205,39 @@ impl Mover {
         }
         self.clock += dt;
 
-        // 5e: the game's own actions.
+        // 5e: the game's own actions. Step aside only while a non-idle animation moves the character.
         let animation = current_animation(player);
+        let root_motion = {
+            let r = &player.chr_ins.modules.behavior.root_motion;
+            Vec3::new(r.0, r.1, r.2).length()
+        };
         let free = animation == IDLE_ANIMATION || animation == NO_ANIMATION || Some(animation) == self.first_idle;
-        if !free {
-            match self.game_action {
-                None => {
-                    glog!("ACTION", "game action: animation {animation}; the game drives (first person stays)");
-                    self.release(player);
-                    self.game_action = Some((animation, self.clock));
-                }
-                Some((last, since)) if last != animation => {
-                    glog!("ACTION", "game action continues: animation {last} -> {animation}");
-                    self.game_action = Some((animation, since));
-                }
-                _ => {}
+        if animation != self.last_seen_animation {
+            glog!(
+                "ACTION",
+                "animation {} -> {animation} (root motion {root_motion:.4}){}",
+                self.last_seen_animation,
+                if self.game_action.is_some() { " [game drives]" } else { "" }
+            );
+            self.last_seen_animation = animation;
+        }
+        let moves = !free && root_motion > ROOT_MOTION_THRESHOLD;
+        match self.game_action {
+            None if moves => {
+                glog!("ACTION", "game action: animation {animation} moves the character (root motion {root_motion:.4}); the game drives");
+                self.release(player);
+                self.game_action = Some((animation, self.clock));
+                self.action_still_for = 0.0;
+                return Step::GameAction(feet_now);
             }
-            return Step::GameAction(feet_now);
+            Some(_) if !free => {
+                self.action_still_for = if moves { 0.0 } else { self.action_still_for + dt };
+                if self.action_still_for < ACTION_STILL_TIME {
+                    return Step::GameAction(feet_now);
+                }
+                // Still a non-idle animation, but it stopped moving the character: take over again below.
+            }
+            _ => {}
         }
         // While waiting to take over again after a game action, keep the first-person view.
         let not_ready = if self.game_action.is_some() { Step::GameAction(feet_now) } else { Step::NotReady };
