@@ -5,6 +5,7 @@
 //! - Genji's controls: captures Genji's keys from the game during gameplay, F9 toggles (step 3).
 //! - First-person camera while Genji's controls are captured (step 4).
 //! - Genji's own mouse look and movement (step 5).
+//! - Shuriken: the engine's own projectiles, thrown from the eye (step 6).
 
 mod camera;
 mod controls;
@@ -14,6 +15,7 @@ mod log;
 mod look;
 mod movement;
 mod obstacles;
+mod shuriken;
 mod ultrawide;
 
 use std::ffi::c_void;

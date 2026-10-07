@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6a: left click throws a projectile (Elden Ring's Throwing Dagger) from the eye
+
+**Changed:** New `genji/src/shuriken.rs`; `genji/src/camera.rs` throws on each left-click press while our
+controller drives and runs a hit watcher every frame; `genji/src/lib.rs` registers the module. Outside the repo
+(gitignored): WitchyBND 3.0.1.0 (`WitchyBND-3.0.1.0-win-x64.zip`, 48,308,252 bytes, SHA-256 `a3e6b2a0...0364`,
+official GitHub release of ividyon/WitchyBND) in `third_party/witchybnd/`; a copy of your `regulation.bin`
+(identical hash) unpacked into `erdata/vanilla/`, with `Bullet`, `EquipParamGoods`, `BehaviorParam_PC` and
+`AtkParam_Pc` converted to XML. The game folder was only read.
+**Why:** Step 6a of the plan (`docs/DESIGN.md` section 5c).
+- Projectile: item 1700 "Throwing Dagger" points to Bullet row `10170000` (speed 32 m/s, life 0.85 s, range
+  15 m, some gravity, effect 300001) and attack row `10170000` (67 physical, correction 120).
+- Spawn request: our own copy of the engine's 0x110-byte layout, filled like a working Elden Ring mod does
+  (justbustin/minecraft-crossover-bridge, MIT): owner = the player's handle, behavior/magic/goods/dummy-poly -1,
+  no target, right/up/forward/position from our look and eye. Size and field offsets are checked at compile time.
+- Logging: `THROW #n bullet ... from ... dir ... : ok` or the engine's error code; `HIT character ... hp a -> b`
+  for any nearby character losing HP within 2 s of a throw.
+**Tested how:** Build OK, no warnings; 8 unit tests pass; size and offset checks pass at compile time.
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Unknown: whether the engine accepts the request on this
+version (error 3 = invalid bullet id, 4 = construction failed); whether the dagger looks right flying from the
+eye. One dagger per click, no ammo or burst yet (6b).
+**Next:** Your test.
+
 ## 2026-10-07 Step 5e tested in game: PASSED (step 5 done)
 
 **Changed:** Nothing in code. Test of commit `b523430` (three sessions). `README.md`, `docs/DESIGN.md` updated.

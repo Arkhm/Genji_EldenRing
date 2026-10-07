@@ -23,6 +23,7 @@ use crate::gamepad;
 use crate::glog;
 use crate::look::Look;
 use crate::movement::{Mover, Step, Wish};
+use crate::shuriken::Thrower;
 
 /// Height of the eyes above the character's feet, in metres.
 const EYE_HEIGHT: f32 = 1.6;
@@ -43,6 +44,8 @@ struct View {
     mover: Mover,
     model_hidden: bool,
     handback_reason: Option<&'static str>,
+    thrower: Thrower,
+    left_was_down: bool,
 }
 
 pub fn camera_step(dt: f32) {
@@ -60,6 +63,10 @@ pub fn camera_step(dt: f32) {
     };
 
     view.mover.watch_hp(player);
+    view.thrower.tick(player, dt);
+    let left_down = gamepad::mouse_buttons() & 1 != 0;
+    let left_pressed = left_down && !view.left_was_down;
+    view.left_was_down = left_down;
 
     let reason = if !WANTED.load(Ordering::Relaxed) {
         Some("Genji input not captured")
@@ -107,9 +114,11 @@ pub fn camera_step(dt: f32) {
         jump: dinput::key_down(&keys, dik::SPACE),
     };
     let look = *look;
+    let mut driving = false;
     let feet = match view.mover.step(player, &look, &wish, dt) {
         Step::Driving(feet) => {
             gamepad::set_movement_blocked(true);
+            driving = true;
             feet
         }
         Step::GameAction(feet) => {
@@ -134,6 +143,11 @@ pub fn camera_step(dt: f32) {
     look.write_camera(&mut camera.pers_cam_1.matrix, eye);
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
+
+    // 4. Shuriken (step 6a): one throw per left click while we drive.
+    if driving && left_pressed {
+        view.thrower.throw(player, &look, eye);
+    }
 }
 
 /// Why the game must drive right now, or None if we can.
