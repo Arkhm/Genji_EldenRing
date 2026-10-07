@@ -1,5 +1,22 @@
 # STATUS: shuriken throwing stops after 256 wall hits (engine error 4)
 
+## Resolved (2026-10-07, option C1, fix not tested in game yet)
+Ghidra 12.1.4 (headless, no full analysis; project and output in the gitignored `third_party/ghidra-work/`)
+decompiled `spawn_bullet` (RVA 0x3A2CB0) and the code that frees the second pool's records:
+- `spawn_bullet` -> RVA 0x3A5A20 allocates a record (0x9D0 bytes, RVA 0x3A7CC0; heap allocations count +0x38) and
+  copies the converted request into it (record +0x330).
+- Every frame RVA 0x3A9840 walks the live records and calls the record update (RVA 0x3900C0). The update keeps a
+  record alive while its "emitting" byte (+0x329, set to 1 at spawn) is set or it still has bullets (+0x320). The
+  emitting byte is cleared only when record +0x4C4 is set, and that byte comes from **bit 0 of the request's
+  `unk44` ("flags")** (RVA 0x38E550 converts the request). Other code that ends emitters (by owner, by id) is
+  driven by the game's own attacks, which we don't use.
+- So with `unk44 = 0` (what we sent) every record emits forever and is never freed.
+- The part 2 log agrees once read correctly: during the `unk44 = 1` variant the second pool's live count stayed at
+  32-33 while its "ever allocated" count rose 32 -> 43, so those records were freed. I had only compared the count
+  just before and after each throw, where a record always appears; the release happens a frame later.
+Fix: `unk44 = 1` on every throw (`SPAWN_ONE_SHOT` in `genji/src/shuriken.rs`); the P debug switch is removed.
+Bit 3 (0x8) of the same field adds network sync, never set.
+
 Date: 2026-10-07
 Step: 6 (Shuriken), see `docs/DESIGN.md` section 5c
 

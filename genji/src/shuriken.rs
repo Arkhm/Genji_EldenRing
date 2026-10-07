@@ -34,7 +34,7 @@ use crate::look::Look;
 
 /// STATUS.md option B (2026-10-07): projectile rows that were compared. Result: Bone Dart fills the second pool exactly
 /// like the dagger, and the pool grows by exactly one record per successful *throw* (not per hit), never freed until
-/// the area reloads. So the projectile type isn't the cause; P now switches spawn-request variants (SPAWN_VARIANTS).
+/// the area reloads. The projectile type wasn't the cause (see SPAWN_ONE_SHOT); we use the dagger (index 0).
 const CANDIDATES: [(i32, &str); 5] = [
     (10_170_000, "Throwing Dagger"),
     (10_171_000, "Bone Dart"),
@@ -102,20 +102,11 @@ const STUCK_SPEED: f32 = 1.0;
 const PUSH_AFTER: f32 = 0.5;
 const PUSH_DOWN_SPEED: f32 = 30.0;
 
-/// Spawn-request variants to find which field lets the engine release the per-throw record (P switches). Each changes
-/// one field we otherwise leave at 0 or -1. The log shows the second pool's extra count before and after every throw:
-/// +1 = leaks, +0 = released.
-const SPAWN_VARIANTS: [&str; 9] = [
-    "baseline (as the bridge mod)",
-    "goods_id = 1700 (Throwing Dagger item)",
-    "dummy_poly_id = 0",
-    "unk44 (\"flags\" in the bridge mod) = 1",
-    "target = owner",
-    "behavior_id = 0, magic_id = 0",
-    "unk10 = 1",
-    "unk28 = 1, unk2c = 1",
-    "unk40 = 1",
-];
+/// Spawn-request flag bit 0 ("one shot"). Every spawn creates an emitter record in the bullet manager's second pool;
+/// the engine frees it only once this bit is set and the record's bullets are gone. Without it the record lives
+/// until the area reloads, and after 256 of them every throw is refused (STATUS.md, Ghidra 2026-10-07: copied into
+/// the record at +0x4c4, checked by the record update at RVA 0x3900c0). Bit 3 (0x8) would add network sync: never.
+const SPAWN_ONE_SHOT: u32 = 1;
 
 /// Our copy of the engine's bullet spawn request (same layout as fromsoftware-rs `BulletSpawnData`).
 #[repr(C, align(16))]
@@ -211,10 +202,8 @@ pub struct Thrower {
     headshots: u32,
     removed_after_life_zero: u32,
     removed_after_push: u32,
-    /// Index into CANDIDATES (fixed at the dagger now).
+    /// Index into CANDIDATES (fixed at the dagger).
     candidate: usize,
-    /// Index into SPAWN_VARIANTS.
-    variant: usize,
     impacts: u32,
     peak_extra: u32,
 }
@@ -295,33 +284,6 @@ impl Thrower {
         CANDIDATES[self.candidate].0
     }
 
-    /// Switches to the next spawn-request variant (STATUS.md option B, second part).
-    pub fn next_variant(&mut self) {
-        self.variant = (self.variant + 1) % SPAWN_VARIANTS.len();
-        glog!("VARIANT", "now #{}: {}", self.variant, SPAWN_VARIANTS[self.variant]);
-    }
-
-    /// Switches to the next projectile row (STATUS.md option B). `active`: Genji mode currently applies the values.
-    #[allow(dead_code)]
-    pub fn next_candidate(&mut self, active: bool) {
-        self.set_shuriken_values(false);
-        self.candidate = (self.candidate + 1) % CANDIDATES.len();
-        self.flying.clear();
-        self.impacts = 0;
-        self.peak_extra = 0;
-        glog!(
-            "PROJECTILE",
-            "now {} (bullet {}), {} of {}",
-            CANDIDATES[self.candidate].1,
-            self.bullet_id(),
-            self.candidate + 1,
-            CANDIDATES.len()
-        );
-        if active {
-            self.set_shuriken_values(true);
-        }
-    }
-
     /// Throws one shuriken from Genji's hand toward what is under the crosshair.
     pub fn throw(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
         let view_forward = look.forward();
@@ -336,7 +298,7 @@ impl Thrower {
         let up = forward.cross(right).normalize_or(Vec3::Y);
         let up = if up.y < 0.0 { -up } else { up };
         let owner = unsafe { std::ptr::read(&player.chr_ins.field_ins_handle as *const _ as *const u64) };
-        let mut request = SpawnRequest {
+        let request = SpawnRequest {
             owner,
             behavior_id: -1,
             magic_id: -1,
@@ -349,7 +311,7 @@ impl Thrower {
             unk2c: 0,
             unk30: [0.0; 4],
             unk40: 0,
-            unk44: 0,
+            unk44: SPAWN_ONE_SHOT,
             pad48: [0; 8],
             right: [right.x, right.y, right.z, 0.0],
             up: [up.x, up.y, up.z, 0.0],
@@ -357,41 +319,13 @@ impl Thrower {
             position: [from.x, from.y, from.z, 1.0],
             rest: [0; 0x80],
         };
-        match self.variant {
-            1 => request.goods_id = 1700,
-            2 => request.dummy_poly_id = 0,
-            3 => request.unk44 = 1,
-            4 => request.target = owner,
-            5 => {
-                request.behavior_id = 0;
-                request.magic_id = 0;
-            }
-            6 => request.unk10 = 1,
-            7 => {
-                request.unk28 = 1;
-                request.unk2c = 1;
-            }
-            8 => request.unk40 = 1,
-            _ => {}
-        }
         let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
             glog!("THROW", "bullet manager not available");
             return;
         };
-        let extra = |m: &CSBulletManager| unsafe { ((m as *const CSBulletManager as *const u8).add(0x38) as *const u32).read() };
-        let before = extra(manager);
         let data = unsafe { &*(&request as *const SpawnRequest as *const BulletSpawnData) };
         let result = manager.spawn_bullet(data);
-        let after = extra(manager);
         self.throws += 1;
-        glog!(
-            "VARIANT",
-            "throw #{} with #{}: second pool extra {before} -> {after} ({}){}",
-            self.throws,
-            self.variant,
-            if after > before { "+1, leaked" } else if before == 0 && after == 0 { "buffer not full yet, can't tell" } else { "+0" },
-            if result.is_err() { ", throw refused" } else { "" }
-        );
         if result.is_err() {
             glog!("THROW", "{}", pool_levels(manager));
         }

@@ -237,6 +237,11 @@ damage, hit effects, enemies reacting and fighting back. This is what the CS2 pr
 **Library gap:** `BulletSpawnData` (the spawn request) has private fields and no constructor in fromsoftware-rs.
 We build our own copy of its memory layout (taken from the library source, 0x110 bytes) and pass that.
 
+**One-shot flag (found with Ghidra, 2026-10-07, see `STATUS.md`):** every spawn also creates an *emitter* record
+(the bullet manager's second pool: 64 slots plus 192 extra). The engine frees it only if bit 0 of the request's
+flags field (`unk44`) is set and its bullets are gone; otherwise it lives until the area reloads and after 256
+throws every spawn is refused. We always set that bit. Bit 3 of the same field asks for network sync: never set.
+
 **Logging:** every throw (time, origin, direction, bullet row, result code from the engine); HP changes of
 characters near where a shuriken lands (`HIT` lines), so damage is checked from numbers.
 

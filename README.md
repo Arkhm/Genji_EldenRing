@@ -32,6 +32,10 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   facing a wall) (steps 5c and 5d, tested 2026-10-07). Doors, chests, item pickups, flask and weapon swaps work
   in Genji mode: the game moves the character for its own animations and you keep the first-person view
   (step 5e, tested 2026-10-07; being grabbed not tested).
+- Shuriken, first part (step 6a, tested 2026-10-07): left click throws one (an Elden Ring Throwing Dagger with
+  Overwatch values: 60 m/s, no drop, 27 damage, 54 on headshots) from just right of and below the centre, toward
+  what's under the crosshair; kills give runes. The old limit (throws refused after 256) has a fix that is
+  **not tested** yet.
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once

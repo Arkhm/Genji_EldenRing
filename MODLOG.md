@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Shuriken limit fixed (one-shot flag found with Ghidra); P debug switch removed
+
+**Changed:** `genji/src/shuriken.rs`: every throw sets bit 0 of the spawn request's flags field (`unk44 = 1`,
+`SPAWN_ONE_SHOT`); spawn variants, the projectile switch and their logging removed. `genji/src/camera.rs`: P no
+longer does anything. `genji/src/dinput.rs`: unused P key code removed. `STATUS.md`: "Resolved" section.
+`docs/DESIGN.md`: one-shot flag. `README.md`: shuriken line. Outside git: Ghidra 12.1.4 (official release,
+SHA-256 matches GitHub's) in `third_party/ghidra/`, its project and outputs in `third_party/ghidra-work/`
+(gitignored); `eldenring.exe` was only read.
+**Why:** Throws were refused after 256 (STATUS.md). Ghidra showed the per-throw emitter record is freed only when
+that bit is set (details in STATUS.md).
+**Tested how:** Build OK, no warnings; 11 unit tests pass. Re-read the part 2 log: with `unk44 = 1` the pool's live
+count stayed flat (32-33) while 11 records were created, so they were freed; I had misread that test.
+**Result:** Not tested in game.
+**Still broken / not tested:** Unlimited throwing in game; whether the flag changes anything else about the throw
+(the part 2 session showed throws `ok` with it, hits weren't checked in that window).
+**Next:** Your test: 300+ throws at walls and an enemy.
+
 ## 2026-10-07 STATUS option B part 2 tested in game: every variant leaks; options updated
 
 **Changed:** `STATUS.md` only. Test of commit `5ee9fa5`.
