@@ -44,6 +44,17 @@ const JUMP_HEIGHT: f32 = 1.2;
 /// Genji's double jump: one extra jump in the air, same height as a normal jump (approximate Overwatch value,
 /// not verified), restored on landing.
 const AIR_JUMPS: u32 = 1;
+/// Genji's wall climb: hold Space in the air while facing a wall to climb it at CLIMB_SPEED for up to
+/// CLIMB_TIME seconds (about 7.5 m), restored on landing. Approximate Overwatch values, not verified.
+const CLIMB_SPEED: f32 = 7.5;
+const CLIMB_TIME: f32 = 1.0;
+/// How far in front of the body (beyond its radius) a wall counts as climbable, metres.
+const CLIMB_REACH: f32 = 0.3;
+/// Height of the ray that looks for the wall to climb (chest), metres above the feet.
+const CLIMB_RAY_HEIGHT: f32 = 1.1;
+/// When the wall ends at chest height (top reached), the feet are still about CLIMB_RAY_HEIGHT below the edge;
+/// this upward speed lifts them about 1.24 m with our gravity (v^2 / 2g), enough to clear it, m/s.
+const VAULT_SPEED: f32 = 6.5;
 /// After walking off an edge you can still jump for this long, seconds ("coyote time").
 const COYOTE_TIME: f32 = 0.1;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
@@ -131,6 +142,8 @@ pub struct Mover {
     since_left_ground: f32,
     jump_was_down: bool,
     air_jumps_used: u32,
+    climbing: bool,
+    climb_used: f32,
     contacts: ContactMonitor,
     settled_for: f32,
     waited_for: f32,
@@ -278,6 +291,7 @@ impl Mover {
                     pos.y = hit.y + GROUND_GAP;
                     self.vy = 0.0;
                     self.air_jumps_used = 0;
+                    self.climb_used = 0.0;
                 }
                 None => {
                     self.grounded = false;
@@ -291,6 +305,40 @@ impl Mover {
         }
         if !self.grounded {
             self.since_left_ground += dt;
+            // Wall climb: Space held, facing a wall within reach, climb time left.
+            let wall_ahead = ray(
+                phys_world,
+                player,
+                self.filter,
+                pos + Vec3::Y * CLIMB_RAY_HEIGHT,
+                look.flat_forward() * (RADIUS + CLIMB_REACH),
+                w,
+            )
+            .is_some();
+            let time_left = self.climb_used < CLIMB_TIME;
+            if wish.jump && wall_ahead && time_left {
+                if !self.climbing {
+                    self.climbing = true;
+                    glog!("MOVE", "wall climb start at ({:.2}, {:.2}, {:.2}), {:.2}s left", pos.x, pos.y, pos.z, CLIMB_TIME - self.climb_used);
+                }
+                self.vy = CLIMB_SPEED;
+                self.climb_used += dt;
+                self.apex_y = self.apex_y.max(pos.y);
+            } else if self.climbing {
+                self.climbing = false;
+                if wish.jump && time_left {
+                    // The wall ended in front of the chest: we reached the top. Hop over the edge.
+                    self.vy = self.vy.max(VAULT_SPEED);
+                    glog!("MOVE", "wall climb: reached the top after {:.2}s, vault", self.climb_used);
+                } else {
+                    glog!(
+                        "MOVE",
+                        "wall climb end after {:.2}s ({})",
+                        self.climb_used,
+                        if !wish.jump { "Space released" } else { "out of climb time" }
+                    );
+                }
+            }
             // Ceiling: stop rising when the head would hit something.
             if self.vy > 0.0
                 && ray(phys_world, player, self.filter, pos + Vec3::Y * (HEAD_HEIGHT - 0.2), Vec3::Y * (self.vy * dt + 0.25), w)
@@ -298,8 +346,14 @@ impl Mover {
             {
                 glog!("MOVE", "hit a ceiling at {:.1} m/s", self.vy);
                 self.vy = 0.0;
+                if self.climbing {
+                    self.climbing = false;
+                    self.climb_used = CLIMB_TIME;
+                }
             }
-            self.vy = (self.vy - GRAVITY * dt).max(-MAX_FALL_SPEED);
+            if !self.climbing {
+                self.vy = (self.vy - GRAVITY * dt).max(-MAX_FALL_SPEED);
+            }
             self.fall_time += dt;
             let drop = (-self.vy * dt).max(0.0);
             let lift = LANDING_RAY_LIFT;
@@ -317,6 +371,8 @@ impl Mover {
                     self.grounded = true;
                     self.fall_time = 0.0;
                     self.air_jumps_used = 0;
+                    self.climb_used = 0.0;
+                    self.climbing = false;
                     glog!("MOVE", "fell {fallen:.1} m (no fall damage in Genji mode)");
                 }
                 _ => {
@@ -560,6 +616,19 @@ fn face(physics: &mut eldenring::cs::CSChrPhysicsModule, look: &Look) {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn vault_clears_the_edge() {
+        // Rise from a vault must exceed the distance from the feet to the edge (the climb ray's height).
+        let rise = VAULT_SPEED * VAULT_SPEED / (2.0 * GRAVITY);
+        assert!(rise > CLIMB_RAY_HEIGHT + 0.05, "vault rise {rise:.2} m vs edge {CLIMB_RAY_HEIGHT} m above the feet");
+    }
+
+    #[test]
+    fn climb_height_is_about_overwatch() {
+        let height = CLIMB_SPEED * CLIMB_TIME;
+        assert!((6.0..=9.0).contains(&height), "climb height {height:.1} m");
+    }
 
     #[test]
     fn jump_reaches_jump_height() {

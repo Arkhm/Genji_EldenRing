@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Steps 5c and 5d: double jump and wall climb
+
+**Changed:** `genji/src/movement.rs`, two commits. 5c (`44a6178`): a second Space press in the air jumps again at
+full jump speed, once per airtime, restored on landing. 5d: holding Space in the air while facing a wall within
+0.3 m (chest-height ray along where you look) climbs at 7.5 m/s for up to 1 s (about 7.5 m), restored on
+landing; ends on releasing Space, running out of time, or a ceiling; when the wall ends at chest height (top
+reached) a 6.5 m/s hop carries the feet over the edge. Climbing doesn't use up the double jump. All values are
+approximate Overwatch values, **not verified**. Log lines: `double jump`, `wall climb start`, `wall climb end`,
+`reached the top`.
+**Why:** Steps 5c and 5d of the plan.
+**Tested how:** Build OK, no warnings; 8 unit tests pass (new: the vault lifts the feet 1.24 m, more than the
+1.1 m to the edge; climb height 7.5 m).
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Climbing only checks straight ahead at chest height, so
+narrow posts, fences and slanted walls may not count as walls.
+**Next:** Your test.
+
 ## 2026-10-07 Step 5b tested in game: PASSED (5b done)
 
 **Changed:** Nothing. Test of commit `fa6e894`. `README.md`, `docs/DESIGN.md` updated.
