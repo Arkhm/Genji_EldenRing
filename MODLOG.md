@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 STATUS option B part 2 tested in game: every variant leaks; options updated
+
+**Changed:** `STATUS.md` only. Test of commit `5ee9fa5`.
+**Why:** Find a spawn-request field that releases the per-throw record.
+**Tested how:** About 70 throws, then 10 per variant with P. I read `logs/genji.log`.
+**Result:** All variants leaked one record per throw: baseline 26/26 (after the buffer filled; 64 earlier throws
+couldn't be judged), goods 1700 16/16, dummy poly 0 10/10, unk44 1 11/11, target = owner 13/13, behavior/magic 0
+12/12, unk10 1 11/11, unk28/2c 1 13/13, unk40 1 6/6. You saw the dagger come from above on the 3rd or 4th P: variant
+#2 (`dummy_poly_id = 0` picks an attachment point on the model). Remaining options in `STATUS.md`: Ghidra headless
+(recommended), more blind variants, or ghidra-mcp.
+**Still broken / not tested:** Unlimited throwing.
+**Next:** Your choice in `STATUS.md`.
+
 ## 2026-10-07 STATUS option B, second part: spawn-request variants (P switches); one record per throw
 
 **Changed:** `genji/src/shuriken.rs`: the projectile is fixed at the Throwing Dagger again; **P** now switches

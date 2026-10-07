@@ -64,7 +64,23 @@ every 8-byte read on the game's frame; removed again):
   the engine release this record. Next experiment: P switches spawn-request variants (item id, dummy poly, the
   bridge mod's "flags", target, behavior/magic id, unknown fields); the log shows +1 or +0 per throw.
 
-## Options from here (updated)
+## Option B, part 2 result (2026-10-07): no tested request field releases the record
+Every throw leaked one record with every variant: baseline 26/26 (after the 64 buffer slots filled), `goods_id` 1700
+16/16, `dummy_poly_id` 0 10/10 (this one spawned the dagger from above: it picks an attachment point on the model),
+`unk44` ("flags") 1 11/11, target = owner 13/13, behavior/magic id 0 12/12, `unk10` 1 11/11, `unk28`/`unk2c` 1 13/13,
+`unk40` 1 6/6. Untested parts of the request: `unk30` (a 4-float vector), the block 0x90..0x10F, `unk100`.
+Nothing about this in the universal-modder notes or fromsoftware-rs issues.
+
+## Options now
+
+| | Option | What it does | Cost |
+|---|---|---|---|
+| **C1 (recommended)** | **Ghidra, headless** (no MCP needed): decompile `CSBulletManager::spawn_bullet` (RVA 0x3A2CB0) and the code that allocates and frees the second pool's records, to see what the game's own throws set that ours don't, or which call releases the record. | Download Ghidra 12.1.4 (`ghidra_12.1.4_PUBLIC_20260921.zip`, 543 MB, official NationalSecurityAgency/ghidra GitHub release) into `third_party/` (gitignored); Java 21 is installed. Analysis of the 87 MB exe takes a while (likely an hour or more, unattended). The exe is only read. Parts may be obfuscated (Arxan). |
+| C2 | Same through ghidra-mcp (interactive) | More setup (Ghidra plugin + MCP server registration in Claude Code, outside this folder). Not needed for this question. |
+| B3 | Keep testing the untested request parts (`unk30`, 0x90..0x10F, `unk100`) | Cheap, but guessing; the 0x50-byte block is too large to try blindly. |
+| W | Workaround: none found that's acceptable (the records clear only on an area reload). | |
+
+## Options from here (earlier)
 
 | | Option | What it does | Cost |
 |---|---|---|---|
