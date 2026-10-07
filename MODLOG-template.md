@@ -1,22 +1,28 @@
 # MODLOG entry template
 
-Copy this block to the **top** of `MODLOG.md` after every change.
+Copy this block to the **top** of `MODLOG.md` after every change. Log everything that changed, including
+changes outside the repo (game folder, saves, installed tools), and exactly what was tested.
 
 ```markdown
-## YYYY-MM-DD: <step number and short title>
+## YYYY-MM-DD Short title
 
-**What changed:** one or two sentences, plain language.
+**Changed:** what was changed, and in which files
+**Why:** the problem or goal
+**Tested how:** what you did to check it (played the game, read logs, ran a test)
+**Result:** what happened, with numbers or log lines where possible
+**Still broken / not tested:** be honest
+**Next:** what to do next
+```
 
-**Files:** the files added or changed.
+## Example
 
-**How to test:**
-1. exact command to run
-2. what to do in game
-3. what you should see, and which log lines prove it
+```markdown
+## 2026-10-03 Player position sync
 
-**Result:** passed / failed / not tested. Who tested and how. Paste the key log lines.
-
-**Dead ends:** what was tried and didn't work, and why. Write "none" if there were none.
-
-**Undo:** how to revert this step (usually `git revert <commit>`), plus anything outside git to undo.
+**Changed:** Added position messages from the gameplay game to the host plugin (`mod/LinkReader.java`, `plugin/link.cpp`)
+**Why:** Step 2 of the plan: send one piece of data between the games
+**Tested how:** Started both games, walked around, compared the position each side logged
+**Result:** Positions match within about one frame at normal walking speed
+**Still broken / not tested:** Fast travel and loading screens not tested; no rotation yet
+**Next:** Send collision shapes the other way
 ```
