@@ -5,9 +5,9 @@
 //! - "Captures" Genji's input while Genji mode is on, the player exists and the HUD is visible. While
 //!   captured:
 //!   - the keyboard hook hides E, Q, Left Shift and F from the game, and passes F on as E (interact).
-//!   - Mouse buttons are not blocked here: in the Genji save, Elden Ring's Attack, Strong Attack, Guard and
-//!     Skill are bound to Numpad 1-4 (or F5-F8) in the game's own key settings, so clicks do nothing in Elden
-//!     Ring. The diagnostic below checks it.
+//!   - Elden Ring's weapon actions (Attack, Strong Attack, Guard, Skill) are switched off in the gameplay
+//!     input reader (`gamepad.rs`, applied in the `GameFlowStep` stage), which covers the mouse buttons. The
+//!     left-click diagnostic below logs what the game's Attack check says.
 //!
 //! "HUD visible" = UI state 0x07 in the game's UI-state table (`CSMenuManImp.ui_states`). In two test sessions
 //! (2026-10-07) it was hidden whenever a real menu was open (Esc menu, inventory, map, grace) and during
@@ -115,6 +115,7 @@ impl Controls {
         if capturing != self.capturing {
             self.capturing = capturing;
             dinput::set_blocking(capturing);
+            gamepad::set_weapons_blocked(capturing);
             let why = if !self.enabled {
                 "Genji mode off"
             } else if !player_present {
@@ -134,7 +135,7 @@ impl Controls {
                 Input::Key(code) => dinput::key_down(&keys, *code),
                 Input::Mouse(button) => buttons & (1 << button) != 0,
             };
-            // Diagnostic: does the game see left click as Attack? Expected `false` in the Genji save.
+            // Diagnostic: does the game see left click as Attack? Expected `false` while captured, `true` otherwise.
             if *action == Action::Shuriken && down && !self.click_was_down {
                 glog!("PAD", "left click: game's Attack check says {:?}", gamepad::attack_polled());
             }

@@ -1,11 +1,11 @@
 # STATUS: Elden Ring still attacks on mouse clicks in Genji mode
 
-> **RESOLVED 2026-10-07: option A chosen.** In the Genji save, Elden Ring's Attack, Strong Attack, Guard and
-> Skill are rebound to Numpad 1-4 (or F5-F8). The flag-blocking code from attempt 2 was removed. Kept for the
-> record; option B can still replace A later.
-
-Date: 2026-10-07
-Step: 3 (Genji's controls), see `docs/DESIGN.md`
+> **Update 2026-10-07:** Option A (rebinding) failed: Elden Ring's key settings only accepted mouse buttons for
+> Attack, even for keys other than F-keys. The log shows our mod had released all keys while you were in the
+> settings, so it shouldn't be the mod (`tools/play_nomod.ps1` can confirm). A closer look at the game's frame
+> order explained attempt 2: the game resets the flags in `PadStep` and decides actions before
+> `ChrIns_PostPhysics`, where we wrote them. Attempt 3 writes them in `GameFlowStep`, right after `PadStep`.
+> Not tested yet.
 
 ## Goal
 During gameplay in Genji mode, left click, right click and mouse 5 must not make Elden Ring attack, guard or

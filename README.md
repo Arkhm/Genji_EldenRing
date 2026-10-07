@@ -23,11 +23,11 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   and logged as Genji actions; F does Elden Ring's interact; F9 switches Genji mode off and on; menus are left
   alone (Q and Esc back out). Mouse clicks are logged as Genji actions.
 
-## Setup the Genji save needs once
+## Not tested yet
 
-In Elden Ring's keyboard settings, while playing the Genji save: Attack (RH) → Numpad 1, Strong Attack (RH) →
-Numpad 2, Guard (LH) → Numpad 3, Skill → Numpad 4 (or F5 to F8). Otherwise mouse clicks still make Elden Ring
-attack.
+- Blocking Elden Ring's mouse attacks in Genji mode (third try, written in the right stage of the game's frame).
+  No key rebinding should be needed; keep Elden Ring's default keyboard and mouse bindings.
+- `tools/play_nomod.ps1`: the Genji save without our DLL, for telling mod problems from game behaviour.
 
 ## What doesn't work yet
 

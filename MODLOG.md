@@ -3,6 +3,25 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3, third try: weapon blocking moved to the right stage of the frame; no-mod launcher
+
+**Changed:** `genji/src/gamepad.rs` (blocker restored, now runs in its own task in the `GameFlowStep` stage),
+`genji/src/controls.rs` (turns weapon blocking on and off with keyboard capture), `genji/src/lib.rs` (second
+per-frame task). New `profile/genji-nomod.me3` and `tools/play_nomod.ps1` (the Genji save without our DLL).
+`README.md`, `docs/DESIGN.md` and `STATUS.md` updated.
+**Why:** Option A failed: you couldn't bind Attack to any keyboard key, only mouse buttons. The log shows capture
+was released the whole time you were in the settings (from 31.4 s), and in that state the hook changes nothing,
+so it's very likely Elden Ring's own rule. You then reset the bindings to defaults. Meanwhile the game's stage
+order (fromsoftware-rs `CSTaskGroupIndex`) explained attempt 2: `PadStep` (input read, flags reset) runs early,
+the player's actions are decided in the middle of the frame, and our write at `ChrIns_PostPhysics` came after
+both. Now the flags are set in `GameFlowStep`, the stage right after `PadStep`.
+**Tested how:** Build OK, no warnings; unit test passes; `me3 profile show` reads the no-mod profile (Genji
+save, no natives, offline).
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether the game decides actions after `GameFlowStep` (the stage order says so;
+not proven). Whether Elden Ring itself refuses keyboard keys for Attack (no-mod launch can confirm).
+**Next:** Your test with default bindings.
+
 ## 2026-10-07 Step 3: option A, Elden Ring's weapon actions unbound from the mouse in the Genji save
 
 **Changed:** Removed the flag-blocking code (`ActionBlocker`) from `genji/src/gamepad.rs` and

@@ -125,10 +125,9 @@ Overwatch changes numbers every season. The values below are approximate referen
 | (Elden Ring interact) | F | The mod passes F to the game as E, so doors, graces, items and talking still work |
 | Genji mode on/off | F9 | Off = plain Elden Ring |
 
-**One-time setup in the Genji save (Elden Ring's own keyboard settings):** rebind Attack (RH) to Numpad 1, Strong
-Attack (RH) to Numpad 2, Guard (LH) to Numpad 3 and Skill to Numpad 4 (or F5 to F8 without a numpad). Elden Ring
-reads the mouse in a way our DLL can't filter reliably (see `STATUS.md`), so the mouse is simply not bound to
-Elden Ring's weapons in this save; our DLL still reads the clicks for Genji.
+**Elden Ring's weapon actions** (Attack, Strong Attack, Guard, Skill) are switched off in the game's gameplay input
+reader while Genji mode captures input, in the `GameFlowStep` stage right after the game reads input. (Rebinding
+them away from the mouse was tried first; Elden Ring's key settings only accepted mouse buttons for them.)
 
 Keys chosen 2026-10-07: Overwatch layout, melee on mouse button 5. Genji's keys are hidden from the game only
 during gameplay; in menus everything passes through (Q stays "Back"). R stays Elden Ring's flask; Genji

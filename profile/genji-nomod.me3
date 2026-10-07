@@ -1,0 +1,7 @@
+# Same Genji save, offline, but WITHOUT genji.dll. For checking whether something is caused by our mod.
+profileVersion = "v1"
+savefile = "ER0000.genji.sl2"
+start_online = false
+
+[[supports]]
+game = "eldenring"

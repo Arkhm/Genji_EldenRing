@@ -81,12 +81,30 @@ fn boot() {
             if panic::catch_unwind(AssertUnwindSafe(|| monitor.tick(data))).is_err() {
                 glog!("ERROR", "per-frame task panicked; genji.dll disabled for this session");
                 dinput::set_blocking(false); // never leave the player's keys captured
+                gamepad::set_weapons_blocked(false);
                 disabled = true;
             }
         },
         CSTaskGroupIndex::ChrIns_PostPhysics,
     );
     glog!("BOOT", "per-frame task registered (ChrIns_PostPhysics)");
+
+    // Weapon blocking must run right after the game reads input (PadStep), before it decides the player's
+    // actions. See gamepad.rs.
+    let mut block_disabled = false;
+    cs_task.run_recurring(
+        move |_: &FD4TaskData| {
+            if block_disabled {
+                return;
+            }
+            if panic::catch_unwind(gamepad::weapon_block_step).is_err() {
+                glog!("ERROR", "weapon-block task panicked; weapon blocking disabled for this session");
+                block_disabled = true;
+            }
+        },
+        CSTaskGroupIndex::GameFlowStep,
+    );
+    glog!("BOOT", "weapon-block task registered (GameFlowStep)");
 }
 
 /// Logs the player's state once per second, plus every time the player appears or disappears.
