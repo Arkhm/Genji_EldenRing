@@ -3,6 +3,32 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 STATUS option B, second part: spawn-request variants (P switches); one record per throw
+
+**Changed:** `genji/src/shuriken.rs`: the projectile is fixed at the Throwing Dagger again; **P** now switches
+between 9 spawn-request variants (baseline; `goods_id` 1700; `dummy_poly_id` 0; `unk44` 1; target = owner;
+behavior/magic id 0; `unk10` 1; `unk28`/`unk2c` 1; `unk40` 1). Every throw logs the second pool's extra count before
+and after (`VARIANT throw #n with #v: ... -> ... (+1, leaked | +0)`). `genji/src/camera.rs`: P calls the variant
+switch. `STATUS.md`: option B result.
+**Why:** Your option B test (entry below) showed the leak is one record per spawn call, whatever the projectile.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Which field (if any) releases the record.
+**Next:** Your variant session.
+
+## 2026-10-07 STATUS option B tested in game: every projectile leaks one record per throw
+
+**Changed:** Nothing. Test of commit `27781d5`.
+**Why:** Compare projectile rows.
+**Tested how:** Bone Dart until refused, rest at a grace, P through all rows. I read `logs/genji.log`.
+**Result:** You saw: Bone Dart hit the limit; resting didn't help; P seemed to do nothing. Log: P worked (all five
+rows were switched in, twice), but the pool is shared, so once full every row is refused. Per 2 s interval the pool
+grew by exactly the number of successful throws (+22/22, +22/22, +20/20, +19/19 ...); 256 throws succeeded, then
+55 refused. The pool stayed 192/192 from 108 s to the end (80 s, including the rest). The impact counter stayed 0
+(the impact detection didn't fire this session; to look at separately).
+**Still broken / not tested:** Unlimited throwing.
+**Next:** Spawn-request variants (entry above).
+
 ## 2026-10-07 STATUS option B: compare projectile rows (P switches)
 
 **Changed:** `genji/src/shuriken.rs`: the projectile is now one of five player-owned rows from your

@@ -51,6 +51,19 @@ every 8-byte read on the game's frame; removed again):
 - So: each hit leaves a data record at the impact point that outlives the projectile and expires after a while.
   What system owns it (impact decal, AI noise, hit record, ...) is not identified; I won't build a fix on a guess.
 
+## Option B result (2026-10-07): one record per throw, never freed
+- Bone Dart fills the second pool exactly like the dagger. Once the pool is full, every projectile is refused (it is
+  shared), so switching rows couldn't help.
+- Measured per 2-second interval: **pool growth = number of successful throws, exactly** (22 throws -> +22, 20 -> +20,
+  ...), and exactly 256 throws succeeded before the first refusal. So it is **one record per spawn call**, not per hit;
+  the earlier "only on wall hits" was wrong (the extra counter only starts after the 64 buffer slots are used, which
+  made early sky throws look free).
+- Resting at a grace does not free them (192/192 for 80 s, including a rest); only an area reload (death) did.
+- The record's position and rotation fit the spawn point and direction, not the impact.
+- So the cause is most likely **our spawn request**: a field we leave at 0 / -1 that, in the game's own throws, makes
+  the engine release this record. Next experiment: P switches spawn-request variants (item id, dummy poly, the
+  bridge mod's "flags", target, behavior/magic id, unknown fields); the log shows +1 or +0 per throw.
+
 ## Options from here (updated)
 
 | | Option | What it does | Cost |

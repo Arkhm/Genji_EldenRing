@@ -86,10 +86,10 @@ pub fn camera_step(dt: f32) {
 
     // Shuriken flight and damage values on the projectile's rows: on in Genji mode, vanilla otherwise.
     view.thrower.set_shuriken_values(reason.is_none());
-    // STATUS.md option B: P switches the projectile row being compared.
+    // STATUS.md option B: P switches the spawn-request variant being compared.
     let p_down = dinput::key_down(&dinput::raw_keys(), dik::P);
     if p_down && !view.p_was_down {
-        view.thrower.next_candidate(reason.is_none());
+        view.thrower.next_variant();
     }
     view.p_was_down = p_down;
 
