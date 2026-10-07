@@ -1,0 +1,175 @@
+# Genji in Elden Ring: design
+
+Plain-language description of how this project works and the order we build it in. Terms are explained
+the first time they appear.
+
+## 1. The question: passthrough or rewrite?
+
+You gave two examples of mixing games:
+
+| | SkyCraft (passthrough) | iw4L (complete rewrite) |
+|---|---|---|
+| What it does | Runs **both** games at once. Minecraft runs hidden and computes the player; Skyrim draws the world. A plugin in each game talks to the other through shared memory. | Runs **neither** original game. A brand-new engine, written in Rust, reads MW2's files from your install and re-implements the gameplay. |
+| Needs the source game running? | Yes, all the time | No, only its files on disk |
+| Works because | Minecraft is offline-capable, moddable (Fabric) and has no anti-cheat | MW2's files are well documented and its gameplay is small enough to rewrite |
+
+### Verdict: the rewrite approach, applied to Genji only, with Elden Ring as the host
+
+**A passthrough is not possible here, for three reasons:**
+1. **Overwatch is online-only.** It needs a Battle.net login and a server for every match. There is no
+   offline mode to run "hidden in the background".
+2. **Overwatch has anti-cheat.** To read Genji's state out of a running Overwatch, we would have to attach to
+   a protected online client. That breaks hard rule 5 and risks a ban on your Battle.net account.
+3. **There is nothing to gain.** SkyCraft passes Minecraft through because Minecraft's systems (block
+   physics, crafting, redstone) are huge. Genji's kit is small: a few moves and four abilities. That is
+   cheap to rewrite and very expensive to pass through.
+
+**Rewriting all of Elden Ring the iw4L way is also wrong.** iw4L rebuilt MW2's engine, which is feasible
+because MW2 maps are small arenas. Elden Ring is a 60 GB open world with its own physics, AI, scripting and
+save system. Rebuilding it would take years, and you would lose the bosses and the world, which are the point.
+
+**So we take the iw4L idea (rewrite the source game's part from scratch, and read its assets from your own
+install) but put it inside Elden Ring.** Elden Ring keeps running its world, enemies, bosses and saves.
+Our code replaces how *you* move, fight and look:
+
+- Genji's **mechanics** are rewritten in Rust: movement, double jump, wall climb, shuriken, Swift Strike,
+  Deflect, Dragonblade, ultimate charge.
+- Genji's **assets** (model, animations, sounds, voice lines, icons) are converted at build time from your
+  own Overwatch install, into a gitignored folder. Overwatch itself never runs.
+
+This route has already been proven on this exact Elden Ring build: universal-modder's knowledge base has a
+field note on a "Counter-Strike 2 in Elden Ring" conversion (same exe 2.7.1.0, Steam build 25080141). It
+used a Rust DLL, me3 and CS2 assets converted from the user's install. We follow its route and its list of
+gotchas.
+
+## 2. The tools you pointed at, and what each one is for
+
+| Tool | What it is | Use here |
+|---|---|---|
+| [universal-modder](https://github.com/rehan-remade/universal-modder) | Skills, safety rules and a shared knowledge base for AI agents that mod games | **Most useful.** It has the Elden Ring field note above (route, the fall-death trap, input hooking, rendering into the frame), the FromSoft playbook, and the safety rules. We use its knowledge and method. We do **not** need its fal image generator, which needs an API key (hard rule 6): our art comes from your Overwatch install. A copy lives in `third_party/` (gitignored). |
+| [ghidra-mcp](https://github.com/bethington/ghidra-mcp) | Lets an agent drive Ghidra, a free disassembler (it turns a program's machine code back into readable functions) | **Useful later, as needed.** When the fromsoftware-rs library (below) doesn't describe something we need (for example, exactly where incoming hits are processed, for Deflect), we look it up in `eldenring.exe` with Ghidra. Needs Java 21 (you have it) and Ghidra 12.1.3. Elden Ring's exe is partly obfuscated (Arxan), so some functions are hard to read. |
+| [rea](https://github.com/morluto/rea) | A broader reverse-engineering agent tool (native binaries, JavaScript apps, .NET, websites) | **Least useful.** For a native Windows game it overlaps with ghidra-mcp, and its Windows support is marked experimental. Not used unless ghidra-mcp falls short. |
+
+Other tools the plan relies on:
+
+- **me3**: the current FromSoftware mod loader. It starts Elden Ring **without** EasyAntiCheat, so the game
+  runs offline, and it loads our DLL and our `regulation.bin`. It uses a **separate save file**, so your
+  normal saves are never touched.
+- **fromsoftware-rs** (`eldenring` crate, v0.14): Rust descriptions of Elden Ring's internal structures
+  (player, physics, camera, bullets, params), maintained by the Elden Ring modding community.
+- **hudhook**: draws our own graphics and menus inside the game's frame (Direct3D 12 + ImGui, a library for
+  on-screen UI).
+- **DataTool** (overtools/OWLib, v2.24, released 2026-09-15): reads Overwatch's data files and extracts hero
+  models, animations, sounds and voice lines.
+- **WitchyBND**: unpacks and repacks Elden Ring's `regulation.bin` (the game's balance tables, called
+  **params**: weapons, bullets, status effects).
+
+## 3. How it works (architecture)
+
+```
+me3 (launches the game offline, no EAC, separate save ER0000.genji.sl2)
+ └─ eldenring.exe  ── Elden Ring stays in charge of the world, enemies, AI, saves
+     └─ genji.dll  (our Rust code)
+         ├─ boot      waits until the game is ready, finds the game's objects
+         ├─ input     intercepts keyboard/mouse; Genji's keys go to us, not to Elden Ring
+         ├─ kit       Genji's state machine: moves, abilities, cooldowns, ult charge
+         ├─ world     reads/writes the player, spawns projectiles, applies and reads damage
+         ├─ camera    first-person camera at Genji's eye height
+         ├─ render    draws Genji's first-person arms, sword and effects into the frame
+         ├─ hud       Overwatch-style HUD: health, cooldowns, ult meter, crosshair
+         ├─ audio     plays Genji's sounds and voice lines
+         └─ log       writes logs/genji.log: every state change, with numbers
+regulation.bin  built from YOUR vanilla copy + our extra rows (shuriken bullets, damage effects)
+owassets/       Genji's assets converted from YOUR Overwatch install (gitignored, never committed)
+```
+
+**Who decides what:** Elden Ring is authoritative for the world, enemies, damage to you and saves. Our DLL is
+authoritative for how the player moves, attacks and what the player sees.
+
+**Damage scale:** Overwatch numbers (a shuriken does tens of damage) mean nothing against Elden Ring bosses
+with thousands of HP. Every number lives in a config file (`genji.toml`) with a damage multiplier, so you can
+tune it without rebuilding.
+
+**Folder layout (planned):**
+
+| Path | Contents | In git? |
+|---|---|---|
+| `genji/` | the Rust DLL | yes |
+| `tools/` | Python scripts: asset pipeline, param builder, save backup | yes |
+| `profile/` | the me3 profile and `genji.toml` | yes |
+| `docs/` | this file and notes | yes |
+| `build/` | built DLL and `regulation.bin` | no |
+| `owassets/` | converted Overwatch assets | no |
+| `erdata/` | unpacked copy of your vanilla `regulation.bin` | no |
+| `backups/` | copies of your saves | no |
+| `logs/` | game logs | no |
+| `third_party/` | universal-modder, DataTool, WitchyBND | no |
+
+## 4. Genji's kit: what we rebuild
+
+Overwatch changes numbers every season. The values below are approximate reference values from memory.
+**Not verified** against the current patch; they go into `genji.toml` and get checked before tuning.
+
+| Overwatch | Default key | Elden Ring implementation |
+|---|---|---|
+| Cyber-Agility: double jump | Space (in air) | Our movement controller adds a second jump |
+| Cyber-Agility: wall climb | hold Space at a wall | Ray casts against map collision; climb for about 1 s |
+| Shuriken (3 in a line, ~27 dmg each) | Left mouse | Spawn real engine projectiles (bullets) with our own param rows, so Elden Ring computes the hits |
+| Fan of Blades (3 spread) | Right mouse | Same projectiles, spread pattern |
+| Swift Strike (dash ~15 m, ~50 dmg, ~8 s cooldown, resets on kill) | Shift | Movement controller dash + damage along the path; listen for kills to reset |
+| Deflect (~2 s, ~8 s cooldown) | E | Block frontal hits; send enemy projectiles back where we can |
+| Quick melee | V | Short-range hit |
+| Dragonblade (~5 s, ~110 dmg swings) | Q | Sword mode: swings with a wide hitbox; Swift Strike resets on kill |
+| Ultimate charge | | Built from damage dealt, shown on the HUD |
+| Health ~250 | | Mapped onto Elden Ring HP (configurable) |
+
+**Movement** is Overwatch-style (constant speed, fast air control) instead of Elden Ring's animation-driven
+movement. Per the CS2 field note, a movement controller that writes the position every frame **must turn off
+the game's own gravity while it drives**. Otherwise the game builds up a hidden fall speed and kills you on
+landing. We do that from the first movement step.
+
+**Elden Ring things we hand back to the game:** ladders, mounting Torrent, doors and levers, item pickup,
+grace menus, cutscenes, death. Our controller steps aside for these and resyncs afterwards.
+
+## 5. The plan, step by step
+
+Each step is small, revertible and ends with a test you run, plus a log I read. Steps 3 to 9 are
+"mechanics with placeholder visuals". Steps 10 to 12 make it look and sound like Genji.
+
+| # | Step | You test by | Pass condition (from the log) |
+|---|---|---|---|
+| 0 | Repo, rules, this plan | reading this file | |
+| 1 | **Lab setup**: build tools, me3 profile with separate save, save backup script, "hello" DLL that logs boot and the player's position once per second | launch through me3, walk around, quit | `genji.log` shows boot OK and positions changing; your normal save untouched |
+| 2 | **Asset recon**: DataTool lists heroes and extracts Genji (model, animations, sounds) from your Steam Overwatch into `owassets/` | run one script | file counts and names logged; Genji's first-person model found (or not) |
+| 3 | **Input**: our DLL reads keys and mouse; Elden Ring stops seeing Genji's keys | press each key in game | each key logged once per press; Elden Ring doesn't roll on Shift |
+| 4 | **First-person camera** | look around, walk | camera at head height follows the mouse; your character body hidden |
+| 5 | **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
+| 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
+| 7 | **Swift Strike** with kill reset | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
+| 8 | **Deflect** | block an archer | frontal hits blocked while active; returned projectiles logged |
+| 9 | **Dragonblade + ult charge** | build charge, press Q | charge numbers rise with damage; swing hits logged |
+| 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
+| 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
+| 12 | **HUD**: health, cooldowns, ult meter, crosshair | play | (visual check by you) |
+| 13 | Polish: Torrent, ladders, menus, death, balance | play the game | |
+
+## 6. Risks and unknowns (honest list)
+
+- **Build tools are missing.** This PC has no Microsoft C++ linker, so Rust can't build a DLL yet. Tested: a
+  minimal DLL build fails. Fix: install Visual Studio Build Tools (step 1).
+- **Old mod loader in your game folder.** `dinput8.dll` (Elden Mod Loader) is in your Elden Ring folder and
+  loads `ersc.dll` (**Seamless Co-op, which goes online**), UltrawideFix and RemoveVignette. Windows loads that
+  `dinput8.dll` every time `eldenring.exe` starts, including under me3. For an offline-only Genji session it
+  has to be switched off (renamed) while we play. That writes to your game folder, so you decide (see the
+  questions in the chat or in `MODLOG.md`).
+- **First-person models:** Overwatch has first-person arm models and animations. Whether DataTool exports them
+  for Genji in a usable form is **not verified** yet (step 2 answers it). Fallback: use the third-person model
+  with the head hidden.
+- **Animations in a custom renderer** are the biggest piece of work (the CS2 project needed its own Direct3D 12
+  renderer). It works in that project; it is a lot of code.
+- **Deflect** needs to know about hits before Elden Ring applies them. fromsoftware-rs may not expose that;
+  this is where Ghidra comes in.
+- **Game updates:** a new Elden Ring patch can break the DLL until fromsoftware-rs updates. Don't let Steam
+  update Elden Ring in the middle of a step if you can avoid it.
+- **Size of the job:** the CS2 conversion took about three days of agent sessions, with the user testing every
+  feature in game. Expect similar.

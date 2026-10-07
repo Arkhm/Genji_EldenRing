@@ -1,0 +1,50 @@
+# WHITELIST. Everything is ignored; only the source file types below are allowed back in.
+# Do not turn this into a normal ignore list (AGENTS.md, hard rule 2).
+
+*
+!*/
+
+# Repo meta
+!.gitignore
+!.gitattributes
+!LICENSE
+
+# Docs
+!*.md
+
+# Rust
+!*.rs
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!.cargo/config.toml
+
+# Our own config (genji settings, me3 profiles)
+!*.toml
+!*.me3
+
+# Scripts and tools
+!*.py
+!requirements.txt
+!*.ps1
+!*.bat
+!*.cmd
+
+# Shaders we write ourselves
+!*.hlsl
+
+# CI
+!.github/**/*.yml
+
+# Folders that hold game data, builds or third-party code. These stay ignored even if a file
+# inside them matches a pattern above. Never move them out of this list.
+target/
+build/
+owassets/
+erdata/
+backups/
+logs/
+third_party/
+dist/
+__pycache__/
+.venv/
