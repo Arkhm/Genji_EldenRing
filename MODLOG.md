@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 3, HUD rule tested in game: menus PASSED, mouse blocking FAILED, stopped (STATUS.md)
+
+**Changed:** New `STATUS.md`. No code change. Test of commit `9fc2568`.
+**Why:** Third in-game test of step 3. Two real attempts at blocking the mouse have now failed, so per
+`AGENTS.md` the work stops and `STATUS.md` lays out the options.
+**Tested how:** You backed out of menus with Q and Esc in both modes, clicked with Genji mode on and off, and
+talked to an NPC and rested at a grace in Genji mode. I read `logs/genji.log` (1,022 lines, 105 Genji actions).
+**Result:**
+- Menus PASSED: capture released every time the HUD hid (`released to the game (HUD hidden: menu or loading)`)
+  and came back after (for example released 35.1 s, captured 38.8 s). Q and Esc back out everywhere.
+- Mouse FAILED: clicks attack with Genji mode on. Blocking flags re-set every frame (23,356 game resets by
+  157 s), but the game still sees Attack. With capture off the game's Attack check says `Some(true)` on click.
+- NPC dialogue and grace menu: Q backs out, Esc doesn't. Capture was released there, and the mod never changes
+  Esc, so this is very likely Elden Ring's own behaviour (not yet checked with F9 off).
+**Still broken / not tested:** Blocking Elden Ring's mouse attacks.
+**Next:** Your choice of option in `STATUS.md`.
+
 ## 2026-10-07 Step 3, menu fix: capture only while the HUD is visible
 
 **Changed:** `genji/src/controls.rs` (capture rule, diagnostic), `genji/src/gamepad.rs` (removed the pad-signal
