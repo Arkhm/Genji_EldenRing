@@ -159,7 +159,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 4 | **Done 2026-10-07.** **First-person camera** | look around, walk | camera at head height follows the mouse; your character body hidden |
 | 5 | **Done 2026-10-07** (see 5b). **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
-| 7 | **Swift Strike** with kill reset | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
+| 7 | **Swift Strike** with kill reset (built 2026-10-07, not tested in game; see 5d) | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
 | 8 | **Deflect** | block an archer | frontal hits blocked while active; returned projectiles logged |
 | 9 | **Dragonblade + ult charge** | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
@@ -269,6 +269,33 @@ characters near where a shuriken lands (`HIT` lines), so damage is checked from 
 **Risks:** the spawn request's fields are only partly documented (some `unk` values may matter); the engine may
 refuse a row without a matching owner or "goods" id (error codes 3 and 4 in the library); picking a good row to
 start from takes reading the params.
+
+## 5d. Step 7 in detail: Swift Strike
+
+**What Overwatch does** (from memory, **not verified**; all values are constants): Left Shift dashes about 15 m
+in the direction you look (up and down included) in about 0.3 s (50 m/s), passing through enemies and damaging
+each one it passes once for 50; walls stop it. Cooldown 8 s, reset when an enemy Genji damaged dies (an
+elimination).
+
+**How in Elden Ring:**
+- `movement.rs`: Left Shift (only while our controller drives and the cooldown is ready) starts a dash: for 0.3 s
+  the controller moves at 50 m/s along the view, ignores gravity and other characters, and still stops at walls
+  (same wall rays as walking). On the ground and looking flat or down, the dash runs along the ground at full speed;
+  looking up lifts off. At the end, in the air, you start falling normally. No wall climb during the dash.
+- `swift.rs` (new): cooldown; each frame of the dash, the stretch travelled is checked against every nearby
+  character's collision cylinder (our body: radius 0.35 m, height 1.75 m); each one touched takes 50 once (HP set
+  directly, like the shuriken), logged as `DASH HIT`.
+- `kills.rs` (new): remembers every character we damaged (shuriken or dash) for 3 s; if one of them dies in that
+  time, that's an elimination: the Swift Strike cooldown resets (`SWIFT reset`).
+- `targets.rs` (new): the "living characters near the player" list, moved out of `shuriken.rs` so both use it.
+
+**Risks:** the game itself registers no hit for dash damage: no hit reaction and possibly **no runes** for a dash
+kill (shuriken kills give runes because the engine also registers their 1-damage hit). We'll see in the test;
+if runes are missing, the dash can spawn an invisible 1-damage projectile on each enemy it hits.
+
+| | What | You test by | Pass condition (log) |
+|---|---|---|---|
+| 7 | Dash, damage, cooldown, kill reset | dash on flat ground, into a wall, up, through enemies; kill with shuriken then dash | `DASH` distance about 15 m in about 0.3 s; stops at walls; `DASH HIT` 50 per enemy; `SWIFT reset` after a kill |
 
 ## 6. Risks and unknowns (honest list)
 

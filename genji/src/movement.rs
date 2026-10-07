@@ -57,6 +57,11 @@ const CLIMB_RAY_HEIGHT: f32 = 1.1;
 const VAULT_SPEED: f32 = 6.5;
 /// After walking off an edge you can still jump for this long, seconds ("coyote time").
 const COYOTE_TIME: f32 = 0.1;
+/// Swift Strike (step 7): dash distance and speed (so about 0.3 s), from memory of Overwatch, not verified.
+const DASH_DISTANCE: f32 = 15.0;
+const DASH_SPEED: f32 = 50.0;
+/// A dash started on the ground lifts off when the view points up more than this (vertical part of the direction).
+const DASH_LIFT: f32 = 0.05;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
 const HEAD_HEIGHT: f32 = 1.75;
 // No fall damage in Genji mode (your choice, 2026-10-07, like Overwatch). Falls are only logged. An Elden
@@ -174,6 +179,13 @@ pub struct Mover {
     clock: f32,
     black_box: std::collections::VecDeque<FrameRecord>,
     last_hp: Option<i32>,
+    /// Swift Strike: seconds of dash left, its direction (the view when it started) and distance so far.
+    dash_left: f32,
+    dash_dir: Vec3,
+    dash_travelled: f32,
+    /// This frame: a dash started / the stretch the dash moved our feet (for its damage, `swift.rs`).
+    pub dash_started: bool,
+    pub dash_segment: Option<(Vec3, Vec3)>,
 }
 
 /// What the controller did this frame.
@@ -191,6 +203,8 @@ pub struct Wish {
     pub forward: f32,
     pub right: f32,
     pub jump: bool,
+    /// Start a Swift Strike this frame (Left Shift pressed and the cooldown ready).
+    pub dash: bool,
 }
 
 impl Mover {
@@ -200,6 +214,8 @@ impl Mover {
             let p = player.chr_ins.modules.physics.position;
             Vec3::new(p.0, p.1, p.2)
         };
+        self.dash_started = false;
+        self.dash_segment = None;
         if self.gave_up || dt <= 0.0 {
             return Step::NotReady;
         }
@@ -333,14 +349,37 @@ impl Mover {
             }
         }
 
+        // Swift Strike: start a dash along the view.
+        if wish.dash && self.dash_left <= 0.0 {
+            self.dash_dir = look.forward();
+            self.dash_left = DASH_DISTANCE / DASH_SPEED;
+            self.dash_travelled = 0.0;
+            self.dash_started = true;
+            self.climbing = false;
+            glog!(
+                "DASH",
+                "start at ({:.2}, {:.2}, {:.2}) toward ({:.2}, {:.2}, {:.2}), {}",
+                start.x, start.y, start.z,
+                self.dash_dir.x, self.dash_dir.y, self.dash_dir.z,
+                if self.grounded { "on the ground" } else { "in the air" }
+            );
+        }
+        let dashing = self.dash_left > 0.0;
+
         // Horizontal: wish direction relative to where we look, along the ground.
         let mut dir = look.flat_forward() * wish.forward + look.right() * wish.right;
         if dir.length_squared() > 1e-6 {
             dir = dir.normalize();
         }
-        let wanted = dir * RUN_SPEED * dt;
         let others = obstacles::nearby(&player.chr_ins, start);
-        let (wanted, char_blocked) = obstacles::clip(start, wanted, RADIUS, HEAD_HEIGHT, &others);
+        let (wanted, char_blocked) = if dashing {
+            // Through characters; along the ground at full speed unless it lifts off (see DASH_LIFT).
+            let flat = Vec3::new(self.dash_dir.x, 0.0, self.dash_dir.z);
+            let along = if self.grounded && self.dash_dir.y <= DASH_LIFT { flat.normalize_or_zero() } else { flat };
+            (along * DASH_SPEED * dt, false)
+        } else {
+            obstacles::clip(start, dir * RUN_SPEED * dt, RADIUS, HEAD_HEIGHT, &others)
+        };
         if char_blocked {
             self.character_blocks += 1;
         }
@@ -365,6 +404,19 @@ impl Mover {
             self.since_left_ground = f32::INFINITY;
             self.apex_y = self.apex_y.max(pos.y);
             glog!("MOVE", "double jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
+        }
+
+        // Swift Strike's vertical part: lift off when looking up; in the air, no gravity while dashing.
+        if dashing {
+            if self.grounded && self.dash_dir.y > DASH_LIFT {
+                self.grounded = false;
+                self.since_left_ground = f32::INFINITY;
+                self.fall_time = 0.0;
+                self.apex_y = pos.y;
+            }
+            if !self.grounded {
+                self.vy = self.dash_dir.y * DASH_SPEED;
+            }
         }
 
         // Vertical: stick to the ground, or fall.
@@ -400,7 +452,7 @@ impl Mover {
             )
             .is_some();
             let time_left = self.climb_used < CLIMB_TIME;
-            if wish.jump && wall_ahead && time_left {
+            if wish.jump && wall_ahead && time_left && !dashing {
                 if !self.climbing {
                     self.climbing = true;
                     glog!("MOVE", "wall climb start at ({:.2}, {:.2}, {:.2}), {:.2}s left", pos.x, pos.y, pos.z, CLIMB_TIME - self.climb_used);
@@ -435,7 +487,7 @@ impl Mover {
                     self.climb_used = CLIMB_TIME;
                 }
             }
-            if !self.climbing {
+            if !self.climbing && !dashing {
                 self.vy = (self.vy - GRAVITY * dt).max(-MAX_FALL_SPEED);
             }
             self.fall_time += dt;
@@ -463,6 +515,24 @@ impl Mover {
                     pos.y += self.vy * dt;
                     self.apex_y = self.apex_y.max(pos.y);
                 }
+            }
+        }
+
+        if dashing {
+            self.dash_segment = Some((start, pos));
+            self.dash_travelled += (pos - start).length();
+            self.dash_left -= dt;
+            if self.dash_left <= 0.0 {
+                if !self.grounded {
+                    self.vy = 0.0; // fall from here
+                }
+                glog!(
+                    "DASH",
+                    "end: travelled {:.1} m (of {DASH_DISTANCE}), now at ({:.2}, {:.2}, {:.2}), {}",
+                    self.dash_travelled,
+                    pos.x, pos.y, pos.z,
+                    if self.grounded { "on the ground" } else { "in the air" }
+                );
             }
         }
 
@@ -518,6 +588,7 @@ impl Mover {
 
     /// Gives control back to the game (menus, Torrent, ladders, death, F9).
     pub fn release(&mut self, player: &mut PlayerIns) {
+        self.dash_left = 0.0;
         self.settled_for = 0.0;
         self.waited_for = 0.0;
         if !self.active {

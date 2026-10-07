@@ -13,11 +13,14 @@ mod crosshair;
 mod dinput;
 mod firing;
 mod gamepad;
+mod kills;
 mod log;
 mod look;
 mod movement;
 mod obstacles;
 mod shuriken;
+mod swift;
+mod targets;
 mod ultrawide;
 
 use std::ffi::c_void;

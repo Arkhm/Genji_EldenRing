@@ -25,6 +25,7 @@ use crate::glog;
 use crate::look::Look;
 use crate::movement::{Mover, Step, Wish};
 use crate::shuriken::Thrower;
+use crate::swift::Swift;
 
 /// Height of the eyes above the character's feet, in metres.
 const EYE_HEIGHT: f32 = 1.6;
@@ -47,6 +48,8 @@ struct View {
     handback_reason: Option<&'static str>,
     thrower: Thrower,
     firing: Firing,
+    swift: Swift,
+    shift_was_down: bool,
 }
 
 pub fn camera_step(dt: f32) {
@@ -71,6 +74,7 @@ fn camera_step_inner(dt: f32) -> bool {
 
     view.mover.watch_hp(player);
     view.thrower.tick(player, dt);
+    view.swift.tick(dt, crate::kills::tick(dt));
     let buttons = gamepad::mouse_buttons();
     let (left_down, right_down) = (buttons & 1 != 0, buttons & 2 != 0);
 
@@ -136,6 +140,16 @@ fn camera_step_inner(dt: f32) -> bool {
         forward: axis(dik::W, dik::S),
         right: axis(dik::D, dik::A),
         jump: dinput::key_down(&keys, dik::SPACE),
+        dash: {
+            // Swift Strike (step 7): Left Shift pressed (not held) and the cooldown ready.
+            let down = dinput::key_down(&keys, dik::LSHIFT);
+            let pressed = down && !view.shift_was_down;
+            view.shift_was_down = down;
+            if pressed && !view.swift.ready() {
+                glog!("SWIFT", "not ready");
+            }
+            pressed && view.swift.ready()
+        },
     };
     let look = *look;
     let mut driving = false;
@@ -143,6 +157,12 @@ fn camera_step_inner(dt: f32) -> bool {
         Step::Driving(feet) => {
             gamepad::set_movement_blocked(true);
             driving = true;
+            if view.mover.dash_started {
+                view.swift.started();
+            }
+            if let Some((from, to)) = view.mover.dash_segment {
+                view.swift.sweep(player, from, to);
+            }
             feet
         }
         Step::GameAction(feet) => {

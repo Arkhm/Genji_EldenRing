@@ -19,11 +19,9 @@
 //! daggers do after 15 m; live shuriken are tracked and reported to prove it.
 
 use std::collections::HashMap;
-use std::ptr::NonNull;
 
 use eldenring::cs::{
-    AtkParam_Pc, Bullet as BulletParam, BulletSpawnData, CSBulletManager, CSHavokMan, ChrIns, PlayerIns,
-    SoloParamRepository, WorldChrMan,
+    AtkParam_Pc, Bullet as BulletParam, BulletSpawnData, CSBulletManager, CSHavokMan, PlayerIns, SoloParamRepository,
 };
 use eldenring::position::{HavokPosition, PositionDelta};
 use fromsoftware_shared::FromStatic;
@@ -31,6 +29,7 @@ use glam::Vec3;
 
 use crate::glog;
 use crate::look::Look;
+use crate::targets::{self, Target};
 
 /// STATUS.md option B (2026-10-07): projectile rows that were compared. Result: Bone Dart fills the second pool exactly
 /// like the dagger, and the pool grows by exactly one record per successful *throw* (not per hit), never freed until
@@ -88,8 +87,6 @@ const HIT_MARGIN: f32 = 0.4;
 
 /// Map collision filter for the aim ray (step 5 tests: all filter bits see the same surface).
 const MAP_FILTER: u32 = 0x0200_0058;
-/// Entries of the game's distance-sorted character list to consider.
-const CHARACTERS_MAX: usize = 64;
 const REPORT_EVERY: f32 = 2.0;
 /// Test of 2026-10-07: a shuriken that hits a wall "flicks" (the dagger's bounce) and, with our zero gravity, hangs
 /// in the air in front of the wall for good, keeping its slot in the bullet manager (screenshot: a wall full of
@@ -179,14 +176,6 @@ struct Flying {
     stuck_for: f32,
     life_zeroed: bool,
     pushed_down: bool,
-}
-
-/// A character as a target: collision cylinder and a pointer to change its HP.
-struct Target {
-    chr: NonNull<ChrIns>,
-    feet: Vec3,
-    radius: f32,
-    height: f32,
 }
 
 #[derive(Default)]
@@ -468,7 +457,7 @@ impl Thrower {
         const SAMPLES: usize = 8;
         let reach = vel * (dt.max(1.0 / 60.0) * 1.5);
         let mut best: Option<(f32, Target, Vec3)> = None;
-        for target in targets(player) {
+        for target in targets::living(player) {
             for i in 0..=SAMPLES {
                 let pos = last_pos + reach * (i as f32 / SAMPLES as f32);
                 if pos.y < target.feet.y - 0.3 || pos.y > target.feet.y + target.height + 0.3 {
@@ -486,13 +475,9 @@ impl Thrower {
         };
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
         let damage = ((if head { HEAD_DAMAGE } else { BODY_DAMAGE }) * DAMAGE_MULTIPLIER).round() as i32;
-        let chr = unsafe { &mut *target.chr.as_ptr() };
-        let data = &mut chr.modules.data;
-        if data.hp <= 0 {
+        let Some((before, after, max)) = targets::damage(&target, damage) else {
             return;
-        }
-        let before = data.hp;
-        data.hp = (data.hp - damage).max(0);
+        };
         self.hits += 1;
         if head {
             self.headshots += 1;
@@ -502,8 +487,8 @@ impl Thrower {
             "{} {damage} on character {:#x}: hp {before} -> {} / {} (shuriken flew {:.2} s, hit at {:.0}% of its height)",
             if head { "HEADSHOT" } else { "body" },
             target.chr.as_ptr() as usize,
-            data.hp,
-            data.max_hp,
+            after,
+            max,
             age,
             100.0 * (pos.y - target.feet.y) / target.height
         );
@@ -554,7 +539,7 @@ fn aim_distance(player: &PlayerIns, eye: Vec3, forward: Vec3) -> f32 {
             best = best.min((Vec3::new(hit.0, hit.1, hit.2) - eye).length());
         }
     }
-    for t in targets(player) {
+    for t in targets::living(player) {
         if let Some(dist) = ray_cylinder(eye, forward, t.feet, t.radius, t.height) {
             best = best.min(dist);
         }
@@ -587,35 +572,6 @@ fn ray_cylinder(eye: Vec3, forward: Vec3, feet: Vec3, radius: f32, height: f32) 
     (y >= feet.y && y <= feet.y + height).then_some(dist)
 }
 
-/// Living characters near the player (not the player).
-fn targets(player: &PlayerIns) -> Vec<Target> {
-    let Ok(world) = (unsafe { WorldChrMan::instance() }) else {
-        return Vec::new();
-    };
-    let me = &player.chr_ins as *const ChrIns as usize;
-    world
-        .chr_inses_by_distance
-        .iter()
-        .take(CHARACTERS_MAX)
-        .filter_map(|entry| {
-            if entry.chr_ins.as_ptr() as usize == me {
-                return None;
-            }
-            let chr = unsafe { entry.chr_ins.as_ref() };
-            if chr.modules.data.hp <= 0 {
-                return None;
-            }
-            let physics = &chr.modules.physics;
-            let p = physics.position;
-            Some(Target {
-                chr: entry.chr_ins,
-                feet: Vec3::new(p.0, p.1, p.2),
-                radius: physics.hit_radius.max(physics.chr_hit_radius).clamp(0.2, 3.0),
-                height: physics.hit_height.max(physics.chr_hit_height).clamp(0.5, 8.0),
-            })
-        })
-        .collect()
-}
 
 /// Writes flight and damage values to the Bullet and AtkParam_Pc rows `id` in memory.
 fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {

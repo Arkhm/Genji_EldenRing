@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 7: Swift Strike (dash, damage, cooldown, kill reset)
+
+**Changed:** `genji/src/movement.rs`: Left Shift starts a dash of 15 m at 50 m/s (about 0.3 s) along the view: through
+characters, stopped by walls (same wall rays as walking), along the ground at full speed when looking flat or down,
+lifting off when looking up, no gravity or wall climb during it, falling normally after it in the air; `DASH` start
+and end lines with the distance travelled. New `genji/src/swift.rs`: 8 s cooldown, 50 damage once to each character
+the dash's stretch touches (`DASH HIT`), reset on an elimination (`SWIFT reset`), 3 unit tests. New
+`genji/src/kills.rs`: characters we damaged (shuriken or dash) that die within 3 s are our eliminations (`KILL`). New
+`genji/src/targets.rs`: the target list and HP damage moved out of `shuriken.rs` (no behaviour change for shuriken,
+except their hits now count for eliminations). `genji/src/camera.rs`: wiring. `docs/DESIGN.md`: section 5d.
+Earlier test: you confirmed the crosshair shows up.
+**Why:** Step 7.
+**Tested how:** Build OK, no warnings; 22 unit tests pass.
+**Result:** Not tested in game. Values from memory of Overwatch, not verified.
+**Still broken / not tested:** Everything in game; whether dash kills give runes (the engine registers no hit for
+dash damage), no hit reaction from enemies on a dash hit.
+**Next:** Your test.
+
 ## 2026-10-07 Crosshair (hudhook overlay), first part of step 12
 
 **Changed:** New `genji/src/crosshair.rs`: hooks Direct3D 12's frame presentation with **hudhook 0.9.3** (MIT,
