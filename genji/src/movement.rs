@@ -41,6 +41,9 @@ const RUN_SPEED: f32 = 5.5;
 const GRAVITY: f32 = 17.0;
 /// Jump height, metres. Approximate Overwatch value, not verified.
 const JUMP_HEIGHT: f32 = 1.2;
+/// Genji's double jump: one extra jump in the air, same height as a normal jump (approximate Overwatch value,
+/// not verified), restored on landing.
+const AIR_JUMPS: u32 = 1;
 /// After walking off an edge you can still jump for this long, seconds ("coyote time").
 const COYOTE_TIME: f32 = 0.1;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
@@ -127,6 +130,7 @@ pub struct Mover {
     /// Time since leaving the ground without jumping (coyote time).
     since_left_ground: f32,
     jump_was_down: bool,
+    air_jumps_used: u32,
     contacts: ContactMonitor,
     settled_for: f32,
     waited_for: f32,
@@ -258,6 +262,12 @@ impl Mover {
             self.fall_time = 0.0;
             self.apex_y = pos.y;
             glog!("MOVE", "jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
+        } else if jump_pressed && !self.grounded && self.air_jumps_used < AIR_JUMPS {
+            self.air_jumps_used += 1;
+            self.vy = (2.0 * GRAVITY * JUMP_HEIGHT).sqrt();
+            self.since_left_ground = f32::INFINITY;
+            self.apex_y = self.apex_y.max(pos.y);
+            glog!("MOVE", "double jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
         }
 
         // Vertical: stick to the ground, or fall.
@@ -267,6 +277,7 @@ impl Mover {
                     self.ever_hit = true;
                     pos.y = hit.y + GROUND_GAP;
                     self.vy = 0.0;
+                    self.air_jumps_used = 0;
                 }
                 None => {
                     self.grounded = false;
@@ -305,6 +316,7 @@ impl Mover {
                     self.vy = 0.0;
                     self.grounded = true;
                     self.fall_time = 0.0;
+                    self.air_jumps_used = 0;
                     glog!("MOVE", "fell {fallen:.1} m (no fall damage in Genji mode)");
                 }
                 _ => {
