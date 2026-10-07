@@ -3,7 +3,9 @@
 //! - Logs the player's state once per second (step 1).
 //! - Ultrawide fix (no black bars).
 //! - Genji's controls: captures Genji's keys from the game during gameplay, F9 toggles (step 3).
+//! - First-person camera while Genji's controls are captured (step 4).
 
+mod camera;
 mod controls;
 mod dinput;
 mod gamepad;
@@ -82,6 +84,7 @@ fn boot() {
                 glog!("ERROR", "per-frame task panicked; genji.dll disabled for this session");
                 dinput::set_blocking(false); // never leave the player's keys captured
                 gamepad::set_weapons_blocked(false);
+                camera::set_first_person(false);
                 disabled = true;
             }
         },
@@ -105,6 +108,23 @@ fn boot() {
         CSTaskGroupIndex::GameFlowStep,
     );
     glog!("BOOT", "weapon-block task registered (GameFlowStep)");
+
+    // First-person camera: right after the game computes its camera (CameraStep). See camera.rs.
+    let mut camera_disabled = false;
+    cs_task.run_recurring(
+        move |data: &FD4TaskData| {
+            if camera_disabled {
+                return;
+            }
+            let dt = data.delta_time.time;
+            if panic::catch_unwind(move || camera::camera_step(dt)).is_err() {
+                glog!("ERROR", "camera task panicked; first person disabled for this session");
+                camera_disabled = true;
+            }
+        },
+        CSTaskGroupIndex::DrawParamUpdate,
+    );
+    glog!("BOOT", "camera task registered (DrawParamUpdate)");
 }
 
 /// Logs the player's state once per second, plus every time the player appears or disappears.

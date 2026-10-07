@@ -3,6 +3,25 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 4, first version: first-person camera
+
+**Changed:** New `genji/src/camera.rs`; `genji/src/lib.rs` registers a third per-frame task (stage
+`DrawParamUpdate`); `genji/src/controls.rs` turns first person on and off together with Genji's input capture.
+**Why:** Step 4 of the plan. First version, kept simple: Elden Ring keeps doing the mouse look (its sensitivity,
+up/down limits and smoothing stay as they are). Every frame, right after the game computes its third-person
+camera (`CameraStep`), we move that camera to the player's eyes (feet + 1.6 m, 0.15 m forward) and keep the
+direction the game chose. The player's model is hidden (`chr_flags1c5.enable_render = false`) and shown again
+when first person ends. First person is on exactly when Genji's controls are captured: Genji mode on, player
+present, HUD visible. Menus, graces, dialogue and F9 give the normal camera back.
+**Tested how:** Build OK, no warnings.
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything in game. Unknown: whether `pers_cam_1` is the camera the game draws
+with (the log reports all four slots); whether the game feeds our position back into its next camera (the log's
+`game cam was` would then follow our eye position); possible one-frame lag or jitter; whether hiding the model
+also hides things we want (shadow, effects). No Genji arms yet (step 10). The view still tilts down a little
+when looking straight ahead, because the game's camera aims at the character from above.
+**Next:** Your test.
+
 ## 2026-10-07 Step 3 tested in game: PASSED (step 3 done)
 
 **Changed:** Removed `STATUS.md` (resolved; it stays in git history at commit `c4d13ab`). `README.md` and

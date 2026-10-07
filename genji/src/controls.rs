@@ -19,6 +19,7 @@
 use eldenring::cs::CSMenuManImp;
 use fromsoftware_shared::FromStatic;
 
+use crate::camera;
 use crate::dinput::{self, dik};
 use crate::gamepad;
 use crate::glog;
@@ -116,6 +117,7 @@ impl Controls {
             self.capturing = capturing;
             dinput::set_blocking(capturing);
             gamepad::set_weapons_blocked(capturing);
+            camera::set_first_person(capturing);
             let why = if !self.enabled {
                 "Genji mode off"
             } else if !player_present {
