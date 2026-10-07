@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6: shuriken flight visual deleted on hit (the effect-pool leak)
+
+**Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's Bullet row also gets
+`bulletSfxDeleteType_byHit` and `bulletSfxDeleteType_byLifeDead` = 1 ("Deletion": the flight visual, the dagger
+model, is removed when the projectile hits or its life ends), restored with the other values. Meaning of the
+values from the community Paramdex shipped with WitchyBND (`ER/Meta/BulletParam.xml`): 0 = "Emitter Stopped"
+(visual left to finish by itself), 1 = "Deletion". The dagger uses 0.
+**Why:** Your test (entry below) and its log proved where the limit is.
+**Tested how:** Build OK, no warnings; 11 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether the visual's deletion also removes its slot in the effect pool (the pool
+line will show it: effects should go back down shortly after each throw).
+**Next:** Your test.
+
+## 2026-10-07 Step 6 bounce-effect fix tested in game: the effect pool is the limit (proved)
+
+**Changed:** Nothing. Test of commit `04d899f`.
+**Why:** Step 6 checks.
+**Tested how:** You threw at a wall until throwing stopped, died, and killed the dragon. I read `logs/genji.log`
+and your screenshot.
+**Result:**
+- You saw: daggers now stick *into* the wall (handles showing) instead of hanging in front of it, and some
+  disappear; throwing still stops at some point.
+- Log: the effect pool's live count climbed while you hit the wall (`effects 9/9`, `23/23`, `43/43` ... `170/170`
+  within 22 s; about 7 per second of wall hits); the bullet pools stayed at 0. **Throw #257 failed at the exact
+  moment `effects 192/192`** (192 extra + 64 built-in = 256). Later the count went back down (156), so effects can
+  be freed; ours weren't. 95 body hits, **19 headshots**: headshots work.
+- So the bounce effect wasn't the whole story: the dagger's flight visual itself stays behind ("Emitter
+  Stopped").
+**Still broken / not tested:** See entry above.
+**Next:** Fix above.
+
 ## 2026-10-07 Step 6: switch off the dagger's bounce effect for shuriken; log the bullet manager's pools
 
 **Changed:** `genji/src/shuriken.rs`: while Genji mode is active, the dagger's Bullet row also gets "bounce effect"

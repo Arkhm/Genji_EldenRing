@@ -55,6 +55,13 @@ const SHURIKEN_LIFE: f32 = 3.0;
 /// 257th throw failed again. What hangs is the bounce *effect*: it falls under the projectile's gravity, which is 0
 /// for shuriken, so it never ends. The bullet manager keeps those effects in a second pool of 64 + 192 = 256.
 const NO_SFX: i32 = -1;
+/// What the engine does with the flight visual (the dagger model, SFX 300001) when the projectile hits or its life
+/// ends: 0 = "Emitter Stopped" (the visual is left to finish on its own), 1 = "Deletion" (removed at once). Names
+/// from the community Paramdex shipped with WitchyBND (`ER/Meta/BulletParam.xml`, enum BULLET_SFX_DELETE_TYPE).
+/// The dagger uses 0. Test of 2026-10-07 (bounce effect already off): daggers stuck *into* the wall instead, and
+/// the effect pool's live count only climbed (9, 23, 43 ... 170 in 22 s, about 7 per second of wall hits): the
+/// flight visuals were never removed. Shuriken use 1.
+const SFX_DELETE: i8 = 1;
 
 /// The engine's own damage is reduced to almost nothing (it still gives the hit reaction, aggro and the "last hit
 /// by" record); the Overwatch damage below is applied by us when a shuriken ends next to a character.
@@ -133,6 +140,8 @@ struct RowValues {
     life: f32,
     dist: f32,
     sfx_flick: i32,
+    sfx_delete_by_hit: i8,
+    sfx_delete_by_life_end: i8,
     atk_phys: u16,
 }
 
@@ -202,6 +211,8 @@ impl Thrower {
                     life: bullet.life(),
                     dist: bullet.dist(),
                     sfx_flick: bullet.sfx_id_flick(),
+                    sfx_delete_by_hit: bullet.bullet_sfx_delete_type_by_hit(),
+                    sfx_delete_by_life_end: bullet.bullet_sfx_delete_type_by_life_dead(),
                     atk_phys: atk.atk_phys(),
                 };
                 let shuriken = RowValues {
@@ -214,13 +225,16 @@ impl Thrower {
                     life: SHURIKEN_LIFE,
                     dist: SHURIKEN_RANGE,
                     sfx_flick: NO_SFX,
+                    sfx_delete_by_hit: SFX_DELETE,
+                    sfx_delete_by_life_end: SFX_DELETE,
                     atk_phys: ENGINE_ATK_PHYS,
                 };
                 write_values(params, id, &shuriken);
                 glog!(
                     "THROW",
-                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, engine atk {} -> {ENGINE_ATK_PHYS}",
-                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick, vanilla.atk_phys
+                    "shuriken values ON: speed {} -> {SHURIKEN_SPEED} m/s, gravity {} -> 0 then {OUT_OF_RANGE_GRAVITY} after {SHURIKEN_RANGE} m (was after {} m), life {} -> {SHURIKEN_LIFE} s, bounce effect {} -> none, visual on hit/life end {}/{} -> deleted, engine atk {} -> {ENGINE_ATK_PHYS}",
+                    vanilla.init_velocity, vanilla.gravity_in_range, vanilla.dist, vanilla.life, vanilla.sfx_flick,
+                    vanilla.sfx_delete_by_hit, vanilla.sfx_delete_by_life_end, vanilla.atk_phys
                 );
                 self.vanilla = Some(vanilla);
             }
@@ -546,6 +560,8 @@ fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {
         bullet.set_life(v.life);
         bullet.set_dist(v.dist);
         bullet.set_sfx_id_flick(v.sfx_flick);
+        bullet.set_bullet_sfx_delete_type_by_hit(v.sfx_delete_by_hit);
+        bullet.set_bullet_sfx_delete_type_by_life_dead(v.sfx_delete_by_life_end);
     }
     if let Some(atk) = params.get_mut::<AtkParam_Pc>(id) {
         atk.set_atk_phys(v.atk_phys);
