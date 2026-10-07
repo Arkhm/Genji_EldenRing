@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 5a: choose the ray filter from 32 candidates at takeover
+
+**Changed:** `genji/src/movement.rs`: at takeover, a 3 m ray down from 1 m above the feet is cast with each of
+the 32 single filter bits and the CS2 filter `0x2000058`; the one whose surface (plus the 8 cm gap) is closest
+to where the game holds the feet, within 0.3 m, becomes the filter for all rays. If none is close enough, the
+controller keeps waiting and the game keeps control (logged every 2 s). The whole table, plus the game's own
+"on solid ground", "touching ground" and "adjust to hi collision" flags, is logged (`FILTER` lines) at takeover
+and every time the controller thinks you walked off an edge. The old probe is removed.
+**Why:** Third 5a test (entry below): the CS2 filter's surface was 0.9 m below the feet, so the controller
+thought you were in mid-air and gave up.
+**Tested how:** Build OK, no warnings; unit test passes.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether any single bit gives the surface the game stands on. If the chosen bit
+only covers some surfaces (for example ground but not objects), walking onto the others will look like walking
+off an edge; the `FILTER` table at that moment will show it.
+**Next:** Your test.
+
+## 2026-10-07 Step 5a third test: FAILED (ray surface 0.9 m below the feet)
+
+**Changed:** Nothing. Test of commit `281354f`.
+**Why:** Step 5a pass condition.
+**Tested how:** You played; I read `logs/genji.log` (135 lines).
+**Result:** You saw third person and Space jumping (plain Elden Ring). Log: collision ready after 6 frames;
+controller on at 22.112 s with feet at y 78.77, but every filter in the probe hit at 77.86, 0.91 m below the
+feet. The controller's ground ray (from 0.5 m above the feet, 1.1 m long) couldn't reach it, so it decided
+you were airborne, tried to drop you, the game held you up (outside push 2.0 m in 0.5 s), and after 30 frames
+the safety net gave up. My explanation (not confirmed): Elden Ring has detailed collision near the player and
+rougher low-detail collision; filter `0x2000058` seems to hit the rough one, which was 8 cm under the feet in one
+place and 0.9 m in another. It would also explain seeing the inside of the hill in the previous test.
+**Still broken / not tested:** Ground detection.
+**Next:** Choose the filter by experiment (entry above).
+
 ## 2026-10-07 Step 5a: wait for collision, keep the 8 cm ground gap, death black box
 
 **Changed:** `genji/src/movement.rs`: (1) the controller only takes over once a ray straight down hits the

@@ -44,8 +44,12 @@ const GROUND_GAP: f32 = 0.08;
 const RADIUS: f32 = 0.35;
 /// Heights (above the feet) of the rays that look for walls. All above MAX_STEP so steps don't count as walls.
 const WALL_RAY_HEIGHTS: [f32; 3] = [0.65, 1.1, 1.6];
-/// Ray-cast filter that hits map collision (CS2 field note).
-const MAP_FILTER: u32 = 0x0200_0058;
+/// Ray-cast filter from the CS2 field note. It hits *some* map collision, but in one 5a test it hit a surface
+/// 0.9 m below the feet (probably the low-detail collision), so the filter is now chosen at takeover from the
+/// 32 single bits (see `choose_filter`). This value is only one of the candidates.
+const CS2_FILTER: u32 = 0x0200_0058;
+/// The chosen filter's surface must be within this distance of where the game holds the feet, metres.
+const FILTER_TOLERANCE: f32 = 0.3;
 /// Give up if the ground ray hasn't hit anything this many frames after taking over.
 const NO_HIT_GIVE_UP_FRAMES: u32 = 30;
 const MAX_FALL_SECONDS: f32 = 5.0;
@@ -77,6 +81,9 @@ pub struct Mover {
     fall_time: f32,
     frames_since_start: u32,
     ever_hit: bool,
+    /// Ray-cast filter chosen at takeover (0 = none chosen yet).
+    filter: u32,
+    choose_log_timer: f32,
     saved_gravity: Option<(f32, bool)>,
     report_timer: f32,
     moved: f32,
@@ -113,13 +120,22 @@ impl Mover {
         if !self.active {
             let p = player.chr_ins.modules.physics.position;
             let feet = Vec3::new(p.0, p.1, p.2);
-            if ray(phys_world, player, feet + Vec3::Y, Vec3::NEG_Y * 3.0, p.3).is_none() {
-                if self.waiting_frames == 0 {
-                    glog!("MOVE", "waiting for the map's collision to load before taking over");
-                }
-                self.waiting_frames += 1;
-                return None;
+            self.choose_log_timer -= dt;
+            let log_now = self.choose_log_timer <= 0.0;
+            if log_now {
+                self.choose_log_timer = 2.0;
             }
+            match choose_filter(phys_world, player, feet, p.3, log_now) {
+                Some(filter) => self.filter = filter,
+                None => {
+                    if self.waiting_frames == 0 {
+                        glog!("MOVE", "waiting: no collision surface found right under the feet yet");
+                    }
+                    self.waiting_frames += 1;
+                    return None;
+                }
+            }
+            self.ever_hit = true;
             if self.waiting_frames > 0 {
                 glog!("MOVE", "collision ready after {} frames of waiting", self.waiting_frames);
                 self.waiting_frames = 0;
@@ -134,15 +150,13 @@ impl Mover {
             self.report_timer = 0.0;
             glog!(
                 "MOVE",
-                "controller ON (game gravity was x{:.2}, disabled {})",
+                "controller ON, ray filter {:#x} (game gravity was x{:.2}, disabled {})",
+                self.filter,
                 physics.gravity_multiplier,
                 physics.gravity_disabled
             );
         }
         self.frames_since_start += 1;
-        if self.frames_since_start == 1 {
-            probe(phys_world, player, world);
-        }
 
         let p0 = player.chr_ins.modules.physics.position;
         let w = p0.3;
@@ -169,7 +183,7 @@ impl Mover {
 
         // Vertical: stick to the ground, or fall.
         if self.grounded {
-            match ray(phys_world, player, pos + Vec3::Y * MAX_STEP, Vec3::NEG_Y * (MAX_STEP + SNAP_DOWN), w) {
+            match ray(phys_world, player, self.filter, pos + Vec3::Y * MAX_STEP, Vec3::NEG_Y * (MAX_STEP + SNAP_DOWN), w) {
                 Some(hit) => {
                     self.ever_hit = true;
                     pos.y = hit.y + GROUND_GAP;
@@ -178,7 +192,8 @@ impl Mover {
                 None => {
                     self.grounded = false;
                     self.ground_misses += 1;
-                    glog!("MOVE", "left the ground at ({:.2}, {:.2}, {:.2})", pos.x, pos.y, pos.z);
+                    glog!("MOVE", "left the ground at ({:.2}, {:.2}, {:.2}); what each filter sees here:", pos.x, pos.y, pos.z);
+                    choose_filter(phys_world, player, pos, w, true);
                 }
             }
         }
@@ -187,7 +202,7 @@ impl Mover {
             self.fall_time += dt;
             let drop = (-self.vy * dt).max(0.0);
             let lift = 0.3;
-            match ray(phys_world, player, pos + Vec3::Y * lift, Vec3::NEG_Y * (lift + drop), w) {
+            match ray(phys_world, player, self.filter, pos + Vec3::Y * lift, Vec3::NEG_Y * (lift + drop), w) {
                 Some(hit) if self.vy <= 0.0 => {
                     self.ever_hit = true;
                     glog!(
@@ -319,6 +334,7 @@ impl Mover {
         if len < 1e-5 {
             return Vec3::ZERO;
         }
+        let filter = self.filter;
         let free = |delta: Vec3| -> f32 {
             let l = delta.length();
             if l < 1e-5 {
@@ -328,7 +344,7 @@ impl Mover {
             let mut allowed = l;
             for h in WALL_RAY_HEIGHTS {
                 let origin = start + Vec3::Y * h;
-                if let Some(hit) = ray(world, player, origin, dir * (l + RADIUS), w) {
+                if let Some(hit) = ray(world, player, filter, origin, dir * (l + RADIUS), w) {
                     let dist = Vec3::new(hit.x - origin.x, 0.0, hit.z - origin.z).length() - RADIUS;
                     allowed = allowed.min(dist.max(0.0));
                 }
@@ -351,38 +367,48 @@ impl Mover {
     }
 }
 
-/// One-off diagnostic: casts a 3 m ray straight down from 1 m above the feet with several collision filters
-/// and several values for the position's 4th component, and logs which combinations hit. Added after the
-/// first 5a test (2026-10-07), where every ray with filter 0x2000058 missed, even straight down at the ground.
-fn probe(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, havok_man: &CSHavokMan) {
-    const FILTERS: [u32; 8] = [0x0200_0058, 0xFFFF_FFFF, 0x0000_0058, 0x0200_0000, 0x0000_0001, 0x0000_0000, 0x0000_0040, 0x0000_0010];
-    let p = player.chr_ins.modules.physics.position;
-    let origin = Vec3::new(p.0, p.1 + 1.0, p.2);
-    glog!(
-        "PROBE",
-        "feet ({:.2}, {:.2}, {:.2}) w {:.3} | CSHavokMan {:p} phys_world {:p}",
-        p.0, p.1, p.2, p.3,
-        havok_man as *const CSHavokMan,
-        world as *const eldenring::cs::CSPhysWorld
-    );
-    for w in [p.3, 0.0, 1.0] {
-        let results: Vec<String> = FILTERS
-            .iter()
-            .map(|&filter| {
-                match world.cast_ray(filter, &HavokPosition(origin.x, origin.y, origin.z, w), PositionDelta(0.0, -3.0, 0.0), player) {
-                    Some(hit) => format!("{filter:#x}:HIT y={:.2}", hit.1),
-                    None => format!("{filter:#x}:miss"),
-                }
-            })
-            .collect();
-        glog!("PROBE", "w={w:.3}: {}", results.join(" "));
+/// Picks the ray filter whose surface is right under the feet: casts a 3 m ray down from 1 m above the feet with
+/// each of the 32 single bits (and the CS2 filter), and keeps the one whose hit (+ the 8 cm gap) is closest to the
+/// feet, if within `FILTER_TOLERANCE`. Logs the whole table when `log` is set.
+fn choose_filter(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, feet: Vec3, w: f32, log: bool) -> Option<u32> {
+    let candidates = std::iter::once(CS2_FILTER).chain((0..32).map(|bit| 1u32 << bit));
+    let mut best: Option<(u32, f32)> = None;
+    let mut table = Vec::new();
+    for filter in candidates {
+        let hit = ray(world, player, filter, feet + Vec3::Y, Vec3::NEG_Y * 3.0, w);
+        if let Some(h) = hit {
+            let off = (h.y + GROUND_GAP - feet.y).abs();
+            table.push(format!("{filter:#x}:{:+.2}", h.y - feet.y));
+            if best.is_none_or(|(_, b)| off < b) {
+                best = Some((filter, off));
+            }
+        }
     }
+    let chosen = best.filter(|(_, off)| *off <= FILTER_TOLERANCE);
+    if log || chosen.is_some() {
+        let physics = &player.chr_ins.modules.physics;
+        glog!(
+            "FILTER",
+            "feet y {:.2} | game: on solid ground {} touching ground {} adjust-to-hi-collision {} | hits (surface minus feet): {}",
+            feet.y,
+            physics.standing_on_solid_ground as u8,
+            physics.is_touching_ground as u8,
+            physics.adjust_to_hi_collision as u8,
+            if table.is_empty() { "none".to_string() } else { table.join(" ") }
+        );
+        match (chosen, best) {
+            (Some((f, off)), _) => glog!("FILTER", "chosen {f:#x} (surface {off:.2} m from where the game holds the feet, after the 8 cm gap)"),
+            (None, Some((f, off))) => glog!("FILTER", "none chosen: closest is {f:#x}, {off:.2} m off (limit {FILTER_TOLERANCE})"),
+            (None, None) => glog!("FILTER", "none chosen: no filter hit anything"),
+        }
+    }
+    chosen.map(|(f, _)| f)
 }
 
 /// Casts a ray against the map; returns the hit point.
-fn ray(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, origin: Vec3, delta: Vec3, w: f32) -> Option<Vec3> {
+fn ray(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, filter: u32, origin: Vec3, delta: Vec3, w: f32) -> Option<Vec3> {
     let hit = world.cast_ray(
-        MAP_FILTER,
+        filter,
         &HavokPosition(origin.x, origin.y, origin.z, w),
         PositionDelta(delta.x, delta.y, delta.z),
         player,
