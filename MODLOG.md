@@ -3,6 +3,22 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Crosshair (hudhook overlay), first part of step 12
+
+**Changed:** New `genji/src/crosshair.rs`: hooks Direct3D 12's frame presentation with **hudhook 0.9.3** (MIT,
+crates.io, only its Direct3D 12 part) and draws your Overwatch crosshair on ImGui's foreground layer: four green bars
+(length 6, gap 13, thickness 1, 80%) with a 1 px black outline at 50%, sizes scaled from 1080p to your screen height
+(1440p: gap 17 px, length 8 px). ImGui's `imgui.ini`/log files are switched off (they'd be written into the game
+folder) and it may not touch the mouse cursor or take input. `genji/src/camera.rs`: crosshair visible exactly while
+the first-person view is drawn. `genji/src/lib.rs`: installs the hook after CSTask is ready. `genji/Cargo.toml`:
+hudhook. Earlier test: you said the Overwatch-measured shuriken values feel better.
+**Why:** You asked for a crosshair; option B (a real overlay), since step 12's HUD needs it anyway.
+**Tested how:** Build OK, no warnings; 19 unit tests pass (2 new: bar positions at 1440p, outline around bars).
+**Result:** Not tested in game. How Overwatch converts its numbers to pixels is assumed (pixels at 1080p, gap from
+the centre to each bar), not verified; "outline shift" isn't modelled.
+**Still broken / not tested:** Whether the hook works under me3; how it looks next to Overwatch's.
+**Next:** Your test; then step 7 (Swift Strike).
+
 ## 2026-10-07 Shuriken values from an Overwatch video measurement
 
 **Changed:** `genji/src/firing.rs`: burst cycle 0.68 -> 0.88 s (start to start: 0.2 s burst + 0.68 s recovery),

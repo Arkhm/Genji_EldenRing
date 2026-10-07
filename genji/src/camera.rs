@@ -50,6 +50,12 @@ struct View {
 }
 
 pub fn camera_step(dt: f32) {
+    // The crosshair shows exactly while the first-person view is drawn.
+    crate::crosshair::set_visible(camera_step_inner(dt));
+}
+
+/// Returns true if the first-person view was drawn this frame.
+fn camera_step_inner(dt: f32) -> bool {
     let mut guard = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let view = guard.get_or_insert_with(View::default);
 
@@ -57,10 +63,10 @@ pub fn camera_step(dt: f32) {
         view.look = None;
         view.model_hidden = false;
         gamepad::set_movement_blocked(false);
-        return;
+        return false;
     };
     let Ok(camera) = (unsafe { CSCamera::instance_mut() }) else {
-        return;
+        return false;
     };
 
     view.mover.watch_hp(player);
@@ -95,7 +101,7 @@ pub fn camera_step(dt: f32) {
             player.chr_ins.chr_flags1c5.set_enable_render(true);
             view.model_hidden = false;
         }
-        return;
+        return false;
     }
 
     // 1. Look.
@@ -153,7 +159,7 @@ pub fn camera_step(dt: f32) {
                 player.chr_ins.chr_flags1c5.set_enable_render(true);
                 view.model_hidden = false;
             }
-            return;
+            return false;
         }
     };
 
@@ -167,6 +173,7 @@ pub fn camera_step(dt: f32) {
     for angle in view.firing.tick(dt, left_down, right_down, driving) {
         view.thrower.throw(player, &look, eye, angle);
     }
+    true
 }
 
 /// Why the game must drive right now, or None if we can.

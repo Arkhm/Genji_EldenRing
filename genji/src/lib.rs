@@ -9,6 +9,7 @@
 
 mod camera;
 mod controls;
+mod crosshair;
 mod dinput;
 mod firing;
 mod gamepad;
@@ -115,6 +116,9 @@ fn boot() {
         CSTaskGroupIndex::GameFlowStep,
     );
     glog!("BOOT", "weapon-block task registered (GameFlowStep)");
+
+    // Overlay (crosshair): hooks the game's frame presentation; the game's renderer exists once CSTask does.
+    crosshair::install();
 
     // First-person camera: right after the game computes its camera (CameraStep). See camera.rs.
     let mut camera_disabled = false;

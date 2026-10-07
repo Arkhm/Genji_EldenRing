@@ -164,7 +164,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 9 | **Dragonblade + ult charge** | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
 | 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
-| 12 | **HUD**: health, cooldowns, ult meter, crosshair | play | (visual check by you) |
+| 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair built 2026-10-07 ahead of the rest, `crosshair.rs`, hudhook Direct3D 12 overlay; not tested in game) | play | (visual check by you) |
 | 13 | Polish: Torrent, ladders, menus, death, balance | play the game | |
 
 ## 5b. Step 5 in detail: movement

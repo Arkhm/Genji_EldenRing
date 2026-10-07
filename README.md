@@ -37,6 +37,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   what's under the crosshair; kills give runes. No throw limit (510 throws in a row, tested 2026-10-07).
   Bursts of 3, Fan of Blades on right click, 30 shuriken and the automatic reload (step 6b) are built, **not
   tested** yet.
+- Crosshair: your Overwatch crosshair (green, length 6, gap 13, 80%, black outline) drawn over the game while
+  the first-person view is on (part of step 12). **Not tested** yet.
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 
 ## Settings the Genji save needs once
