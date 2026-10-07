@@ -3,6 +3,17 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-07 Step 6 diagnostic: trigger fixed (it never ran)
+
+**Changed:** `genji/src/shuriken.rs`: the pool diagnostic now runs whenever the second pool's live list has a head
+(`+0x28` non-zero), at most every 10 s.
+**Why:** Your test of `b0ad34a`: 45 throws, no `POOLDIAG` lines. I made it wait for the pool's extra-allocation
+count (`+0x38`), which stays 0 until the 64 built-in slots are used up; 45 hits never got there. My mistake.
+**Tested how:** Build OK, no warnings.
+**Result:** Not tested in game.
+**Still broken / not tested:** Diagnostic output.
+**Next:** Same short test again.
+
 ## 2026-10-07 Step 6: STATUS.md option A, name what fills the bullet manager's second pool; hit effect back on
 
 **Changed:** New `genji/src/pooldiag.rs` (read-only diagnostic), called from `genji/src/shuriken.rs` at most every
