@@ -111,6 +111,11 @@ impl Swift {
         }
     }
 
+    /// Seconds of cooldown left (HUD).
+    pub fn cooldown(&self) -> f32 {
+        self.cooldown
+    }
+
     pub fn ready(&self) -> bool {
         self.cooldown <= 0.0
     }

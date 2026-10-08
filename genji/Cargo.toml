@@ -16,6 +16,7 @@ glam = "0.34"
 # Draws our overlay (crosshair, later the HUD) over the game's Direct3D 12 frames. MIT.
 hudhook = { version = "0.9.3", default-features = false, features = ["dx12"] }
 pelite = "0.10"
+png = "0.17"
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Memory", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_Devices_HumanInterfaceDevice"] }
 
 [profile.release]

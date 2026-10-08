@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 12: Overwatch-style HUD
+
+**Changed:**
+- New `genji/src/hud.rs`, drawn by the overlay while the first-person view is on, scaled from 1080p to your screen:
+  - Bottom left: Genji's portrait, health "current | max" and a bar of 10 segments.
+  - Bottom centre: an ultimate ring with the percentage. When full, the Dragonblade icon and "Q"; during Dragonblade
+    it drains with the seconds left.
+  - Bottom right: Swift Strike (LSHIFT) and Deflect (E) icons with cooldown seconds (darkened while cooling,
+    highlighted while Deflect is up), and the shuriken icon with ammo "n | 30" or "RELOADING" with a bar.
+  - Images are Overwatch's own, read at startup from `D:\GenjiBridgeAssets\raw` (never in the repository; a missing
+    one is logged and skipped).
+  - Font: Windows' Bahnschrift.
+- `genji/src/crosshair.rs`: loads the HUD at startup and draws it after the crosshair. The temporary "ULT n%" and
+  "DEFLECT" texts are removed.
+- `genji/src/camera.rs`: fills the HUD every frame.
+- `genji/src/firing.rs`, `swift.rs`, `deflect.rs`, `blade.rs`: small getters.
+- `genji/Cargo.toml`: `png` 0.17 (MIT/Apache) to read the images.
+- `docs/DESIGN.md`: section 5h.
+
+**Why:** You chose the HUD before the model (step 10).
+**Tested how:** Build OK, no warnings; unit tests pass.
+**Result:** Not tested in game. A `HUD resources:` line at startup says what loaded.
+**Still broken / not tested:** Everything visual; Elden Ring's own HUD stays on screen too.
+**Next:** Your test, with a screenshot.
+
 ## 2026-10-08 Step 2 unblocked: old Overwatch build via download_depot; extraction to D:
 
 **Changed:**

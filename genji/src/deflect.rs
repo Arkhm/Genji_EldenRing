@@ -114,6 +114,11 @@ impl Deflect {
         );
     }
 
+    /// For the HUD: seconds of Deflect left (while up) and of cooldown.
+    pub fn hud(&self) -> (Option<f32>, f32) {
+        (self.left, self.cooldown)
+    }
+
     pub fn active(&self) -> bool {
         self.left.is_some()
     }

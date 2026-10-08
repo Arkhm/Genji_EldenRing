@@ -15,6 +15,7 @@ mod deflect;
 mod dinput;
 mod firing;
 mod gamepad;
+mod hud;
 mod kills;
 mod log;
 mod look;

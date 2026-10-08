@@ -45,6 +45,11 @@ impl Default for Firing {
 }
 
 impl Firing {
+    /// For the HUD: shuriken left, the magazine size, and the share of a reload done (while reloading).
+    pub fn hud(&self) -> (u32, u32, Option<f32>) {
+        (self.ammo, AMMO, self.reload.map(|left| 1.0 - left / RELOAD_TIME))
+    }
+
     /// One frame. `primary`/`secondary`: left/right click held. `can_throw`: the controller drives this frame.
     /// Returns the sideways angle (radians, positive = left) of every shuriken to throw now.
     pub fn tick(&mut self, dt: f32, primary: bool, secondary: bool, can_throw: bool) -> Vec<f32> {

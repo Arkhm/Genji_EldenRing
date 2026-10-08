@@ -19,7 +19,6 @@ use crate::glog;
 
 const COLOR: [f32; 3] = [0.0, 1.0, 0.0];
 const OPACITY: f32 = 0.8;
-const COLOR_U8: [u8; 3] = [0, 255, 0];
 const THICKNESS: f32 = 1.0;
 const LENGTH: f32 = 6.0;
 const CENTER_GAP: f32 = 13.0;
@@ -30,21 +29,6 @@ const OUTLINE_THICKNESS: f32 = 1.0;
 const REFERENCE_HEIGHT: f32 = 1080.0;
 
 static VISIBLE: AtomicBool = AtomicBool::new(false);
-static DEFLECTING: AtomicBool = AtomicBool::new(false);
-/// Ultimate charge in percent, and Dragonblade's seconds left in tenths (0 = not active).
-static ULT_PERCENT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-static BLADE_TENTHS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-/// "ULT n%" or "DRAGONBLADE n s" under the crosshair (until the real HUD, step 12).
-pub fn set_ult(percent: u32, blade_left: Option<f32>) {
-    ULT_PERCENT.store(percent, Ordering::Relaxed);
-    BLADE_TENTHS.store(blade_left.map(|s| (s * 10.0).ceil() as u32).unwrap_or(0), Ordering::Relaxed);
-}
-
-/// Shows "DEFLECT" under the crosshair while Deflect is up (until Genji's sword is drawn, step 10).
-pub fn set_deflecting(on: bool) {
-    DEFLECTING.store(on, Ordering::Relaxed);
-}
 
 /// Show the crosshair (true while the first-person view is drawn) or hide it.
 pub fn set_visible(on: bool) {
@@ -54,7 +38,7 @@ pub fn set_visible(on: bool) {
 /// Hooks the game's Direct3D 12 frame presentation. Call once, after the game has started.
 pub fn install() {
     let result = hudhook::Hudhook::builder()
-        .with::<hudhook::hooks::dx12::ImguiDx12Hooks>(Overlay { frames: 0, failed: false })
+        .with::<hudhook::hooks::dx12::ImguiDx12Hooks>(Overlay { frames: 0, failed: false, hud: crate::hud::Resources::default() })
         .build()
         .apply();
     match result {
@@ -66,15 +50,18 @@ pub fn install() {
 struct Overlay {
     frames: u64,
     failed: bool,
+    /// The HUD's images and fonts (step 12).
+    hud: crate::hud::Resources,
 }
 
 impl ImguiRenderLoop for Overlay {
-    fn initialize<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
+    fn initialize<'a>(&'a mut self, ctx: &mut Context, render_context: &'a mut dyn RenderContext) {
         // ImGui would otherwise save window positions to imgui.ini in the game's folder.
         ctx.set_ini_filename(None);
         ctx.set_log_filename(None);
         // Never let ImGui change or show the mouse cursor, or take mouse/keyboard focus from the game.
         ctx.io_mut().config_flags |= imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE | imgui::ConfigFlags::NO_MOUSE;
+        self.hud = crate::hud::Resources::load(ctx, render_context);
     }
 
     fn render(&mut self, ui: &mut Ui) {
@@ -100,30 +87,16 @@ impl Overlay {
         if !VISIBLE.load(Ordering::Relaxed) {
             return;
         }
-        let draw = ui.get_foreground_draw_list();
-        for (min, max, color) in shapes(width, height) {
-            draw.add_rect(min, max, imgui::ImColor32::from_rgba_f32s(color[0], color[1], color[2], color[3]))
-                .filled(true)
-                .build();
+        {
+            // ImGui allows one draw list in use at a time: this one ends before the HUD takes its own.
+            let draw = ui.get_foreground_draw_list();
+            for (min, max, color) in shapes(width, height) {
+                draw.add_rect(min, max, imgui::ImColor32::from_rgba_f32s(color[0], color[1], color[2], color[3]))
+                    .filled(true)
+                    .build();
+            }
         }
-        let tenths = BLADE_TENTHS.load(Ordering::Relaxed);
-        let ult = if tenths > 0 {
-            format!("DRAGONBLADE {:.1} s", tenths as f32 / 10.0)
-        } else {
-            let p = ULT_PERCENT.load(Ordering::Relaxed);
-            if p >= 100 { "ULT READY (Q)".to_string() } else { format!("ULT {p}%") }
-        };
-        let size = ui.calc_text_size(&ult);
-        let pos = [(width - size[0]) / 2.0, height / 2.0 + 70.0 * height / REFERENCE_HEIGHT];
-        draw.add_text([pos[0] + 1.0, pos[1] + 1.0], imgui::ImColor32::from_rgba(0, 0, 0, 160), &ult);
-        draw.add_text(pos, imgui::ImColor32::from_rgba(COLOR_U8[0], COLOR_U8[1], COLOR_U8[2], 200), &ult);
-        if DEFLECTING.load(Ordering::Relaxed) {
-            let text = "DEFLECT";
-            let size = ui.calc_text_size(text);
-            let pos = [(width - size[0]) / 2.0, height / 2.0 + 40.0 * height / REFERENCE_HEIGHT];
-            draw.add_text([pos[0] + 1.0, pos[1] + 1.0], imgui::ImColor32::from_rgba(0, 0, 0, 160), text);
-            draw.add_text(pos, imgui::ImColor32::from_rgba(COLOR_U8[0], COLOR_U8[1], COLOR_U8[2], 230), text);
-        }
+        crate::hud::draw(ui, &self.hud, width, height);
     }
 }
 

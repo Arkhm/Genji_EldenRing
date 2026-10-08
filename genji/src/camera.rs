@@ -77,8 +77,12 @@ struct View {
 }
 
 pub fn camera_step(dt: f32) {
-    // The crosshair shows exactly while the first-person view is drawn.
-    crate::crosshair::set_visible(camera_step_inner(dt));
+    // The crosshair and the HUD show exactly while the first-person view is drawn.
+    let shown = camera_step_inner(dt);
+    crate::crosshair::set_visible(shown);
+    if !shown {
+        crate::hud::hide();
+    }
 }
 
 /// Returns true if the first-person view was drawn this frame.
@@ -104,7 +108,6 @@ fn camera_step_inner(dt: f32) -> bool {
     view.swift.tick(dt, crate::kills::tick(dt));
     view.blade.advance(dt);
     crate::ult::tick(dt, view.blade.active());
-    crate::crosshair::set_ult(crate::ult::percent(), view.blade.left());
     let buttons = gamepad::mouse_buttons();
     let (left_down, right_down) = (buttons & 1 != 0, buttons & 2 != 0);
 
@@ -142,7 +145,6 @@ fn camera_step_inner(dt: f32) -> bool {
         view.firing.tick(dt, false, false, false);
         view.deflect.tick(dt, false, false);
         view.deflect.release(player);
-        crate::crosshair::set_deflecting(false);
         view.mover.release(player);
         view.look = None;
         gamepad::set_movement_blocked(false);
@@ -223,8 +225,7 @@ fn camera_step_inner(dt: f32) -> bool {
             view.firing.tick(dt, false, false, false);
             view.deflect.tick(dt, false, false);
             view.deflect.release(player);
-            crate::crosshair::set_deflecting(false);
-            // Waiting for collision to load or for the character to settle, or gave up: the game drives.
+                // Waiting for collision to load or for the character to settle, or gave up: the game drives.
             gamepad::set_movement_blocked(false);
             if view.model_hidden {
                 player.chr_ins.chr_flags1c5.set_enable_render(true);
@@ -297,13 +298,30 @@ fn camera_step_inner(dt: f32) -> bool {
     let deflecting = view.deflect.tick(dt, e_pressed, driving);
     view.deflect.apply(player, feet, look.flat_forward());
     view.deflect.reflect(player, &look, eye);
-    crate::crosshair::set_deflecting(deflecting);
 
     // 6. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive (not during
     // Deflect or Dragonblade).
     for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade) {
         view.thrower.throw(player, &look, eye, angle);
     }
+
+    // 7. HUD (step 12).
+    let (ammo, ammo_max, reloading) = view.firing.hud();
+    let (deflect_left, deflect_cooldown) = view.deflect.hud();
+    crate::hud::update(crate::hud::State {
+        visible: true,
+        hp: player.chr_ins.modules.data.hp,
+        max_hp: player.chr_ins.modules.data.max_hp,
+        ammo,
+        ammo_max,
+        reloading,
+        swift_cooldown: view.swift.cooldown(),
+        deflect_left,
+        deflect_cooldown,
+        ult_percent: crate::ult::percent(),
+        blade_left: view.blade.left(),
+        blade_duration: view.blade.duration(),
+    });
     true
 }
 

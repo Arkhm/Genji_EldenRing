@@ -164,7 +164,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 9 | **Dragonblade + ult charge** (done 2026-10-08, see 5g) | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
 | 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
-| 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair built 2026-10-07 ahead of the rest, `crosshair.rs`, hudhook Direct3D 12 overlay; not tested in game) | play | (visual check by you) |
+| 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair done 2026-10-07; the rest planned in 5h, built before 10 and 11) | play | (visual check by you) |
 | 13 | Polish: Torrent, ladders, menus, death, balance | play the game | |
 
 ## 5b. Step 5 in detail: movement
@@ -369,6 +369,22 @@ stances: strong stamina/poise damage, overwhelming on a second melee within 5 s 
 - **Ultimate charge** (`ult.rs`): counted in Overwatch damage (27/54 per shuriken hit, 50 per dash hit, 40 per melee
   hit; swings don't charge, as in Overwatch) plus 5 per second, paused while Dragonblade is active; Q when full.
 - **Overlay:** "ULT n%" under the crosshair, "DRAGONBLADE n s" while active.
+
+## 5h. Step 12 in detail: the Overwatch HUD (plan 2026-10-08, ahead of steps 10 and 11)
+
+Drawn by the overlay (hudhook, like the crosshair), only while the first-person view is on, laid out like your
+Overwatch screenshot, sizes scaled from 1080p to your screen height:
+- **Bottom left:** Genji's portrait (from your extracted files), health as "current | max" and a bar of 10 white
+  segments (Overwatch draws 25 HP per segment; Elden Ring's health is larger, so each segment is a tenth).
+- **Bottom centre:** the ultimate: a ring that fills with the charge and the percentage inside; when full, the
+  Dragonblade icon and "Q"; during Dragonblade, the ring drains with the seconds left.
+- **Bottom right:** Swift Strike (LSHIFT) and Deflect (E) icons with their cooldown seconds (darkened while cooling,
+  highlighted while Deflect is up), the shuriken icon with ammo "n | 30", "RELOADING" while reloading.
+- Icons and the portrait are read at startup from `D:\GenjiBridgeAssets\raw` (Overwatch's own images, outside the
+  repository); if a file is missing that element is drawn without it and the log says so. Font: Windows'
+  Bahnschrift (closest to Overwatch's HUD lettering among the fonts every Windows has), read from `C:\Windows\Fonts`.
+- The temporary "ULT n%" and "DEFLECT" texts go. Elden Ring's own HUD stays (hiding it would break the "HUD visible
+  = gameplay" rule our controls rely on).
 
 ## 6. Risks and unknowns (honest list)
 
