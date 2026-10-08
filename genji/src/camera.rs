@@ -14,7 +14,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use eldenring::cs::{CSCamera, LadderState, PlayerIns, WorldChrMan};
+use eldenring::cs::{CSCam, CSCamera, ChrCam, LadderState, PlayerIns, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
@@ -64,6 +64,7 @@ struct View {
     shift_was_down: bool,
     /// Seconds until the next CAMERA sync report.
     sync_report: f32,
+    f8_was_down: bool,
 }
 
 pub fn camera_step(dt: f32) {
@@ -226,6 +227,13 @@ fn camera_step_inner(dt: f32) -> bool {
     let fov = vertical_fov(OVERWATCH_FOV);
     camera.pers_cam_1.fov = fov;
     camera.pers_cam_2.fov = fov;
+
+    // F8: diagnostic snapshot of every camera, for health bars drawn in the wrong place (test of 2026-10-08).
+    let f8 = dinput::key_down(&dinput::raw_keys(), dik::F8);
+    if f8 && !view.f8_was_down {
+        snapshot(camera, chr_cam, player, eye);
+    }
+    view.f8_was_down = f8;
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
@@ -234,6 +242,56 @@ fn camera_step_inner(dt: f32) -> bool {
         view.thrower.throw(player, &look, eye, angle);
     }
     true
+}
+
+/// Logs every camera (position, direction, field of view) and where each would put the nearest characters on
+/// screen (-1 = left edge, 0 = centre, +1 = right edge), so a health bar drawn in the wrong place can be matched
+/// to the camera the game placed it with.
+fn snapshot(camera: &CSCamera, chr_cam: Option<std::ptr::NonNull<ChrCam>>, player: &PlayerIns, eye: Vec3) {
+    let mut cams: Vec<(&str, &CSCam)> = vec![
+        ("pers_cam_1 (drawn)", &camera.pers_cam_1),
+        ("pers_cam_2 (follow)", &camera.pers_cam_2),
+        ("pers_cam_3", &camera.pers_cam_3),
+        ("pers_cam_4", &camera.pers_cam_4),
+    ];
+    if let Some(c) = chr_cam {
+        cams.push(("chr_cam", &unsafe { c.as_ref() }.pers_cam));
+    }
+    let targets = crate::targets::living(player);
+    let mut near: Vec<_> = targets.iter().map(|t| ((t.feet - eye).length(), t)).collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    near.truncate(3);
+    glog!("MARK", "F8 snapshot: eye ({:.2}, {:.2}, {:.2}), camera mask {:#x}", eye.x, eye.y, eye.z, camera.camera_mask);
+    for (name, cam) in cams {
+        let m = &cam.matrix;
+        let right = Vec3::new(m.0.0, m.0.1, m.0.2);
+        let up = Vec3::new(m.1.0, m.1.1, m.1.2);
+        let forward = Vec3::new(m.2.0, m.2.1, m.2.2);
+        let pos = Vec3::new(m.3.0, m.3.1, m.3.2);
+        let half_h = (cam.fov / 2.0).tan() * cam.aspect_ratio;
+        let screen: Vec<String> = near
+            .iter()
+            .map(|(dist, t)| {
+                let v = t.feet + Vec3::Y * t.height - pos;
+                let z = v.dot(forward);
+                if z <= 0.0 {
+                    format!("{:#x} {dist:.1} m: behind", t.chr.as_ptr() as usize)
+                } else {
+                    format!("{:#x} {dist:.1} m: x {:+.2} y {:+.2}", t.chr.as_ptr() as usize, v.dot(right) / (z * half_h), v.dot(up) / (z * (cam.fov / 2.0).tan()))
+                }
+            })
+            .collect();
+        glog!(
+            "MARK",
+            "{name}: pos ({:.2}, {:.2}, {:.2}) {:.2} m from eye, forward ({:.2}, {:.2}, {:.2}), fov {:.1} aspect {:.3} | {}",
+            pos.x, pos.y, pos.z,
+            (pos - eye).length(),
+            forward.x, forward.y, forward.z,
+            cam.fov.to_degrees(),
+            cam.aspect_ratio,
+            screen.join(" | ")
+        );
+    }
 }
 
 /// Why the game must drive right now, or None if we can.

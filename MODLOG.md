@@ -3,6 +3,35 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 F8 camera snapshot (health bars in the wrong place)
+
+**Changed:** `genji/src/camera.rs`, `genji/src/dinput.rs`: in first person, F8 writes `MARK` lines: every camera's
+position, direction, field of view and aspect, and where each would put the 3 nearest characters on screen.
+**Why:** Your test: health bars still sometimes sit in the wrong place. The 2-second `CAMERA` lines show the game's
+follow camera now stays within 1-10 degrees of our view, which can't put a bar on the other side of the screen, so
+the game places bars with something else. Press F8 when you see a wrong bar; I'll match it to a camera.
+**Tested how:** Build OK; 23 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Health bars sometimes misplaced.
+**Next:** Your F8 marks.
+
+## 2026-10-08 Shuriken damage only when the game confirms the hit (shield blocks do nothing)
+
+**Changed:** `genji/src/shuriken.rs`: a shuriken ending next to a character becomes a pending hit; it does damage
+only if, within 10 frames, the character loses HP to the game's own small hit (`HIT ... game N + ours M`, total =
+27/54); otherwise `HIT BLOCKED`, no damage. The 2-second report counts blocked ones. `genji/src/targets.rs`: keeps
+the total HP we took from each character ourselves, to tell the game's HP changes from ours.
+**Why:** Your test: shuriken blocked by shields still did damage that didn't show on the health bar. The log of that
+session proves it: real hits are always preceded by the game's own 4-6 HP (e.g. 187, then 181 at the next hit), and
+the shield-blocked ones by none (152 -> 152, 125 -> 125, 83 -> 83, 56 -> 56, 29 -> 29). It also means body shots
+did 31-32 instead of 27; now the game's part is subtracted.
+**Tested how:** Build OK; 23 unit tests pass.
+**Result:** Not tested in game. Earlier in that test: dashes now go their full 15 m through enemies (body fix
+works).
+**Still broken / not tested:** Blocked shuriken in game; damage from other sources (your own weapon, other enemies)
+landing in the same 10 frames would also count as confirmation.
+**Next:** Your test.
+
 ## 2026-10-08 First person uses your Overwatch FOV (103)
 
 **Changed:** `genji/src/camera.rs`: in first person, the drawn camera and the follow camera get a vertical field of
