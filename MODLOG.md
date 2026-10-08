@@ -3,6 +3,33 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Dragonblade ignores shields, wider cone; melee breaks guards; Deflect allowed during Dragonblade
+
+**Changed:**
+- `genji/src/blade.rs`, swings:
+  - They now use Corpse Piler's row with "Disable Guard" (AtkParam `disableGuard`: shields are ignored).
+  - The cone is 90 degrees each side (was 60).
+- `genji/src/blade.rs`, quick melee:
+  - It hits from our side, so a shield blocks it.
+  - The first melee on a character does 60 stamina and 40 poise damage. Another within 5 s does 999 of both, meant
+    to break the guard or stance.
+  - Each melee logs the target's stamina and poise before and after. A melee fully blocked by a shield counts as
+    landed when its stamina or poise drops.
+- `genji/src/camera.rs`: Deflect works during Dragonblade again (no swings while it's up).
+
+**Why:** Your test of commit `bb9ce3c`: everything works, but shields shouldn't block Dragonblade. Log: some swings
+did 30 where unblocked ones did 153 at the same attack power (80% shield absorption), although fired from behind:
+the game seems to judge blocking by where the attacker stands. You asked for melee to break a shielded enemy's stance
+in about 2 hits, a wider cone, and Deflect during Dragonblade (allowed in Overwatch).
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Whether the game applies stamina/poise values for the player's attacks (Paramdex says those fields are "NPCs only";
+  the log will show).
+- F7 test key still in.
+
+**Next:** Your test.
+
 ## 2026-10-08 Step 9: Dragonblade, ultimate charge, quick melee
 
 **Changed:**

@@ -350,7 +350,9 @@ how enemy melee that starts in front but swings around is judged.
 verified): Dragonblade 6 s; 100 damage per enemy per swing; a swing about every 0.61 s; 5 m forward cone (angle
 unknown, we use 60 degrees each side); ultimate cost about 2000 points; passive charge 5 points/s, paused while
 Dragonblade is active; quick melee 40. Activating it resets Swift Strike; Swift Strike keeps its own damage during
-it; no shuriken, no Deflect during it.
+it; no shuriken during it; Deflect is allowed (no swings while it's up). Swings ignore shields (AtkParam "Disable
+Guard"); the cone is 90 degrees each side (you found 60 too narrow). Quick melee can be blocked and breaks guards and
+stances: strong stamina/poise damage, overwhelming on a second melee within 5 s (your request, 2026-10-08).
 
 **How in Elden Ring** (your choices, 2026-10-08):
 - **Hits:** a swing (hold left click) hits every character within 5 m in the cone, with the same mechanism as Swift

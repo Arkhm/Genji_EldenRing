@@ -284,14 +284,15 @@ fn camera_step_inner(dt: f32) -> bool {
     let melee_down = buttons & (1 << 4) != 0;
     let melee_pressed = melee_down && !view.melee_was_down;
     view.melee_was_down = melee_down;
-    if driving && view.blade.act(q_pressed, left_down, melee_pressed, player, &look, eye) {
+    // No swings while Deflect is up (Deflect is allowed during Dragonblade, Overwatch).
+    if driving && view.blade.act(q_pressed, left_down && !view.deflect.active(), melee_pressed, player, &look, eye) {
         view.swift.reset("Dragonblade");
     }
     let blade = view.blade.active();
 
-    // 5. Deflect (step 8a): E, while we drive. No shuriken while deflecting, no Deflect during Dragonblade (Overwatch).
+    // 5. Deflect (step 8a): E, while we drive, also during Dragonblade (Overwatch). No shuriken while deflecting.
     let e_down = dinput::key_down(&keys_now, dik::E);
-    let e_pressed = e_down && !view.e_was_down && !blade;
+    let e_pressed = e_down && !view.e_was_down;
     view.e_was_down = e_down;
     let deflecting = view.deflect.tick(dt, e_pressed, driving);
     view.deflect.apply(player, feet, look.flat_forward());

@@ -7,6 +7,8 @@
 //! damage removed, as the visible sweep until Genji's own model and animations exist.
 //! All rows are changed in memory while Genji mode is on and restored afterwards.
 
+use std::collections::HashMap;
+
 use eldenring::cs::{AtkParam_Pc, Bullet as BulletParam, ChrInsExt, NpcParam, PlayerIns, SoloParamRepository, SpEffectParam};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
@@ -21,7 +23,8 @@ const DURATION: f32 = 6.0;
 const SWING_DAMAGE: f32 = 100.0;
 const SWING_INTERVAL: f32 = 0.61;
 const SWING_REACH: f32 = 5.0;
-const SWING_HALF_ANGLE: f32 = 60.0;
+/// Degrees each side of where we look. Was 60; you found it too narrow (2026-10-08): now the whole front half.
+const SWING_HALF_ANGLE: f32 = 90.0;
 /// Each swing hit fills this share of the target's bleed bar (a bleed every third swing).
 const SWING_BLEED_SHARE: f32 = 0.34;
 /// Overwatch quick melee: 40. Reach, cone and recovery are not verified.
@@ -29,6 +32,15 @@ const MELEE_DAMAGE: f32 = 40.0;
 const MELEE_REACH: f32 = 2.5;
 const MELEE_HALF_ANGLE: f32 = 45.0;
 const MELEE_RECOVERY: f32 = 0.8;
+/// Quick melee breaks guards and stances (your request, 2026-10-08: two melee hits on a shield should break the
+/// enemy's stance). Unlike swings, melee can be blocked: it hits from our side, on the shield. The first melee on a
+/// character does MELEE_STAMINA stamina and MELEE_POISE poise damage; another within MELEE_COMBO_WINDOW does
+/// BREAK_VALUE of both, meant to break any guard or stance. Whether the game counts these values for the player's
+/// attacks is logged (stamina and poise before and after each melee hit).
+const MELEE_STAMINA: u16 = 60;
+const MELEE_POISE: f32 = 40.0;
+const BREAK_VALUE: u16 = 999;
+const MELEE_COMBO_WINDOW: f32 = 5.0;
 
 /// Invisible carrier of the hits: Ruin Fragment's Bullet row.
 const CARRIER: u32 = 10_176_000;
@@ -53,6 +65,9 @@ struct Saved {
     carrier_homing: i16,
     piler_atk: [u16; 5],
     piler_add_base: bool,
+    piler_disable_guard: bool,
+    piler_stam: u16,
+    piler_poise: f32,
     sweep_atk: i32,
     sweep_sp: i32,
     sweep_life: f32,
@@ -71,6 +86,20 @@ struct Pending {
     /// Overwatch ultimate-charge points this hit gives (swings give none).
     ult_points: f32,
     kind: &'static str,
+    /// The target's stamina and poise before the hit (melee: guard and stance breaking are logged).
+    stamina_before: i32,
+    poise_before: f32,
+}
+
+/// How a strike lands.
+#[derive(Clone, Copy)]
+struct Style {
+    /// Fired from our side (true: can be blocked, melee) or from behind the target's facing (false).
+    from_front: bool,
+    /// Shields count (melee) or are ignored (swings: AtkParam "Disable Guard").
+    guardable: bool,
+    stamina: u16,
+    poise: f32,
 }
 
 #[derive(Default)]
@@ -83,6 +112,8 @@ pub struct Blade {
     uses: u32,
     saved: Option<Saved>,
     pending: Vec<Pending>,
+    /// Characters hit by quick melee: seconds since.
+    melee_hits: HashMap<usize, f32>,
 }
 
 impl Blade {
@@ -98,6 +129,10 @@ impl Blade {
     pub fn advance(&mut self, dt: f32) {
         self.swing_wait = (self.swing_wait - dt).max(0.0);
         self.melee_wait = (self.melee_wait - dt).max(0.0);
+        for age in self.melee_hits.values_mut() {
+            *age += dt;
+        }
+        self.melee_hits.retain(|_, age| *age <= MELEE_COMBO_WINDOW);
         if let Some(left) = self.left {
             let left = left - dt;
             if left <= 0.0 {
@@ -143,9 +178,10 @@ impl Blade {
         let damage = crate::scaling::scaled(SWING_DAMAGE, player);
         let attack = (SWING_DAMAGE * crate::scaling::dex_multiplier(player)).round() as u16;
         glog!("BLADE", "swing #{}: {} in reach", self.swings, hit.len());
+        let style = Style { from_front: false, guardable: false, stamina: self.saved.map(|s| s.piler_stam).unwrap_or(0), poise: self.saved.map(|s| s.piler_poise).unwrap_or(0.0) };
         for target in &hit {
             let bleed = bleed_share(target, SWING_BLEED_SHARE);
-            self.strike(player, target, feet, damage, attack, bleed, 0.0, "swing");
+            self.strike(player, target, feet, damage, attack, bleed, 0.0, "swing", style);
         }
         // The visible sweep.
         let forward = look.forward();
@@ -167,14 +203,35 @@ impl Blade {
         };
         let damage = crate::scaling::scaled(MELEE_DAMAGE, player);
         let attack = (MELEE_DAMAGE * crate::scaling::dex_multiplier(player)).round() as u16;
-        self.strike(player, target, feet, damage, attack, 0, MELEE_DAMAGE, "quick melee");
+        let id = target.chr.as_ptr() as usize;
+        let second = self.melee_hits.contains_key(&id);
+        self.melee_hits.insert(id, 0.0);
+        let style = if second {
+            Style { from_front: true, guardable: true, stamina: BREAK_VALUE, poise: BREAK_VALUE as f32 }
+        } else {
+            Style { from_front: true, guardable: true, stamina: MELEE_STAMINA, poise: MELEE_POISE }
+        };
+        glog!("BLADE", "quick melee on character {id:#x}: {} hit within {MELEE_COMBO_WINDOW} s", if second { "second (break)" } else { "first" });
+        self.strike(player, target, feet, damage, attack, 0, MELEE_DAMAGE, "quick melee", style);
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn strike(&mut self, player: &PlayerIns, target: &Target, our_feet: Vec3, damage: i32, attack: u16, bleed: i32, ult_points: f32, kind: &'static str) {
+    fn strike(
+        &mut self,
+        player: &PlayerIns,
+        target: &Target,
+        our_feet: Vec3,
+        damage: i32,
+        attack: u16,
+        bleed: i32,
+        ult_points: f32,
+        kind: &'static str,
+        style: Style,
+    ) {
         let id = target.chr.as_ptr() as usize;
         let chr = unsafe { target.chr.as_ref() };
         let (hp_before, own_before) = (chr.modules.data.hp, targets::own_damage(id));
+        let (stamina_before, poise_before) = (chr.modules.data.stamina, chr.modules.super_armor.sa_durability);
         crate::kills::damaged(id);
         if self.saved.is_none() {
             direct(target, damage, kind, "values not applied");
@@ -183,21 +240,37 @@ impl Blade {
         if let Ok(params) = unsafe { SoloParamRepository::instance_mut() } {
             if let Some(atk) = params.get_mut::<AtkParam_Pc>(CORPSE_PILER) {
                 atk.set_atk_phys(attack);
+                atk.set_disable_guard(!style.guardable);
+                atk.set_atk_stam(style.stamina);
+                atk.set_atk_super_armor(style.poise);
             }
         }
         let center = target.feet + Vec3::Y * (target.height * 0.5);
-        let facing = glam::Quat::from(chr.modules.physics.orientation) * Vec3::NEG_Z;
-        let mut away = Vec3::new(-facing.x, 0.0, -facing.z);
-        if away.length_squared() < 1e-4 {
-            away = Vec3::new(center.x - our_feet.x, 0.0, center.z - our_feet.z);
-        }
-        let away = away.normalize_or(Vec3::X);
+        let toward_us = Vec3::new(our_feet.x - center.x, 0.0, our_feet.z - center.z).normalize_or(Vec3::X);
+        let away = if style.from_front {
+            toward_us
+        } else {
+            let facing = glam::Quat::from(chr.modules.physics.orientation) * Vec3::NEG_Z;
+            Vec3::new(-facing.x, 0.0, -facing.z).normalize_or(-toward_us)
+        };
         let from = center + away * (target.radius + STRIKE_GAP);
         let forward = -away;
         let right = Vec3::Y.cross(forward).normalize_or(Vec3::X);
         let up = forward.cross(right).normalize_or(Vec3::Y);
         match crate::shuriken::spawn(player, CARRIER as i32, from, right, up, forward) {
-            Ok(()) => self.pending.push(Pending { chr: id, hp_before, own_before, frames: 0, damage, attack, bleed, ult_points, kind }),
+            Ok(()) => self.pending.push(Pending {
+                chr: id,
+                hp_before,
+                own_before,
+                frames: 0,
+                damage,
+                attack,
+                bleed,
+                ult_points,
+                kind,
+                stamina_before,
+                poise_before,
+            }),
             Err(code) => {
                 direct(target, damage, kind, &format!("spawn failed, engine error {code}"));
                 apply_bleed(target, bleed);
@@ -220,9 +293,20 @@ impl Blade {
             let Some(target) = everyone.iter().find(|t| t.chr.as_ptr() as usize == p.chr) else {
                 continue;
             };
-            let data = &unsafe { target.chr.as_ref() }.modules.data;
+            let modules = &unsafe { target.chr.as_ref() }.modules;
+            let data = &modules.data;
             let game = (p.hp_before - data.hp) as i64 - (targets::own_damage(p.chr) - p.own_before);
-            if game > 0 {
+            let (stamina, poise) = (data.stamina, modules.super_armor.sa_durability);
+            // A melee hit fully blocked by a shield takes no HP but stamina: that counts as landed too.
+            let landed = game > 0 || (p.kind == "quick melee" && (stamina < p.stamina_before || poise < p.poise_before));
+            if p.kind == "quick melee" && (landed || p.frames >= CONFIRM_FRAMES) {
+                glog!(
+                    "BLADE",
+                    "quick melee on {:#x}: stamina {} -> {stamina} / {}, poise {:.0} -> {poise:.0} / {:.0}",
+                    p.chr, p.stamina_before, data.max_stamina, p.poise_before, modules.super_armor.sa_durability_max
+                );
+            }
+            if landed {
                 glog!(
                     "BLADE",
                     "{} HIT on character {:#x}: game dealt {game} (attack power {}, Corpse Piler row), hp now {} / {}",
@@ -272,6 +356,9 @@ impl Blade {
                     carrier_homing: c.homing_angle(),
                     piler_atk: [p.atk_phys(), p.atk_mag(), p.atk_fire(), p.atk_thun(), p.atk_dark()],
                     piler_add_base: p.is_add_base_atk(),
+                    piler_disable_guard: p.disable_guard(),
+                    piler_stam: p.atk_stam(),
+                    piler_poise: p.atk_super_armor(),
                     sweep_atk: s.atk_id_bullet(),
                     sweep_sp: s.sp_effect_id0(),
                     sweep_life: s.life(),
@@ -337,6 +424,9 @@ impl Blade {
                     p.set_atk_thun(v.piler_atk[3]);
                     p.set_atk_dark(v.piler_atk[4]);
                     p.set_is_add_base_atk(v.piler_add_base);
+                    p.set_disable_guard(v.piler_disable_guard);
+                    p.set_atk_stam(v.piler_stam);
+                    p.set_atk_super_armor(v.piler_poise);
                 }
                 if let Some(s) = params.get_mut::<BulletParam>(SWEEP) {
                     s.set_atk_id_bullet(v.sweep_atk);
