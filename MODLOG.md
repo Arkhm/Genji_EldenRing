@@ -3,6 +3,21 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 One-shot shuriken kills count as eliminations (Swift Strike reset)
+
+**Changed:** `genji/src/shuriken.rs`: shuriken are matched against characters that died within the last 0.5 s too;
+such a hit is a killing blow (`HIT killing blow`) and counts for the Swift Strike reset. `genji/src/targets.rs`:
+`all()` lists dead characters as well.
+**Why:** Your test of commit `28f466f`: shuriken now deal real damage (78-85 per hit at attack power 82, 55-78 on a
+tougher one, 3 when guarded), but killing with the Fan of Blades + dash combo didn't reset the dash, even across
+several kills. Log: goats (55 HP) died to one shuriken; the game's damage lands before we match the shuriken to a
+character, and the match skipped dead ones, so those kills were never ours (no HIT, no KILL lines). Dash kills were
+fine (`SWIFT reset` after each).
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Kill reset after one-shot kills.
+**Next:** Your test; then Swift Strike's real hit and the half bar of bleed.
+
 ## 2026-10-08 Shuriken attack power actually used ("Is Base Attack Added")
 
 **Changed:** `genji/src/shuriken.rs`: while Genji mode is on, the dagger's AtkParam row also gets "Is Base Attack

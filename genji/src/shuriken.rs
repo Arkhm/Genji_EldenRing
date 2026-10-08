@@ -95,6 +95,9 @@ const REPORT_EVERY: f32 = 2.0;
 /// loses HP from the engine's own small hit (ENGINE_ATK_PHYS, about 4-5 HP). A shield block takes none (test of
 /// 2026-10-08: blocked shuriken still did 27, so health bars and damage disagreed). We wait this many frames for it.
 const CONFIRM_FRAMES: u32 = 10;
+/// A shuriken that ends next to a character that died within this many seconds dealt the killing blow (test of
+/// 2026-10-08: goats killed by one shuriken never counted as kills, so Swift Strike didn't reset).
+const KILLING_BLOW_WINDOW: f32 = 0.5;
 /// Test of 2026-10-07: a shuriken that hits a wall "flicks" (the dagger's bounce) and, with our zero gravity, hangs
 /// in the air in front of the wall for good, keeping its slot in the bullet manager (screenshot: a wall full of
 /// daggers; throwing stopped after the pool filled; killing an enemy freed the ones stuck in it). Impact is now
@@ -216,6 +219,9 @@ pub struct Thrower {
     blocked: u32,
     /// Attack power currently on the dagger's AtkParam row (0 = not applied yet).
     attack: u16,
+    /// When each character died (our clock), seen from its HP dropping to 0.
+    died_at: HashMap<usize, f32>,
+    killing_blows: u32,
 }
 
 /// A shuriken ended next to a character; damage waits for the game's own hit (CONFIRM_FRAMES).
@@ -476,13 +482,16 @@ impl Thrower {
             }
         }
         // HP the game itself took from each character this frame (anything that isn't our own damage).
-        let living = targets::living(player);
+        let everyone = targets::all(player);
         let engine_before_frame = self.engine_taken.clone();
-        for t in &living {
+        for t in &everyone {
             let id = t.chr.as_ptr() as usize;
             let hp = unsafe { t.chr.as_ref() }.modules.data.hp;
             let own = targets::own_damage(id);
             if let Some(&(last_hp, last_own)) = self.observed.get(&id) {
+                if last_hp > 0 && hp <= 0 {
+                    self.died_at.insert(id, self.clock);
+                }
                 let engine = (last_hp - hp) as i64 - (own - last_own);
                 if engine > 0 {
                     *self.engine_taken.entry(id).or_insert(0) += engine;
@@ -490,9 +499,12 @@ impl Thrower {
             }
             self.observed.insert(id, (hp, own));
         }
+        let clock = self.clock;
+        self.died_at.retain(|_, t| clock - *t <= KILLING_BLOW_WINDOW);
         for (pos, vel, age) in impacts {
-            self.resolve(player, pos, vel, age, dt, &engine_before_frame);
+            self.resolve(&everyone, pos, vel, age, dt, &engine_before_frame);
         }
+        let living: Vec<&Target> = everyone.iter().filter(|t| unsafe { t.chr.as_ref() }.modules.data.hp > 0).collect();
         self.confirm(&living);
 
         self.report_timer += dt;
@@ -528,7 +540,7 @@ impl Thrower {
     /// the next frame: if that stretch passes next to a character, it hit it (closest character wins).
     fn resolve(
         &mut self,
-        player: &PlayerIns,
+        everyone: &[Target],
         last_pos: Vec3,
         vel: Vec3,
         age: f32,
@@ -538,7 +550,9 @@ impl Thrower {
         const SAMPLES: usize = 8;
         let reach = vel * (dt.max(1.0 / 60.0) * 1.5);
         let mut best: Option<(f32, Target, Vec3)> = None;
-        for target in targets::living(player) {
+        for target in everyone.iter().filter(|t| {
+            unsafe { t.chr.as_ref() }.modules.data.hp > 0 || self.died_at.contains_key(&(t.chr.as_ptr() as usize))
+        }) {
             for i in 0..=SAMPLES {
                 let pos = last_pos + reach * (i as f32 / SAMPLES as f32);
                 if pos.y < target.feet.y - 0.3 || pos.y > target.feet.y + target.height + 0.3 {
@@ -546,7 +560,7 @@ impl Thrower {
                 }
                 let gap = Vec3::new(pos.x - target.feet.x, 0.0, pos.z - target.feet.z).length() - target.radius;
                 if gap <= HIT_MARGIN && best.as_ref().is_none_or(|(g, _, _)| gap < *g) {
-                    best = Some((gap, Target { ..target }, pos));
+                    best = Some((gap, Target { ..*target }, pos));
                     break; // the first sample along the flight that touches it is where it hit
                 }
             }
@@ -557,6 +571,17 @@ impl Thrower {
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
         let chr = target.chr.as_ptr() as usize;
         crate::kills::damaged(chr); // kill credit even if the game's own hit finishes it
+        if unsafe { target.chr.as_ref() }.modules.data.hp <= 0 {
+            // The game's damage already killed it (one-shot): this shuriken was the killing blow.
+            self.hits += 1;
+            self.killing_blows += 1;
+            glog!(
+                "HIT",
+                "killing blow on character {chr:#x} (died {:.2} s before we matched the shuriken to it)",
+                self.clock - self.died_at.get(&chr).copied().unwrap_or(self.clock)
+            );
+            return;
+        }
         self.pending.push(Pending {
             chr,
             head,
@@ -569,11 +594,11 @@ impl Thrower {
 
     /// Logs pending hits once the game dealt its damage; a confirmed headshot gets the same damage again (Overwatch's
     /// x2, HEAD_DAMAGE / BODY_DAMAGE). Hits the game dealt nothing for (shield, guard) are logged as blocked.
-    fn confirm(&mut self, living: &[Target]) {
+    fn confirm(&mut self, living: &[&Target]) {
         let mut still = Vec::new();
         for mut p in std::mem::take(&mut self.pending) {
             p.frames += 1;
-            let Some(target) = living.iter().find(|t| t.chr.as_ptr() as usize == p.chr) else {
+            let Some(target) = living.iter().copied().find(|t| t.chr.as_ptr() as usize == p.chr) else {
                 continue; // died (the game's own hit finished it) or unloaded
             };
             let engine = self.engine_taken.get(&p.chr).copied().unwrap_or(0) - p.engine_before;

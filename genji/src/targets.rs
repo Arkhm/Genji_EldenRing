@@ -21,6 +21,16 @@ pub struct Target {
 
 /// Living characters near the player (not the player).
 pub fn living(player: &PlayerIns) -> Vec<Target> {
+    list(player, false)
+}
+
+/// Characters near the player, dead ones included (a shuriken that kills outright: the game's damage lands before
+/// we look, so the character is already dead when we match the shuriken to it).
+pub fn all(player: &PlayerIns) -> Vec<Target> {
+    list(player, true)
+}
+
+fn list(player: &PlayerIns, include_dead: bool) -> Vec<Target> {
     let Ok(world) = (unsafe { WorldChrMan::instance() }) else {
         return Vec::new();
     };
@@ -34,7 +44,7 @@ pub fn living(player: &PlayerIns) -> Vec<Target> {
                 return None;
             }
             let chr = unsafe { entry.chr_ins.as_ref() };
-            if chr.modules.data.hp <= 0 {
+            if chr.modules.data.hp <= 0 && !include_dead {
                 return None;
             }
             let physics = &chr.modules.physics;
