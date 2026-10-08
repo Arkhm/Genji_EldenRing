@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Dragonblade: 1 s unsheathing
+
+**Changed:** `genji/src/blade.rs`: after Q, 1 s of unsheathing during which you can't swing and the 6 s don't drain
+(`BLADE unsheathed` line when it ends). `docs/DESIGN.md` unchanged in substance (duration "6 s, with a separate
+unsheathing animation" was already noted).
+**Why:** You (test of commit `285d212`): Dragonblade has a 1 s unsheathing in Overwatch. In the same test: all HUD
+elements work, but the HUD should use Overwatch's own designs (next entry).
+**Tested how:** Build OK; unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game.
+**Next:** Overwatch's HUD art.
+
 ## 2026-10-08 Step 12: Overwatch-style HUD
 
 **Changed:**

@@ -20,6 +20,8 @@ use crate::targets::{self, Target};
 /// Overwatch, Season 5 (2026-10-06, passed on by you): 6 s; 100 per enemy per swing; a swing about every 0.61 s
 /// (derived from ~0.70 s and +15% swing speed, not verified); 5 m forward cone (angle unknown, 60 degrees each side).
 const DURATION: f32 = 6.0;
+/// Unsheathing before the 6 s start: no swings, the duration doesn't drain (you, 2026-10-08: about 1 s).
+const UNSHEATHE: f32 = 1.0;
 const SWING_DAMAGE: f32 = 100.0;
 const SWING_INTERVAL: f32 = 0.61;
 const SWING_REACH: f32 = 5.0;
@@ -106,6 +108,8 @@ struct Style {
 pub struct Blade {
     /// Seconds of Dragonblade left.
     left: Option<f32>,
+    /// Seconds of unsheathing left (before `left` starts draining).
+    unsheathe: f32,
     swing_wait: f32,
     melee_wait: f32,
     swings: u32,
@@ -137,6 +141,13 @@ impl Blade {
             *age += dt;
         }
         self.melee_hits.retain(|_, age| *age <= MELEE_COMBO_WINDOW);
+        if self.left.is_some() && self.unsheathe > 0.0 {
+            self.unsheathe = (self.unsheathe - dt).max(0.0);
+            if self.unsheathe <= 0.0 {
+                glog!("BLADE", "unsheathed: {DURATION} s of Dragonblade start now");
+            }
+            return;
+        }
         if let Some(left) = self.left {
             let left = left - dt;
             if left <= 0.0 {
@@ -155,16 +166,17 @@ impl Blade {
         if q_pressed && !self.active() {
             if crate::ult::spend() {
                 self.left = Some(DURATION);
+                self.unsheathe = UNSHEATHE;
                 self.uses += 1;
                 self.swings = 0;
                 self.swing_wait = 0.0;
                 started = true;
-                glog!("BLADE", "Dragonblade #{} start ({DURATION} s)", self.uses);
+                glog!("BLADE", "Dragonblade #{} start: unsheathing {UNSHEATHE} s, then {DURATION} s", self.uses);
             } else {
                 glog!("BLADE", "ultimate not ready ({}%)", crate::ult::percent());
             }
         }
-        if self.active() && swing_held && self.swing_wait <= 0.0 {
+        if self.active() && self.unsheathe <= 0.0 && swing_held && self.swing_wait <= 0.0 {
             self.swing_wait = SWING_INTERVAL;
             self.swing(player, look, eye);
         }
