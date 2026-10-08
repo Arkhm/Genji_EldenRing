@@ -3,6 +3,45 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: ultimate and ability tiles rebuilt from your analysed Overwatch clip
+
+**Changed:**
+- `genji/src/hud.rs`, rebuilt from your clip and its spec (`HUD_ANIMATION_SPEC.txt`; summary in DESIGN.md 5h). Sizes,
+  colours and timings were measured on its frames, which are at 1080 lines.
+- **Ultimate:**
+  - Centre 150 px above the bottom; white disc 39.5, thick cyan band 43-50, pale ring 56, side markers, Q badge
+    22 px.
+  - Ready: blue halo, fine arcs, electric ribbons.
+  - Pressed: ring expands and fades, emblem fades, the empty meter's big "0" fades in, Q goes from filled to outlined
+    (0.4 s).
+  - During Dragonblade: the meter, not the old draining ring.
+- **LSHIFT/E tiles:**
+  - 64 px, leaning. Cyan while used (Swift Strike 0.4 s, Deflect while up), with the badge outlined.
+  - Cooldown: grey tile with cyan rising, and a big italic number with a dark edge. The tile fades from cyan to grey
+    as the number fades in.
+  - Ready flash: light bars down to the screen's bottom, white star, glow column, square particles, tile glowing
+    back to white, badge filling in (0.6 s).
+  - The "pressed" dip from the previous entry is gone: the clip shows no dip.
+- **Badges:** "Q", "E" and "LSHIFT" are filled when ready and outlined otherwise.
+- **Ammo panel:** moved to fit the new tiles.
+- **Code:** generated textures (white, the tile's top-to-bottom gradient, a soft light bar); fonts 50 px (ult) and
+  42 px (cooldowns); labels 15 px. `blade.rs` lost its unused `duration()`.
+**Why:** You: "check this folder... do the build for me".
+**Tested how:**
+- Frames extracted from the clips, measured, and put on sheets.
+- A mock-up drawn from the same formulas (Python, outside the game) compared frame by frame with the clip:
+  `D:\GenjiBridgeAssets\hud_ref\mock6_ult.png` and `mock6_tile.png`. Tuned twice: thicker ribbons, and a more
+  solid, longer-lasting flash.
+- The build and the 29 unit tests pass.
+**Result:** The mock-up's ult press, tile states and flash line up with the clip. The ready ult's ribbons are
+still simpler than Overwatch's. Not tested in game.
+**Still broken / not tested:**
+- Everything above, in game.
+- Not in your clip: the reset by a kill (reuses the ready flash) and the ultimate becoming full.
+- The Dragonblade time left is no longer shown (Overwatch shows it near the crosshair, which is outside this step).
+- F7 (fill ult) is still in.
+**Next:** Your test.
+
 ## 2026-10-08 HUD: "pressed" cyan ability boxes; bigger ultimate with breathing aura, blue flames and electric wisps
 
 **Changed:**

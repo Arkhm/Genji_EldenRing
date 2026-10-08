@@ -391,8 +391,25 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
 - Numbers in Segoe UI Black Italic (Overwatch's heavy oblique digits aren't a font file DataTool extracts); labels
   in Bahnschrift.
 - Overwatch stores its HUD layout as UI data, not pictures, so positions follow the screenshot.
-- The temporary "ULT n%" and "DEFLECT" texts go. Elden Ring's own HUD stays (hiding it would break the "HUD visible
-  = gameplay" rule our controls rely on).
+- The temporary "ULT n%" and "DEFLECT" texts go. (Update, 2026-10-08: Elden Ring's own HUD is now switched off in
+  Genji mode, and the gameplay rule no longer depends on it.)
+- **Animations from your analysed clip (2026-10-08).** Your clip is in
+  `D:\Videos\edits_hyper\Overwatch_HUD_reference_20261008\Overwatch_HUD_Agent_Pack`, with its written spec
+  (`HUD_ANIMATION_SPEC.txt`). Its frames are at 1080 lines, so sizes, colours and timings were measured on them
+  directly. Frames and comparison sheets are in `D:\GenjiBridgeAssets\hud_ref`, extracted with CapCut's ffmpeg.
+  - **Ultimate ready:** halo, fine arcs, pale ring, thick cyan ring, white disc with the emblem, side markers, short
+    electric ribbons at changing places, filled Q.
+  - **Ultimate pressed (0.4 s):** the ring expands and fades, and the emblem gives way to the empty meter with its
+    "0". Q becomes outlined.
+  - **During Dragonblade:** the meter shows the charge, as in the clip. The draining ring with seconds is gone.
+  - **Ability used:** the tile turns cyan with the badge outlined. Swift Strike stays cyan 0.4 s; Deflect while up.
+  - **Cooldown:** a grey tile with cyan rising from the bottom and whole seconds over the emblem. Right after the cyan,
+    the tile fades to grey while the number fades in.
+  - **Cooldown finished (0.6 s):** tall cyan light bars down to the screen's bottom edge, a white star, a glow column,
+    square particles, and the tile glowing before it turns white again.
+  - **Layout:** the tiles lean slightly (right side lower), as in the clip.
+  - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
+    cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 
 ## 6. Risks and unknowns (honest list)
 

@@ -3,9 +3,11 @@
 //! The game thread writes a snapshot of Genji's state every frame (`update`); the overlay's render thread draws it.
 //! Pictures are Overwatch's own UI art from your extracted files (outside the repository): ability icons, the hexagon
 //! portrait, and effect textures (glow ring, ring of dashes, light flare) built into D:\GenjiBridgeAssets\hud by
-//! tools\make_hud_art.py. Shapes and animations follow your Overwatch 2 screenshots (2026-10-08): Overwatch's own
-//! HUD animations are engine effects, not pictures in its UI files, so they are redrawn here. A missing picture is
-//! logged and left out.
+//! tools\make_hud_art.py. Shapes and animations follow your Overwatch 2 screenshots and your analysed clip
+//! (D:\Videos\edits_hyper\Overwatch_HUD_reference_20261008, HUD_ANIMATION_SPEC.txt, 2026-10-08): sizes, colours and
+//! timings of the ultimate and LSHIFT tile were measured on its frames, which are at 1080 lines, so they're used
+//! directly here as "1080-line pixels" (`k`). Overwatch's own HUD animations are engine effects, not pictures in its
+//! UI files, so they are redrawn here. A missing picture is logged and left out.
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::path::Path;
@@ -28,19 +30,25 @@ const ITALIC_FONT: &str = r"C:\Windows\Fonts\seguibli.ttf";
 const BOLD_FONT: &str = r"C:\Windows\Fonts\segoeuib.ttf";
 const LABEL_FONT: &str = r"C:\Windows\Fonts\bahnschrift.ttf";
 const REFERENCE_HEIGHT: f32 = 1080.0;
-/// Ticks around the ultimate ring (Overwatch shows the charge as cyan ticks).
+/// Ticks of the ultimate's charge, between its inner and outer rings.
 const ULT_TICKS: usize = 48;
-/// Length of the burst when the ultimate becomes ready, seconds.
+/// Length of the burst when the ultimate becomes full (not in your clip: kept short), seconds.
 const FLASH: f32 = 0.6;
-/// Length of the flash when a cooldown finishes ("fast", your Overwatch frames), seconds.
-const COOLDOWN_FLASH: f32 = 0.45;
-/// Length of the "pressed" dip of an ability box, seconds.
-const PRESS: f32 = 0.22;
-/// How long Swift Strike's box stays cyan after the dash starts (the dash itself lasts about this long), seconds.
-const SWIFT_LIT: f32 = 0.45;
-/// Electric wisps around the ready ultimate, and blue flame particles.
-const ULT_WISPS: u32 = 5;
-const ULT_FLAMES: u32 = 40;
+/// Ultimate pressed: the ring expands and fades, the emblem gives way to the empty meter (clip part 2), seconds.
+const ULT_PRESS: f32 = 0.4;
+/// Cooldown finished: light bars, star, glow column, square particles, tile back to white (clip part 5), seconds.
+const READY_FLASH: f32 = 0.6;
+/// Ability used: the tile turns cyan over this long (clip part 3), seconds.
+const LIT_IN: f32 = 0.07;
+/// How long Swift Strike's tile stays cyan after the dash starts (clip part 3: about 0.4 s), seconds.
+const SWIFT_LIT: f32 = 0.4;
+/// After the cyan: the tile fades to grey while the countdown number fades in (clip part 3), seconds.
+const COOLDOWN_ENTRY: f32 = 0.17;
+/// Overwatch's ability tiles lean: their right side sits lower by this share of their width (clip part 3).
+const LEAN: f32 = 0.08;
+/// Electric ribbons around the ready ultimate (slots; each shows a ribbon for part of its cycle), and blue flames.
+const ULT_WISPS: u32 = 3;
+const ULT_FLAMES: u32 = 30;
 
 /// Everything the HUD shows, written by the game thread each frame.
 #[derive(Clone, Copy, Default)]
@@ -62,7 +70,6 @@ pub struct State {
     pub deflect_cooldown_max: f32,
     pub ult_percent: u32,
     pub blade_left: Option<f32>,
-    pub blade_duration: f32,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -81,7 +88,6 @@ static STATE: Mutex<State> = Mutex::new(State {
     deflect_cooldown_max: 1.0,
     ult_percent: 0,
     blade_left: None,
-    blade_duration: 0.0,
 });
 
 pub fn update(state: State) {
@@ -107,8 +113,13 @@ pub struct Resources {
     dash_ring: Picture,
     flare: Picture,
     glow_dot: Picture,
-    italic_big: Option<FontId>,
-    italic_small: Option<FontId>,
+    /// Made here, not loaded: plain white (solid shapes), white to light grey top to bottom (tiles), and a soft
+    /// vertical bar (light streaks).
+    white: Picture,
+    tile_grad: Picture,
+    bar: Picture,
+    italic_ult: Option<FontId>,
+    italic_cd: Option<FontId>,
     bold_big: Option<FontId>,
     bold_small: Option<FontId>,
     label: Option<FontId>,
@@ -129,6 +140,12 @@ struct Anim {
     deflect_uses: Option<u32>,
     swift_pressed_at: Option<f32>,
     deflect_pressed_at: Option<f32>,
+    swift_was_lit: bool,
+    deflect_was_lit: bool,
+    swift_lit_off_at: Option<f32>,
+    deflect_lit_off_at: Option<f32>,
+    blade_was_on: bool,
+    ult_pressed_at: Option<f32>,
 }
 
 // SAFETY: font ids are pointers into ImGui's font atlas; they are created and used only on the overlay's render
@@ -166,6 +183,26 @@ impl Resources {
         r.deflect = load(RAW, ICON_DEFLECT);
         r.blade = load(RAW, ICON_BLADE);
         r.shuriken = load(RAW, ICON_SHURIKEN);
+        let mut make = |w: u32, h: u32, pixel: &dyn Fn(f32, f32) -> [u8; 4]| -> Picture {
+            let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+            for y in 0..h {
+                for x in 0..w {
+                    rgba.extend_from_slice(&pixel((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32));
+                }
+            }
+            render.load_texture(&rgba, w, h).ok().map(|id| (id, [w as f32, h as f32]))
+        };
+        r.white = make(4, 4, &|_, _| [255; 4]);
+        // Ready tile: 248 at the top to 212 at the bottom (clip part 3).
+        r.tile_grad = make(4, 64, &|_, v| {
+            let g = (255.0 - 38.0 * v) as u8;
+            [g, g, g, 255]
+        });
+        r.bar = make(32, 128, &|u, v| {
+            let across = (1.0 - (2.0 * u - 1.0).abs()).powf(0.3);
+            let up = smooth((v / 0.3).min(1.0));
+            [255, 255, 255, (255.0 * across * up) as u8]
+        });
         let k = (ctx.io().display_size[1] / REFERENCE_HEIGHT).max(0.5);
         let fonts = ctx.fonts();
         fonts.add_font(&[FontSource::DefaultFontData { config: None }]);
@@ -182,19 +219,23 @@ impl Resources {
                 }
             }
         };
-        r.italic_big = add(ITALIC_FONT, 34.0);
-        r.italic_small = add(ITALIC_FONT, 16.0);
+        // Clip: the ultimate's "0" is about 35 px tall, the cooldown digits about 30 px.
+        r.italic_ult = add(ITALIC_FONT, 50.0);
+        r.italic_cd = add(ITALIC_FONT, 42.0);
         r.bold_big = add(BOLD_FONT, 30.0);
         r.bold_small = add(BOLD_FONT, 18.0);
-        r.label = add(LABEL_FONT, 12.0);
+        r.label = add(LABEL_FONT, 15.0);
         glog!(
             "HUD",
-            "resources: pictures {}/10, fonts {}/5",
-            [r.portrait, r.plus, r.glow_ring, r.dash_ring, r.flare, r.glow_dot, r.swift, r.deflect, r.blade, r.shuriken]
+            "resources: pictures {}/13, fonts {}/5",
+            [
+                r.portrait, r.plus, r.glow_ring, r.dash_ring, r.flare, r.glow_dot, r.swift, r.deflect, r.blade, r.shuriken,
+                r.white, r.tile_grad, r.bar,
+            ]
                 .iter()
                 .filter(|p| p.is_some())
                 .count(),
-            [r.italic_big, r.italic_small, r.bold_big, r.bold_small, r.label].iter().filter(|f| f.is_some()).count()
+            [r.italic_ult, r.italic_cd, r.bold_big, r.bold_small, r.label].iter().filter(|f| f.is_some()).count()
         );
         r
     }
@@ -222,15 +263,22 @@ const WHITE: [u8; 4] = [255, 255, 255, 255];
 const PANEL_WHITE: [u8; 4] = [232, 235, 240, 235];
 const DIM: [u8; 4] = [215, 220, 230, 200];
 const SHADOW: [u8; 4] = [0, 0, 0, 110];
-const NAVY: [u8; 4] = [16, 30, 52, 205];
-const TEAL: [u8; 4] = [60, 205, 225, 220];
 const CYAN: [u8; 4] = [90, 235, 255, 255];
-const BLUE_GLOW: [u8; 4] = [70, 170, 255, 255];
 const ICON_ON_WHITE: [u8; 4] = [40, 45, 60, 255];
-const COOLING: [u8; 4] = [95, 100, 112, 175];
+/// Clip parts 3-4: the active tile and the cooldown fill are a saturated cyan; the waiting tile a see-through grey.
+const ACTIVE_CYAN: [u8; 4] = [70, 255, 245, 255];
+const FILL_CYAN: [u8; 4] = [68, 255, 250, 255];
+const COOLING_GREY: [u8; 4] = [128, 130, 134, 205];
+const ICON_DARK: [u8; 4] = [22, 24, 30, 255];
+const OUTLINE: [u8; 4] = [15, 18, 26, 255];
 
 fn col(c: [u8; 4]) -> ImColor32 {
     ImColor32::from_rgba(c[0], c[1], c[2], c[3])
+}
+
+fn mix(a: [u8; 4], b: [u8; 4], f: f32) -> [u8; 4] {
+    let f = f.clamp(0.0, 1.0);
+    std::array::from_fn(|i| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * f) as u8)
 }
 
 fn alpha(c: [u8; 4], a: f32) -> [u8; 4] {
@@ -279,6 +327,21 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         r.anim.deflect_pressed_at = Some(now);
     }
     r.anim.deflect_uses = Some(s.deflect_uses);
+    let swift_lit = r.anim.swift_pressed_at.is_some_and(|t| now - t < SWIFT_LIT);
+    if r.anim.swift_was_lit && !swift_lit {
+        r.anim.swift_lit_off_at = Some(now);
+    }
+    r.anim.swift_was_lit = swift_lit;
+    let deflect_lit = s.deflect_left.is_some();
+    if r.anim.deflect_was_lit && !deflect_lit {
+        r.anim.deflect_lit_off_at = Some(now);
+    }
+    r.anim.deflect_was_lit = deflect_lit;
+    let blade_on = s.blade_left.is_some();
+    if blade_on && !r.anim.blade_was_on {
+        r.anim.ult_pressed_at = Some(now);
+    }
+    r.anim.blade_was_on = blade_on;
 
     let k = height / REFERENCE_HEIGHT;
     let draw = ui.get_foreground_draw_list();
@@ -291,19 +354,31 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         let _f = font.map(|f| ui.push_font(f));
         ui.calc_text_size(t)
     };
-    // A key box ("LSHIFT", "E", "Q"): filled light when the ability is ready, outlined when not.
-    let key_box = |center_x: f32, top: f32, label: &str, ready: bool| {
+    // A key badge ("LSHIFT", "E", "Q"): filled white with a dark label when the ability is ready (`filled` 1), a white
+    // outline with a light label when not (0); in between while it changes. `lean`: share of its width its right
+    // side sits lower.
+    let badge = |center_x: f32, top: f32, label: &str, filled: f32, lean: f32| {
         let t = measure(r.label, label);
-        let (w, h) = (t[0] + 10.0 * k, t[1] + 4.0 * k);
-        let x = center_x - w / 2.0;
-        if ready {
-            draw.add_rect([x, top], [x + w, top + h], col(PANEL_WHITE)).filled(true).rounding(2.0 * k).build();
-        } else {
-            draw.add_rect([x, top], [x + w, top + h], col([20, 24, 34, 140])).filled(true).rounding(2.0 * k).build();
-            draw.add_rect([x, top], [x + w, top + h], col([200, 205, 215, 200])).thickness(1.2 * k).rounding(2.0 * k).build();
-        }
+        let h = 22.0 * k;
+        let w = (t[0] + 14.0 * k).max(h);
+        let (x0, x1) = (center_x - w / 2.0, center_x + w / 2.0);
+        let d = w * lean;
+        tile_quad(&draw, r.white, x0, top, x1, top + h, d, alpha([20, 24, 34, 255], 0.45 * (1.0 - filled)));
+        tile_quad(&draw, r.white, x0, top, x1, top + h, d, alpha(PANEL_WHITE, filled));
+        let edge = vec![[x0, top], [x1, top + d], [x1, top + h + d], [x0, top + h], [x0, top]];
+        draw.add_polyline(edge, col(alpha([228, 230, 236, 255], 0.9 * (1.0 - filled)))).thickness(1.6 * k).build();
         let _f = r.label.map(|f| ui.push_font(f));
-        draw.add_text([x + 5.0 * k, top + 2.0 * k], col(if ready { [30, 34, 46, 255] } else { [225, 228, 235, 255] }), label);
+        draw.add_text([center_x - t[0] / 2.0, top + d / 2.0 + (h - t[1]) / 2.0], col(mix([228, 230, 236, 255], [26, 30, 40, 255], filled)), label);
+    };
+    // Big italic digits with a dark edge (ultimate and cooldown numbers).
+    let digits = |center: [f32; 2], font: Option<FontId>, a: f32, t: &str| {
+        let size = measure(font, t);
+        let pos = [center[0] - size[0] / 2.0, center[1] - size[1] / 2.0];
+        let _f = font.map(|f| ui.push_font(f));
+        for (dx, dy) in [(-1.6, 0.0), (1.6, 0.0), (0.0, -1.6), (0.0, 1.6), (-1.2, -1.2), (1.2, 1.2), (-1.2, 1.2), (1.2, -1.2)] {
+            draw.add_text([pos[0] + dx * k, pos[1] + dy * k], col(alpha(OUTLINE, 0.85 * a)), t);
+        }
+        draw.add_text(pos, col(alpha(WHITE, a)), t);
     };
     let base = height - 62.0 * k;
 
@@ -345,149 +420,159 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         }
     }
 
-    // ---- Bottom centre: the ultimate.
-    // Sizes measured on your Overwatch screenshot (2026-10-08): white centre 38, bright ring out to 57, centre 151
-    // above the bottom edge (at 1080 lines).
-    let radius = 41.0 * k;
-    let (cx, cy) = (width / 2.0, base - radius - 48.0 * k);
-    // Faint outer rings and the dotted circle.
-    for i in 0..60 {
-        let a = TAU * i as f32 / 60.0;
-        let rr = radius * 1.75;
-        draw.add_circle([cx + rr * a.cos(), cy + rr * a.sin()], 0.9 * k, col([255, 255, 255, 55])).filled(true).build();
-    }
-    draw.add_circle([cx, cy], radius * 1.85, col([255, 255, 255, 40])).thickness(1.5 * k).num_segments(72).build();
-    if let Some(left) = s.blade_left {
-        // Dragonblade: glowing ring draining with the time left, the blade icon, seconds.
-        let pulse = 0.75 + 0.25 * (now * 6.0).sin();
-        picture(&draw, r.glow_ring, [cx, cy], radius * 3.0, 0.0, alpha(BLUE_GLOW, pulse));
-        draw.add_circle([cx, cy], radius, col(NAVY)).filled(true).num_segments(64).build();
-        let share = if s.blade_duration > 0.0 { (left / s.blade_duration).clamp(0.0, 1.0) } else { 0.0 };
-        arc(&draw, [cx, cy], radius * 1.08, share, col(CYAN), 4.0 * k);
-        picture(&draw, r.blade, [cx, cy - 6.0 * k], radius * 1.1, 0.0, WHITE);
-        let t = format!("{left:.1}");
-        let tw = measure(r.italic_small, &t);
-        text([cx - tw[0] / 2.0, cy + radius * 0.38], r.italic_small, CYAN, &t);
-        key_box(cx, cy + radius * 1.6, "Q", false);
-    } else if ult_ready {
-        // Ready (your Overwatch frames, 2026-10-08): a blue aura breathing slowly, blue flames licking out of the
-        // ring, electric wisps curling away from it; the thick bright ring, the white centre with the icon.
+    // ---- Bottom centre: the ultimate. Sizes from your clip (1080-line pixels): centre 150 above the bottom; white
+    // disc 39.5; dark line 41; bright cyan band 43-50; blue 51-53; pale ring 56; side markers 54-60; Q badge 22 px,
+    // its top 66 below the centre.
+    let (cx, cy) = (width / 2.0, height - 150.0 * k);
+    let q_top = cy + 66.0 * k;
+    let since_press = r.anim.ult_pressed_at.map_or(f32::MAX, |t| now - t);
+    // The empty/charging meter (clip part 2, end): see-through dark centre, thin pale outer ring, thin teal inner ring
+    // with gaps at top and bottom, the charge as ticks between them, the big italic number.
+    let meter = |a: f32, percent: u32| {
+        picture(&draw, r.glow_dot, [cx, cy], 130.0 * k, 0.0, alpha([6, 10, 24, 255], 0.55 * a));
+        draw.add_circle([cx, cy], 55.0 * k, col(alpha([22, 28, 52, 255], 0.5 * a))).filled(true).num_segments(96).build();
+        draw.add_circle([cx, cy], 56.0 * k, col(alpha([225, 230, 245, 255], 0.55 * a))).thickness(2.0 * k).num_segments(96).build();
+        let gap = 0.14;
+        for start in [-FRAC_PI_2 + gap, FRAC_PI_2 + gap] {
+            arc_at(&draw, [cx, cy], 34.0 * k, start, PI - 2.0 * gap, col(alpha([45, 200, 195, 255], 0.9 * a)), 2.0 * k);
+        }
+        let lit = (percent as f32 / 100.0 * ULT_TICKS as f32).floor() as usize;
+        for i in 0..ULT_TICKS {
+            let ang = -FRAC_PI_2 + TAU * i as f32 / ULT_TICKS as f32;
+            let (r0, r1) = (40.0 * k, 48.0 * k);
+            if i >= lit {
+                continue;
+            }
+            let c = alpha(CYAN, a);
+            draw.add_line([cx + r0 * ang.cos(), cy + r0 * ang.sin()], [cx + r1 * ang.cos(), cy + r1 * ang.sin()], col(c)).thickness(2.2 * k).build();
+        }
+        digits([cx, cy], r.italic_ult, a, &percent.to_string());
+    };
+    if ult_ready {
+        // Clip part 1, back to front: soft blue halo (brightest near the rim, breathing and flickering), blue flames,
+        // fine arcs with wandering highlights, pale ring, bright cyan ring, white disc with the dark emblem, side
+        // markers, short electric ribbons appearing at changing places on the rim, Q badge.
         let breathe = 0.5 + 0.5 * (now * 1.6).sin();
-        picture(&draw, r.glow_dot, [cx, cy], radius * (4.4 + 0.8 * breathe), 0.0, alpha(BLUE_GLOW, 0.4 + 0.3 * breathe));
-        picture(&draw, r.glow_dot, [cx, cy], radius * (2.9 + 0.3 * breathe), 0.0, alpha([110, 200, 255, 255], 0.45 + 0.3 * breathe));
-        ult_flames(&draw, r.glow_dot, [cx, cy], radius, now);
-        ult_wisps(&draw, [cx, cy], radius, now, k);
-        picture(&draw, r.glow_ring, [cx, cy], radius * 2.9, 0.0, alpha(BLUE_GLOW, 0.7 + 0.3 * breathe));
-        // The ring: deep blue outside, bright cyan, light inner edge; a thin dark line around the white centre.
-        draw.add_circle([cx, cy], radius * 1.2, col([40, 120, 255, 255])).thickness(radius * 0.42).num_segments(96).build();
-        draw.add_circle([cx, cy], radius * 1.17, col([70, 215, 255, 255])).thickness(radius * 0.24).num_segments(96).build();
-        draw.add_circle([cx, cy], radius * 1.08, col([190, 245, 255, 255])).thickness(radius * 0.06).num_segments(96).build();
-        draw.add_circle([cx, cy], radius * 0.98, col([20, 40, 80, 255])).filled(true).num_segments(96).build();
-        draw.add_circle([cx, cy], radius * 0.93, col(PANEL_WHITE)).filled(true).num_segments(96).build();
-        picture(&draw, r.blade, [cx, cy], radius * 1.25, 0.0, ICON_ON_WHITE);
+        let flicker = 0.85 + 0.15 * (now * 13.0).sin() * (now * 7.3).cos();
+        picture(&draw, r.glow_dot, [cx, cy], 205.0 * k * (1.0 + 0.06 * breathe), 0.0, alpha([60, 140, 255, 255], (0.6 + 0.25 * breathe) * flicker));
+        picture(&draw, r.glow_dot, [cx, cy], 150.0 * k, 0.0, alpha([90, 190, 255, 255], 0.75 + 0.25 * breathe));
+        ult_flames(&draw, r.glow_dot, [cx, cy], 41.0 * k, now);
+        for i in 0..4 {
+            let f = i as f32;
+            let start = now * (0.35 + 0.1 * f) * if i % 2 == 0 { 1.0 } else { -1.0 } + f * 1.7;
+            let len = 0.9 + 0.5 * (now * 0.9 + f).sin();
+            arc_at(&draw, [cx, cy], (61.0 + 2.5 * f) * k, start, len, col(alpha([170, 230, 255, 255], 0.35 + 0.25 * breathe)), 1.3 * k);
+        }
+        draw.add_circle([cx, cy], 56.0 * k, col(alpha([190, 245, 255, 255], 0.7 + 0.3 * flicker))).thickness(2.5 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 52.0 * k, col([55, 181, 247, 255])).thickness(3.0 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 46.5 * k, col([50, 255, 252, 255])).thickness(8.0 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 41.5 * k, col([40, 100, 165, 255])).thickness(3.0 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 39.5 * k, col([233, 233, 242, 255])).filled(true).num_segments(96).build();
+        picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, ICON_DARK);
+        ult_wisps(&draw, [cx, cy], now, k);
         for side in [-1.0f32, 1.0] {
-            let x = cx + side * radius * 1.62;
-            draw.add_triangle([x, cy - 5.0 * k], [x, cy + 5.0 * k], [x - side * 7.0 * k, cy], col(WHITE)).filled(true).build();
+            let x = cx + side * 60.0 * k;
+            draw.add_triangle([x, cy - 4.5 * k], [x, cy + 4.5 * k], [x - side * 6.0 * k, cy], col(WHITE)).filled(true).build();
         }
         if let Some(t0) = r.anim.ult_ready_at {
             let p = (now - t0) / FLASH;
             if p < 1.0 {
-                picture(&draw, r.flare, [cx, cy], radius * (2.0 + 4.0 * p), 0.0, alpha(WHITE, 1.0 - p));
+                picture(&draw, r.flare, [cx, cy], 80.0 * k * (1.0 + 2.0 * p), 0.0, alpha(WHITE, 1.0 - p));
             }
         }
-        key_box(cx, cy + radius * 1.6, "Q", true);
+        badge(cx, q_top, "Q", 1.0, 0.0);
+    } else if since_press < ULT_PRESS {
+        // Clip part 2: the halo and ribbons drop away; the turquoise ring expands from 69 to about 135 px, thinning
+        // and fading; the white disc flares then fades; the empty meter with its "0" fades in; Q goes from filled to
+        // outlined.
+        let t = since_press;
+        meter(((t - 0.1) / 0.15).clamp(0.0, 1.0), s.ult_percent);
+        let e = 1.0 - (1.0 - (t / 0.3).min(1.0)).powi(3);
+        let ring_a = 1.0 - ((t - 0.1) / 0.2).clamp(0.0, 1.0);
+        draw.add_circle([cx, cy], (69.0 + 66.0 * e) * k, col(alpha([60, 235, 212, 255], ring_a))).thickness((14.0 - 12.0 * e) * k).num_segments(128).build();
+        let disc_a = 1.0 - ((t - 0.05) / 0.15).clamp(0.0, 1.0);
+        let disc = if t < 0.06 { [250, 252, 245, 255] } else { [233, 233, 242, 255] };
+        draw.add_circle([cx, cy], 55.0 * k, col(alpha([200, 200, 215, 255], 0.7 * disc_a))).thickness(1.5 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 39.5 * k, col(alpha(disc, disc_a))).filled(true).num_segments(96).build();
+        picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, alpha(ICON_DARK, disc_a));
+        badge(cx, q_top, "Q", 1.0 - ((t - 0.15) / 0.2).clamp(0.0, 1.0), 0.0);
     } else {
-        // Charging: navy disc, teal ring, cyan ticks for the charge, italic number.
-        draw.add_circle([cx, cy], radius, col(NAVY)).filled(true).num_segments(64).build();
-        draw.add_circle([cx, cy], radius * 0.86, col(TEAL)).thickness(2.0 * k).num_segments(64).build();
-        let lit = (s.ult_percent as f32 / 100.0 * ULT_TICKS as f32).floor() as usize;
-        for i in 0..ULT_TICKS {
-            let a = -FRAC_PI_2 + TAU * i as f32 / ULT_TICKS as f32;
-            let (r0, r1) = (radius * 1.05, radius * 1.24);
-            let c = if i < lit { col(CYAN) } else { col([255, 255, 255, 30]) };
-            draw.add_line([cx + r0 * a.cos(), cy + r0 * a.sin()], [cx + r1 * a.cos(), cy + r1 * a.sin()], c).thickness(2.2 * k).build();
-        }
-        let t = s.ult_percent.to_string();
-        let tw = measure(r.italic_big, &t);
-        text([cx - tw[0] / 2.0, cy - tw[1] / 2.0], r.italic_big, WHITE, &t);
-        key_box(cx, cy + radius * 1.6, "Q", false);
+        meter(1.0, s.ult_percent);
+        badge(cx, q_top, "Q", 0.0, 0.0);
     }
 
-    // ---- Bottom right: Swift Strike and Deflect boxes, then the ammo panel.
-    let size = 52.0 * k;
-    let box_top = base - size - 16.0 * k;
-    let mut x = width - 410.0 * k;
-    let swift_lit = r.anim.swift_pressed_at.is_some_and(|t| now - t < SWIFT_LIT);
-    for (icon, key, cooldown, max, lit, pressed_at, ready_at) in [
-        (r.swift, "LSHIFT", s.swift_cooldown, s.swift_cooldown_max, swift_lit, r.anim.swift_pressed_at, r.anim.swift_ready_at),
-        (r.deflect, "E", s.deflect_cooldown, s.deflect_cooldown_max, s.deflect_left.is_some(), r.anim.deflect_pressed_at, r.anim.deflect_ready_at),
+    // ---- Bottom right: Swift Strike and Deflect tiles (clip parts 3-5: 64 px tiles leaning slightly, LSHIFT's left
+    // edge 434 px from the right edge and its top 172 px above the bottom), then the ammo panel.
+    let size = 64.0 * k;
+    let drop = size * LEAN;
+    let box_top = height - 172.0 * k;
+    let mut x = width - 434.0 * k;
+    for (icon, key, cooldown, max, lit, lit_since, lit_off_at, ready_at) in [
+        (r.swift, "LSHIFT", s.swift_cooldown, s.swift_cooldown_max, swift_lit, r.anim.swift_pressed_at, r.anim.swift_lit_off_at, r.anim.swift_ready_at),
+        (r.deflect, "E", s.deflect_cooldown, s.deflect_cooldown_max, deflect_lit, r.anim.deflect_pressed_at, r.anim.deflect_lit_off_at, r.anim.deflect_ready_at),
     ] {
         let ready = cooldown <= 0.0;
-        let (bx0, by1) = (x, box_top + size);
-        // Pressed (your Overwatch frame, 2026-10-08): the box dips in and springs back, and turns cyan with a dark
-        // icon while the ability runs.
-        let dip = pressed_at.map_or(0.0, |t| {
-            let p = (now - t) / PRESS;
-            if (0.0..1.0).contains(&p) { (PI * p).sin() } else { 0.0 }
-        });
-        let shrink = size * 0.12 * dip / 2.0;
-        let (x0, y0, x1, y1) = (bx0 + shrink, box_top + shrink, bx0 + size - shrink, by1 - shrink);
-        let bsize = x1 - x0;
+        let (x0, x1, y0, y1) = (x, x + size, box_top, box_top + size);
+        let mid = [x0 + size / 2.0, y0 + size / 2.0 + drop / 2.0];
+        let tile = |tex: Picture, top: f32, bottom: f32, tint: [u8; 4]| tile_quad(&draw, tex, x0, top, x1, bottom, drop, tint);
+        let flash_t = ready_at.map(|t0| now - t0).filter(|t| *t < READY_FLASH);
         if lit {
-            picture(&draw, r.glow_dot, [x0 + bsize / 2.0, y0 + bsize / 2.0], size * 2.4, 0.0, alpha(BLUE_GLOW, 0.55));
-            let (top, bottom) = (col([130, 245, 255, 255]), col([40, 195, 240, 255]));
-            draw.add_rect_filled_multicolor([x0, y0], [x1, y1], top, top, bottom, bottom);
-            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, [12, 40, 62, 255]);
-            draw.add_rect([bx0, by1 + 3.0 * k], [bx0 + size, by1 + 5.0 * k], col(CYAN)).filled(true).build();
-        } else if ready {
-            draw.add_rect_filled_multicolor([x0, y0], [x1, y1], col(WHITE), col(PANEL_WHITE), col([205, 210, 220, 235]), col([215, 220, 228, 235]));
-            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, ICON_ON_WHITE);
-            draw.add_rect([bx0, by1 + 3.0 * k], [bx0 + size, by1 + 5.0 * k], col(PANEL_WHITE)).filled(true).build();
-        } else {
-            draw.add_rect([x0, y0], [x1, y1], col(COOLING)).filled(true).build();
-            // Cyan rising from the bottom as the cooldown runs.
+            // Used (part 3): the tile turns saturated cyan, the emblem stays dark.
+            let blend = lit_since.map_or(1.0, |t| ((now - t) / LIT_IN).clamp(0.0, 1.0));
+            tile(r.tile_grad, y0, y1, mix(WHITE, ACTIVE_CYAN, blend));
+            picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK);
+        } else if !ready {
+            // Cooldown (parts 3-4): grey tile, cyan rising from the bottom, the emblem, the whole seconds left. Right
+            // after the cyan, the tile fades to grey while the number fades in.
+            tile(r.white, y0, y1, COOLING_GREY);
             let done = (1.0 - cooldown / max.max(0.01)).clamp(0.0, 1.0);
-            draw.add_rect([x0, y1 - bsize * done], [x1, y1], col(alpha(CYAN, 0.85))).filled(true).build();
-            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, [255, 255, 255, 90]);
-            let t = format!("{}", cooldown.ceil() as u32);
-            let tw = measure(r.italic_big, &t);
-            text([x0 + (bsize - tw[0]) / 2.0, y0 + (bsize - tw[1]) / 2.0], r.italic_big, WHITE, &t);
-        }
-        let (x0, y0, y1) = (bx0, box_top, by1);
-        // Ready flash (your Overwatch frames, 2026-10-08): a rectangle of light centred on the box, as tall above as
-        // below, that shrinks to the box while losing its light, fast; a white core; pixel sparks drifting up.
-        if let Some(t0) = ready_at {
-            let p = (now - t0) / COOLDOWN_FLASH;
-            if p < 1.0 {
-                let ease = 1.0 - (1.0 - p) * (1.0 - p);
-                let fade = (1.0 - p).powf(1.4);
-                let (mx, my) = (x0 + size / 2.0, y0 + size / 2.0);
-                let half_h = size * (0.5 + 2.6 * (1.0 - ease));
-                let half_w = size * (0.42 + 0.08 * (1.0 - ease));
-                let edge = col(alpha(BLUE_GLOW, 0.0));
-                let body = col(alpha([70, 175, 255, 255], 0.85 * fade));
-                let core = col(alpha([215, 245, 255, 255], 0.95 * fade));
-                draw.add_rect_filled_multicolor([mx - half_w, my - half_h], [mx - half_w * 0.25, my + half_h], edge, body, body, edge);
-                draw.add_rect_filled_multicolor([mx - half_w * 0.25, my - half_h], [mx, my + half_h], body, core, core, body);
-                draw.add_rect_filled_multicolor([mx, my - half_h], [mx + half_w * 0.25, my + half_h], core, body, body, core);
-                draw.add_rect_filled_multicolor([mx + half_w * 0.25, my - half_h], [mx + half_w, my + half_h], body, edge, edge, body);
-                picture(&draw, r.glow_dot, [mx, my], size * (1.6 + 1.2 * (1.0 - ease)), 0.0, alpha(WHITE, 0.8 * fade));
-                for i in 0..14 {
-                    let f = i as f32;
-                    let sx = mx + ((f * 37.0).sin() * 0.5) * size * 1.1;
-                    let sy = my + ((f * 53.0).cos() * 0.5) * size * 2.2 - size * 1.2 * ease;
-                    let sq = (2.0 + (i % 3) as f32 * 1.5) * k;
-                    draw.add_rect([sx, sy], [sx + sq, sy + sq], col(alpha([170, 230, 255, 255], fade))).filled(true).build();
+            let fill_top = y1 - size * done;
+            tile(r.white, fill_top, y1, FILL_CYAN);
+            if done > 0.02 && done < 0.98 {
+                draw.add_line([x0, fill_top], [x1, fill_top + drop], col(alpha([225, 255, 255, 255], 0.8))).thickness(1.5 * k).build();
+            }
+            let entry = lit_off_at.map_or(1.0, |t| ((now - t) / COOLDOWN_ENTRY).clamp(0.0, 1.0));
+            if entry < 1.0 {
+                tile(r.white, y0, y1, alpha(ACTIVE_CYAN, 1.0 - entry));
+            }
+            picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK);
+            digits(mid, r.italic_cd, entry, &format!("{}", cooldown.ceil() as u32));
+        } else {
+            // Ready: off-white tile, dark emblem. Just after a cooldown (part 5) the tile is luminous cyan first,
+            // the emblem showing through it again from 0.1 s, white again by about 0.55 s.
+            tile(r.tile_grad, y0, y1, WHITE);
+            match flash_t {
+                Some(t) => {
+                    let glow = if t < 0.12 { 0.95 } else { 0.95 * (1.0 - ((t - 0.12) / 0.43).clamp(0.0, 1.0)) };
+                    tile(r.white, y0, y1, alpha([170, 245, 255, 255], glow));
+                    // The emblem shows through as light blue first, dark again by the end.
+                    let back = ((t - 0.1) / 0.15).clamp(0.0, 1.0);
+                    let tint = mix([110, 190, 240, 255], ICON_DARK, ((t - 0.25) / 0.3).clamp(0.0, 1.0));
+                    picture(&draw, icon, mid, size * 0.8, 0.0, alpha(tint, back));
                 }
+                None => picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK),
             }
         }
-        key_box(x0 + size / 2.0, y1 + 10.0 * k, key, ready || lit);
+        // Thin white underline, then the key badge (filled only when ready and not in use).
+        tile(r.white, y1 + 4.0 * k, y1 + 6.5 * k, alpha(WHITE, 0.95));
+        let badge_w = measure(r.label, key)[0] + 14.0 * k;
+        let badge_x = mid[0] - badge_w.max(22.0 * k) / 2.0;
+        // After a cooldown the badge fills in towards the end of the flash (clip part 5).
+        let filled = match (ready && !lit, flash_t) {
+            (false, _) => 0.0,
+            (true, Some(t)) => ((t - 0.25) / 0.25).clamp(0.0, 1.0),
+            (true, None) => 1.0,
+        };
+        badge(mid[0], y1 + 23.0 * k + (badge_x - x0) * LEAN, key, filled, LEAN);
+        if let Some(t) = flash_t {
+            ready_flash(&draw, r, mid, size, t, height, k);
+        }
         x += size + 12.0 * k;
     }
     // Ammo panel between two glowing cyan bars.
     let ax = x + 14.0 * k;
-    let aw = width - ax - 36.0 * k;
-    let (pt, pb) = (box_top - 6.0 * k, box_top + size + 6.0 * k);
+    let aw = width - ax - 50.0 * k;
+    let (pt, pb) = (height - 154.0 * k, height - 79.0 * k);
     draw.add_rect([ax, pt], [ax + aw, pb], col([20, 24, 34, 90])).filled(true).build();
     for y in [pt, pb] {
         for (th, a) in [(9.0, 0.15), (5.0, 0.35), (2.5, 1.0)] {
@@ -547,60 +632,147 @@ fn ult_flames(draw: &DrawListMut, glow: Picture, center: [f32; 2], radius: f32, 
     }
 }
 
-/// Electric wisps (your Overwatch frames, 2026-10-08): thin strands of blue light that grow out of the ring,
-/// curl sideways, flicker, and fade, each at a new place every time.
-fn ult_wisps(draw: &DrawListMut, center: [f32; 2], radius: f32, now: f32, k: f32) {
-    const POINTS: usize = 28;
+/// Electric ribbons (clip part 1): short, irregular cyan ribbons appear at changing points on the rim, some curling
+/// around the circle, others stretching outward; they brighten, change shape and vanish quickly. Each slot shows one
+/// for part of its cycle, at a new place each time.
+fn ult_wisps(draw: &DrawListMut, center: [f32; 2], now: f32, k: f32) {
+    const POINTS: usize = 22;
     for i in 0..ULT_WISPS {
-        let period = 1.8 + 0.9 * hash(i * 13 + 1);
+        let period = 0.8 + 0.6 * hash(i * 13 + 1);
         let t = now / period + hash(i * 13 + 2);
         let (cycle, u) = (t.floor() as u32, t.fract());
         let seed = i * 7919 + cycle * 271;
+        let window = 0.3 + 0.25 * hash(seed + 5);
+        if u > window {
+            continue;
+        }
+        let v = u / window;
+        let life = (PI * v).sin().powf(0.5);
         let dir = if hash(seed + 1) < 0.5 { -1.0 } else { 1.0 };
-        let start = TAU * hash(seed) + dir * 0.5 * u;
-        let length = radius * (0.5 + 0.6 * hash(seed + 2)) * smooth((u / 0.35).min(1.0));
-        let curl = dir * (0.5 + 0.5 * hash(seed + 3));
-        let life = (PI * u).sin().powf(0.7);
-        let phase = hash(seed + 4) * 20.0;
-        let points: Vec<[f32; 2]> = (0..POINTS)
-            .map(|j| {
-                let f = j as f32 / (POINTS - 1) as f32;
-                let rr = radius * 1.3 + length * f;
-                let a = start + curl * f * f;
-                // Slow wave plus a fast flicker across the strand: an electric look.
-                let side = radius * (0.14 * f * (f * 8.0 + now * 5.0 + phase).sin()
-                    + 0.035 * (f * 37.0 - now * 31.0 + phase).sin());
-                let (sa, ca) = a.sin_cos();
-                [center[0] + rr * ca - side * sa, center[1] + rr * sa + side * ca]
-            })
-            .collect();
-        for (width, color, strength) in [(12.0, [50, 130, 255, 255], 0.3), (5.5, [80, 190, 255, 255], 0.55), (2.0, [215, 245, 255, 255], 0.95)] {
-            for j in 0..POINTS - 1 {
-                let f = j as f32 / (POINTS - 1) as f32;
-                let fade = life * (1.0 - f).powf(0.8) * strength;
-                draw.add_line(points[j], points[j + 1], col(alpha(color, fade)))
-                    .thickness(width * k * (1.0 - 0.7 * f))
-                    .build();
+        let start = TAU * hash(seed);
+        let outward = hash(seed + 6);
+        let length = (50.0 + 60.0 * hash(seed + 2)) * k;
+        let sweep = length / (58.0 * k);
+        let phase = hash(seed + 4) * 50.0;
+        let path = |f: f32, extra: f32| -> [f32; 2] {
+            let a = start + dir * sweep * f;
+            let jag = ((f * 9.0 + now * 12.0 + phase).sin() * 3.0 + (f * 31.0 - now * 40.0 + phase).sin() * 1.0) * k * (0.3 + f);
+            let rr = (54.0 + (6.0 + 50.0 * outward) * f * f + extra) * k + jag;
+            [center[0] + rr * a.cos(), center[1] + rr * a.sin()]
+        };
+        let points: Vec<[f32; 2]> = (0..POINTS).map(|j| path(j as f32 / (POINTS - 1) as f32, 0.0)).collect();
+        // Sometimes a short branch stretching outward from the middle.
+        let branch: Vec<[f32; 2]> = if hash(seed + 7) > 0.55 {
+            (0..8).map(|j| path(0.5 + 0.05 * j as f32, 3.0 * j as f32)).collect()
+        } else {
+            Vec::new()
+        };
+        for (width, color, strength) in [(30.0, [40, 140, 255, 255], 0.35), (14.0, [60, 220, 255, 255], 0.8), (4.0, [220, 250, 255, 255], 0.95)] {
+            for line in [&points, &branch] {
+                for j in 0..line.len().saturating_sub(1) {
+                    let f = j as f32 / (line.len() - 1) as f32;
+                    let taper = 0.25 + 0.75 * (PI * f).sin().powf(0.6);
+                    draw.add_line(line[j], line[j + 1], col(alpha(color, life * strength)))
+                        .thickness(width * k * taper)
+                        .build();
+                }
             }
         }
     }
 }
 
-fn smooth(x: f32) -> f32 {
-    x * x * (3.0 - 2.0 * x)
-}
-
-/// A clockwise arc from 12 o'clock covering `share` of the circle.
-fn arc(draw: &DrawListMut, center: [f32; 2], radius: f32, share: f32, color: ImColor32, thickness: f32) {
-    if share <= 0.0 {
+/// A picture (usually plain white) stretched over a leaning tile: left edge at x0 from top to bottom, right edge at
+/// x1, `drop` lower.
+fn tile_quad(draw: &DrawListMut, tex: Picture, x0: f32, top: f32, x1: f32, bottom: f32, drop: f32, tint: [u8; 4]) {
+    let Some((id, _)) = tex else {
+        return;
+    };
+    if tint[3] == 0 {
         return;
     }
-    let n = (72.0 * share).max(2.0) as usize;
+    draw.add_image_quad(id, [x0, top], [x1, top + drop], [x1, bottom + drop], [x0, bottom]).col(col(tint)).build();
+}
+
+/// An arc from angle `start` (radians, 0 = 3 o'clock, clockwise on screen) covering `len` radians.
+fn arc_at(draw: &DrawListMut, center: [f32; 2], radius: f32, start: f32, len: f32, color: ImColor32, thickness: f32) {
+    let n = ((len / TAU) * 96.0).max(2.0) as usize;
     let points: Vec<[f32; 2]> = (0..=n)
         .map(|i| {
-            let a = -FRAC_PI_2 + TAU * share * i as f32 / n as f32;
+            let a = start + len * i as f32 / n as f32;
             [center[0] + radius * a.cos(), center[1] + radius * a.sin()]
         })
         .collect();
     draw.add_polyline(points, color).thickness(thickness).build();
+}
+
+/// Cooldown finished (clip part 5), `t` seconds in, around the tile centred on `c`: long narrow cyan bars from high
+/// above down to the bottom of the screen, their tops sinking as they fade (0-0.22 s); a white star burst on the tile
+/// (0-0.17 s); a soft blue glow column above the tile (0.08-0.5 s); small square particles lifting and fading,
+/// mostly above the tile (0.12-0.6 s).
+fn ready_flash(draw: &DrawListMut, r: &Resources, c: [f32; 2], size: f32, t: f32, screen_h: f32, k: f32) {
+    if t < 0.25 {
+        let fade = if t < 0.12 { 1.0 } else { 1.0 - (t - 0.12) / 0.13 };
+        let sink = smooth((t / 0.25).min(1.0));
+        // (offset from the centre, width, height above the centre, colour, strength), measured on the clip.
+        for (dx, w, up, color, a) in [
+            (0.0, 90.0, 300.0, [40, 150, 255, 255], 0.7),
+            (0.0, 30.0, 380.0, [70, 235, 255, 255], 1.0),
+            (0.0, 9.0, 380.0, [215, 250, 255, 255], 0.9),
+            (-32.0, 13.0, 260.0, [60, 220, 255, 255], 0.85),
+            (32.0, 13.0, 300.0, [60, 220, 255, 255], 0.85),
+            (-41.0, 6.0, 180.0, [80, 190, 255, 255], 0.6),
+            (42.0, 6.0, 210.0, [80, 190, 255, 255], 0.6),
+        ] {
+            let top = c[1] - up * k * (1.0 - 0.85 * sink);
+            let half = w * k / 2.0 * (1.0 - 0.2 * sink);
+            let bx = c[0] + dx * k;
+            if let Some((id, _)) = r.bar {
+                draw.add_image(id, [bx - half, top], [bx + half, screen_h]).col(col(alpha(color, a * fade))).build();
+            }
+        }
+    }
+    if t < 0.17 {
+        let a = 1.0 - t / 0.17;
+        let grow = 1.0 + 0.3 * t / 0.17;
+        picture(draw, r.glow_dot, c, 160.0 * k, 0.0, alpha([80, 220, 255, 255], a));
+        picture(draw, r.glow_dot, c, 90.0 * k, 0.0, alpha(WHITE, a));
+        picture(draw, r.glow_dot, c, 45.0 * k, 0.0, alpha(WHITE, a));
+        let white = col(alpha(WHITE, a));
+        let (v, h) = (75.0 * k * grow, 30.0 * k * grow);
+        let (vw, hw) = (4.0 * k, 3.5 * k);
+        draw.add_triangle([c[0], c[1] - v], [c[0] + vw, c[1]], [c[0] - vw, c[1]], white).filled(true).build();
+        draw.add_triangle([c[0], c[1] + v], [c[0] + vw, c[1]], [c[0] - vw, c[1]], white).filled(true).build();
+        draw.add_triangle([c[0] - h, c[1]], [c[0], c[1] - hw], [c[0], c[1] + hw], white).filled(true).build();
+        draw.add_triangle([c[0] + h, c[1]], [c[0], c[1] - hw], [c[0], c[1] + hw], white).filled(true).build();
+    }
+    if (0.08..0.5).contains(&t) {
+        let a = if t < 0.17 { (t - 0.08) / 0.09 } else { 1.0 - (t - 0.17) / 0.33 };
+        let top = c[1] - size / 2.0 - 150.0 * k * (1.0 - 0.3 * ((t - 0.08) / 0.42));
+        if let Some((id, _)) = r.bar {
+            draw.add_image(id, [c[0] - 36.0 * k, top], [c[0] + 36.0 * k, c[1]]).col(col(alpha([60, 190, 255, 255], 0.9 * a))).build();
+        }
+        // The tile glows at its edges meanwhile.
+        picture(draw, r.glow_dot, c, size * 2.2, 0.0, alpha([90, 220, 255, 255], 0.8 * a));
+    }
+    for i in 0..34u32 {
+        let born = 0.12 + 0.12 * hash(i * 3 + 1);
+        let life = 0.25 + 0.2 * hash(i * 3 + 2);
+        let q = (t - born) / life;
+        if !(0.0..1.0).contains(&q) {
+            continue;
+        }
+        let spread = hash(i * 5 + 3) - 0.5;
+        let px = c[0] + spread * spread.abs().sqrt() * 2.0 * 40.0 * k;
+        let near_edge = hash(i * 5 + 7) < 0.2;
+        let py0 = if near_edge { c[1] + (hash(i * 5 + 8) - 0.5) * size } else { c[1] - size / 2.0 - (10.0 + 120.0 * hash(i * 5 + 4)) * k };
+        let py = py0 - 35.0 * k * q;
+        let sq = (3.0 + 4.0 * hash(i * 5 + 6)) * k;
+        let color = if hash(i * 5 + 9) < 0.5 { [90, 230, 255, 255] } else { [60, 150, 255, 255] };
+        let a = (1.0 - q).powf(1.2) * (q * 6.0).min(1.0);
+        draw.add_rect([px, py], [px + sq, py + sq], col(alpha(color, a))).filled(true).build();
+    }
+}
+
+fn smooth(x: f32) -> f32 {
+    x * x * (3.0 - 2.0 * x)
 }
