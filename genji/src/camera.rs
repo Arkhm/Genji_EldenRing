@@ -275,6 +275,9 @@ fn camera_step_inner(dt: f32) -> bool {
 
     // 4. Dragonblade and quick melee (step 9): Q, held left click, mouse 5, while we drive.
     let keys_now = dinput::raw_keys();
+    if dinput::key_down(&keys_now, dik::F7) {
+        crate::ult::fill_for_testing(); // TESTING ONLY: remove once Dragonblade is validated
+    }
     let q_down = dinput::key_down(&keys_now, dik::Q);
     let q_pressed = q_down && !view.q_was_down;
     view.q_was_down = q_down;

@@ -35,8 +35,7 @@ Everything that changed and what was tested. Newest entry first. Template:
 - The swing cone angle and the melee recovery aren't Overwatch-verified.
 - Swing hits don't add ultimate charge (as in Overwatch).
 
-**Next:** Your test. To try it quickly you'll need about 400 s of passive charge or a lot of hits: tell me if you want
-a temporary full-charge key for testing.
+**Next:** Your test. **Temporary for testing: F7 fills the ultimate (remove once Dragonblade is validated).**
 
 ## 2026-10-08 Step 9 plan; reminder for step 10
 
