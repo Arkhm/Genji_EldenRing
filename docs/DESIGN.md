@@ -160,7 +160,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 5 | **Done 2026-10-07** (see 5b). **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
 | 7 | **Swift Strike** with kill reset (built 2026-10-07, not tested in game; see 5d) | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
-| 8 | **Deflect** | block an archer | frontal hits blocked while active; returned projectiles logged |
+| 8 | **Deflect** (plan 2026-10-08, see 5f; 8a built, not tested in game) | block an archer | frontal hits blocked while active; returned projectiles logged |
 | 9 | **Dragonblade + ult charge** | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
 | 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
@@ -316,6 +316,28 @@ negation and shields then apply as for any weapon, and the damage number is righ
   row, in memory: no flight visual, our attack power), and every hit makes the enemy bleed (since 2026-10-08), so the game registers a real
   hit: number, sound, reaction, bleed.
 - The `HIT` lines log the attack power and what the game dealt, to tune ATTACK_FACTOR.
+
+## 5f. Step 8 in detail: Deflect
+
+**What Overwatch does** (Overwatch wiki and patch notes, searched 2026-10-08; the current cooldown is not confirmed,
+a 2025 patch raised it from 8 s to an unknown value): E holds the sword up for 2 s. Everything that comes from less
+than 90 degrees off where Genji faces is caught. Projectiles are sent back where Genji aims. Melee attacks are
+blocked but not sent back. Beams and area damage get through. E again ends it early. No shooting while deflecting
+(Swift Strike allowed). Cooldown 8 s.
+
+**8a, blocking (first):** `deflect.rs` (new): E starts it, E again or 2 s ends it, then the 8 s cooldown. While it
+runs, the player's "invincible" flag (ChrIns flags, used by the game while loading areas) is set on every frame where
+nothing threatens from behind: no living enemy within 4 m in our rear half and no enemy projectile closing in from
+behind. That approximates "front only": an enemy hitting us from the front can't, one behind us can. Shuriken are
+held while deflecting. The overlay shows "DEFLECT" under the crosshair. Logged: start, end (why), every frame the flag
+was off because of a rear threat, and HP changes while deflecting.
+
+**8b, sending projectiles back (second):** enemy projectiles that come within about 2 m of us from the front are
+removed and an equal projectile of ours is fired back along our aim (first try: the same projectile row with us as
+owner; if the game refuses it, our shuriken row with the damage the original would have done). Details after 8a.
+
+**Unknowns:** whether the invincible flag also stops hit reactions and status buildup (the log and you will tell);
+how enemy melee that starts in front but swings around is judged.
 
 ## 6. Risks and unknowns (honest list)
 

@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 8a: Deflect blocks frontal damage (E)
+
+**Changed:**
+- New `genji/src/deflect.rs` (3 unit tests):
+  - E starts Deflect for 2 s; E again ends it early; then an 8 s cooldown.
+  - While it runs, the game's "invincible" character flag is set on every frame where nothing threatens from
+    behind: no living enemy within 4 m in our rear half, no enemy projectile closing in from behind.
+  - Logs: start, end (and why), when protection was off and why, and HP changes while deflecting.
+- `genji/src/camera.rs`: wiring; no shuriken while deflecting.
+- `genji/src/crosshair.rs`: "DEFLECT" under the crosshair while active.
+- `genji/src/lib.rs`: the flag is cleared if our per-frame code ever crashes.
+- `docs/DESIGN.md`: section 5f (plan for 8a and 8b).
+
+**Why:** Step 8. Overwatch's Deflect (wiki and patch notes): 2 s, about 8 s cooldown, frontal (under 90 degrees),
+melee blocked, projectiles sent back (8b, next), E again cancels, no shooting meanwhile.
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Whether the invincible flag also stops hit reactions and status buildup.
+- Projectiles aren't sent back yet (8b).
+
+**Next:** Your test; then 8b.
+
 ## 2026-10-08 Elimination window 5 s (Overwatch community figure)
 
 **Changed:** `genji/src/kills.rs`: a character we damaged that dies within 5 s (was 3) counts as our elimination.

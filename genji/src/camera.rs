@@ -19,6 +19,7 @@ use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::dinput::{self, dik};
+use crate::deflect::Deflect;
 use crate::firing::Firing;
 use crate::gamepad;
 use crate::glog;
@@ -65,6 +66,8 @@ struct View {
     /// Seconds until the next CAMERA sync report.
     sync_report: f32,
     f8_was_down: bool,
+    deflect: Deflect,
+    e_was_down: bool,
     /// LockCamParam field of view of every row, saved while ours is applied (STATUS.md option B).
     lock_cam_fov: Option<Vec<(u32, f32)>>,
 }
@@ -124,6 +127,9 @@ fn camera_step_inner(dt: f32) -> bool {
 
     if reason.is_some() {
         view.firing.tick(dt, false, false, false);
+        view.deflect.tick(dt, false, false);
+        view.deflect.release(player);
+        crate::crosshair::set_deflecting(false);
         view.mover.release(player);
         view.look = None;
         gamepad::set_movement_blocked(false);
@@ -202,6 +208,9 @@ fn camera_step_inner(dt: f32) -> bool {
         }
         Step::NotReady => {
             view.firing.tick(dt, false, false, false);
+            view.deflect.tick(dt, false, false);
+            view.deflect.release(player);
+            crate::crosshair::set_deflecting(false);
             // Waiting for collision to load or for the character to settle, or gave up: the game drives.
             gamepad::set_movement_blocked(false);
             if view.model_hidden {
@@ -254,8 +263,16 @@ fn camera_step_inner(dt: f32) -> bool {
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
-    // 4. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive.
-    for angle in view.firing.tick(dt, left_down, right_down, driving) {
+    // 4. Deflect (step 8a): E, while we drive. No shuriken while deflecting (Overwatch).
+    let e_down = dinput::key_down(&dinput::raw_keys(), dik::E);
+    let e_pressed = e_down && !view.e_was_down;
+    view.e_was_down = e_down;
+    let deflecting = view.deflect.tick(dt, e_pressed, driving);
+    view.deflect.apply(player, feet, look.flat_forward());
+    crate::crosshair::set_deflecting(deflecting);
+
+    // 5. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive.
+    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting) {
         view.thrower.throw(player, &look, eye, angle);
     }
     true

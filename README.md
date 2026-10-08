@@ -40,6 +40,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
 - Crosshair: your Overwatch crosshair (green, length 6, gap 13, 80%, black outline) drawn over the game while
   the first-person view is on (part of step 12). Tested 2026-10-07: it shows up.
 - All Genji damage scales with dexterity (Elden Ring's own scaling curve, grade A). **Not tested** yet.
+- Deflect, first part (step 8a): E blocks damage from the front for 2 s (E again ends it), 8 s cooldown; "DEFLECT"
+  shows under the crosshair. Projectiles aren't sent back yet. **Not tested** yet.
 - Swift Strike (step 7): Left Shift dashes about 15 m where you look, through enemies (50 damage each), stopped by
   walls; 8 s cooldown, reset by a kill (tested 2026-10-08). Each dash hit is a real game hit and makes the enemy bleed
   (**not tested** yet).

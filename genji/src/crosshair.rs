@@ -19,6 +19,7 @@ use crate::glog;
 
 const COLOR: [f32; 3] = [0.0, 1.0, 0.0];
 const OPACITY: f32 = 0.8;
+const COLOR_U8: [u8; 3] = [0, 255, 0];
 const THICKNESS: f32 = 1.0;
 const LENGTH: f32 = 6.0;
 const CENTER_GAP: f32 = 13.0;
@@ -29,6 +30,12 @@ const OUTLINE_THICKNESS: f32 = 1.0;
 const REFERENCE_HEIGHT: f32 = 1080.0;
 
 static VISIBLE: AtomicBool = AtomicBool::new(false);
+static DEFLECTING: AtomicBool = AtomicBool::new(false);
+
+/// Shows "DEFLECT" under the crosshair while Deflect is up (until Genji's sword is drawn, step 10).
+pub fn set_deflecting(on: bool) {
+    DEFLECTING.store(on, Ordering::Relaxed);
+}
 
 /// Show the crosshair (true while the first-person view is drawn) or hide it.
 pub fn set_visible(on: bool) {
@@ -89,6 +96,13 @@ impl Overlay {
             draw.add_rect(min, max, imgui::ImColor32::from_rgba_f32s(color[0], color[1], color[2], color[3]))
                 .filled(true)
                 .build();
+        }
+        if DEFLECTING.load(Ordering::Relaxed) {
+            let text = "DEFLECT";
+            let size = ui.calc_text_size(text);
+            let pos = [(width - size[0]) / 2.0, height / 2.0 + 40.0 * height / REFERENCE_HEIGHT];
+            draw.add_text([pos[0] + 1.0, pos[1] + 1.0], imgui::ImColor32::from_rgba(0, 0, 0, 160), text);
+            draw.add_text(pos, imgui::ImColor32::from_rgba(COLOR_U8[0], COLOR_U8[1], COLOR_U8[2], 230), text);
         }
     }
 }

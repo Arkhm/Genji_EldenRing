@@ -10,6 +10,7 @@
 mod camera;
 mod controls;
 mod crosshair;
+mod deflect;
 mod dinput;
 mod firing;
 mod gamepad;
@@ -134,6 +135,7 @@ fn boot() {
             let dt = data.delta_time.time;
             if panic::catch_unwind(move || camera::camera_step(dt)).is_err() {
                 glog!("ERROR", "camera task panicked; first person disabled for this session");
+                deflect::emergency_clear(); // never leave the player invincible
                 camera_disabled = true;
             }
         },
