@@ -3,6 +3,20 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Deflect: projectiles judged by where they come from
+
+**Changed:** `genji/src/deflect.rs`: an enemy projectile switches protection off only if it flies the way we face
+(it comes from behind), within 4 m and closing in. Before, its position decided.
+**Why:** Your test of commit `244f095`: blocking works, but arrows still hurt depending on the view; you need at least
+the central 80% of the screen protected. Log: every hit taken while deflecting came on a frame marked "enemy
+projectile closing in from behind" (13 uses, 10 hits of 54): arrows from the front were level with or a hair past
+our body's centre on the last frame before the hit. Now everything flying at us within 90 degrees of where we look
+is blocked (wider than the screen).
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game. Several melee enemies at once not tested yet either.
+**Still broken / not tested:** Arrows from the sides of the screen; melee from several enemies.
+**Next:** Your test; then 8b (sending projectiles back).
+
 ## 2026-10-08 Step 8a: Deflect blocks frontal damage (E)
 
 **Changed:**

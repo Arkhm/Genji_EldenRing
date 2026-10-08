@@ -1,7 +1,7 @@
 //! Deflect (step 8a, DESIGN.md 5f): E holds the sword up for DURATION seconds (E again ends it early), then COOLDOWN.
 //! While it runs, the player can't be damaged from the front: the game's "invincible" character flag is set on every
 //! frame where nothing threatens from behind (no living enemy within REAR_RANGE in our rear half, no enemy
-//! projectile closing in from behind). Sending projectiles back is step 8b.
+//! projectile within REAR_RANGE flying the way we face, i.e. coming from behind). Sending projectiles back is step 8b.
 
 use eldenring::cs::{CSBulletManager, PlayerIns, WorldChrMan};
 use fromsoftware_shared::FromStatic;
@@ -141,8 +141,13 @@ fn rear_threat(player: &PlayerIns, feet: Vec3, forward: Vec3) -> Option<String> 
             let p = &bullet.physics.position;
             let v = &bullet.physics.velocity;
             let (pos, vel) = (Vec3::new(p.0, p.1, p.2), Vec3::new(v.0, v.1, v.2));
-            if behind(pos) && vel.dot(feet - pos) > 0.0 {
-                return Some("enemy projectile closing in from behind".to_string());
+            // Judged by where it comes from (its flight direction), not where it is: test of 2026-10-08, arrows
+            // from the front were level with our body (or a hair past its centre) on the last frame before the hit
+            // and counted as "behind", so every arrow hit got through. Coming from behind = flying the way we face.
+            let near = Vec3::new(pos.x - feet.x, 0.0, pos.z - feet.z).length() <= REAR_RANGE;
+            let flat_vel = Vec3::new(vel.x, 0.0, vel.z);
+            if near && vel.dot(feet - pos) > 0.0 && flat_vel.dot(forward) > 0.0 {
+                return Some("enemy projectile coming from behind".to_string());
             }
         }
     }
