@@ -3,6 +3,21 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Game's follow camera kept in line with our view (health bars, enemy sounds)
+
+**Changed:** `genji/src/camera.rs`: every frame in first person, our view is also written into the game's follow
+camera (`CSCamera.pers_cam_2` and `WorldChrMan.chr_cam`), not only the drawn camera. Every 2 s a `CAMERA` line logs
+how far the game's follow camera had turned away from our view before the overwrite.
+**Why:** Your test: often after a hit, the enemy's health bar sat at the side of the screen and its sound came from
+there too, until F9 twice. Likely cause (not yet proven): the game places those with its own follow camera, which
+kept facing where it was when first person started; F9 twice restarts our view from it, which matches the fix you
+found.
+**Tested how:** Build OK.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether bars and sounds now follow; whether this disturbs the game's camera when
+first person ends (it should snap back to its own).
+**Next:** FOV.
+
 ## 2026-10-08 Swift Strike passes through bodies (living and dead)
 
 **Changed:** `genji/src/obstacles.rs`: `bodies()` lists every character's cylinder, dead or alive. `genji/src/movement.rs`:

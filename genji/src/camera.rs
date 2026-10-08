@@ -50,6 +50,8 @@ struct View {
     firing: Firing,
     swift: Swift,
     shift_was_down: bool,
+    /// Seconds until the next CAMERA sync report.
+    sync_report: f32,
 }
 
 pub fn camera_step(dt: f32) {
@@ -62,7 +64,10 @@ fn camera_step_inner(dt: f32) -> bool {
     let mut guard = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let view = guard.get_or_insert_with(View::default);
 
-    let Some(player) = (unsafe { WorldChrMan::instance_mut() }).ok().and_then(|w| w.main_player.as_mut()) else {
+    let world = unsafe { WorldChrMan::instance_mut() }.ok();
+    // The game's follow camera object (see step 3b below); a raw pointer, read before borrowing the player.
+    let chr_cam = world.as_ref().and_then(|w| w.chr_cam);
+    let Some(player) = world.and_then(|w| w.main_player.as_mut()) else {
         view.look = None;
         view.model_hidden = false;
         gamepad::set_movement_blocked(false);
@@ -189,6 +194,22 @@ fn camera_step_inner(dt: f32) -> bool {
     // 3. Camera and model.
     let eye = feet + Vec3::Y * EYE_HEIGHT + look.flat_forward() * FORWARD_OFFSET;
     look.write_camera(&mut camera.pers_cam_1.matrix, eye);
+    // 3b. The game's own cameras follow our view too. Test of 2026-10-08: enemy health bars and enemy sounds sat at
+    // the side of the screen until F9 was pressed twice; they are placed with the game's follow camera
+    // (`pers_cam_2`, ChrCam), which kept facing where it was when first person started. Logged: how far it had
+    // turned away from our view before each overwrite.
+    view.sync_report -= dt;
+    if view.sync_report <= 0.0 {
+        view.sync_report = 2.0;
+        let ours = Vec3::new(camera.pers_cam_1.matrix.2.0, camera.pers_cam_1.matrix.2.1, camera.pers_cam_1.matrix.2.2);
+        let game = Vec3::new(camera.pers_cam_2.matrix.2.0, camera.pers_cam_2.matrix.2.1, camera.pers_cam_2.matrix.2.2);
+        let angle = ours.normalize_or_zero().dot(game.normalize_or_zero()).clamp(-1.0, 1.0).acos().to_degrees();
+        glog!("CAMERA", "game follow camera was {angle:.1} deg away from our view (before this frame's sync)");
+    }
+    look.write_camera(&mut camera.pers_cam_2.matrix, eye);
+    if let Some(mut chr_cam) = chr_cam {
+        look.write_camera(&mut unsafe { chr_cam.as_mut() }.pers_cam.matrix, eye);
+    }
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
