@@ -161,7 +161,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
 | 7 | **Swift Strike** with kill reset (built 2026-10-07, not tested in game; see 5d) | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
 | 8 | **Deflect** (done 2026-10-08, see 5f) | block an archer | frontal hits blocked while active; returned projectiles logged |
-| 9 | **Dragonblade + ult charge** | build charge, press Q | charge numbers rise with damage; swing hits logged |
+| 9 | **Dragonblade + ult charge** (plan in 5g, numbers to confirm) | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
 | 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
 | 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair built 2026-10-07 ahead of the rest, `crosshair.rs`, hudhook Direct3D 12 overlay; not tested in game) | play | (visual check by you) |
@@ -343,6 +343,35 @@ was off because of a rear threat, and HP changes while deflecting.
 
 **Unknowns:** whether the invincible flag also stops hit reactions and status buildup (the log and you will tell);
 how enemy melee that starts in front but swings around is judged.
+
+## 5g. Step 9 in detail: Dragonblade, ultimate charge, quick melee (plan 2026-10-08)
+
+**What Overwatch does:** numbers to be confirmed by you (web sources disagree, several are from the original game
+or fan proposals). Placeholders in the code until then:
+
+| | Placeholder | Unsure about |
+|---|---|---|
+| Dragonblade duration | 6 s | 6 or 8 s (OW2) |
+| Swing damage | 120 | 110, 120 or 130 |
+| Time between swings | 0.9 s | 0.9 or 1.1 s |
+| Swing reach | 5 m, wide arc in front | exact shape |
+| Ultimate cost | 1680 points | unknown in OW2 |
+| Quick melee (mouse 5) | 40 damage, 2.5 m | |
+
+Other rules, from multiple sources: activating it resets Swift Strike; Swift Strike can be used during it; no
+shuriken during it.
+
+**How in Elden Ring:**
+- **Hits:** the Swift Strike mechanism (invisible point-blank Kukri projectile from behind each target, real game hit
+  with number, sound, reaction; direct damage as fallback) becomes a shared `strike.rs`. A blade swing (left click
+  during Dragonblade) strikes every character in the arc in front; quick melee strikes the nearest one in front.
+  Damage = Overwatch number x dexterity scaling, like everything else. No bleed on swings (unless you want it).
+- **Ultimate charge:** counted in **Overwatch damage**, not Elden Ring damage (the dexterity-scaled numbers and
+  Elden Ring's health would otherwise change how fast it fills): each hit adds its Overwatch base (27 / 54
+  shuriken, 50 dash, 40 melee; swings don't charge, as in Overwatch). Plus Overwatch's passive charge over time if
+  you confirm it.
+- **Q** starts it when full; the overlay shows the charge in % and "DRAGONBLADE" while active (the real HUD is step
+  12, the sword itself step 10).
 
 ## 6. Risks and unknowns (honest list)
 
