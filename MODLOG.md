@@ -3,6 +3,33 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Shuriken attack power actually used ("Is Base Attack Added")
+
+**Changed:** `genji/src/shuriken.rs`: while Genji mode is on, the dagger's AtkParam row also gets "Is Base Attack
+Added" (`isAddBaseAtk`), restored with the other vanilla values.
+**Why:** Your test of commit `af55c29`: shuriken now do about 3 damage to everything. Log: `attack power 82`, yet
+`game dealt 4` on every hit, exactly as with attack power 1. Paramdex notes (WitchyBND): for the player's attacks
+the damage is a base attack power from the item or weapon times the row's correction percentage, and `atkPhys` only
+counts with "Is Base Attack Added". Our throws carry no item, so the base was about 0 and every hit dealt the
+game's minimum.
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game. If the game still deals 4, the next step is to throw "as" the Throwing Dagger item
+(goods id 1700) so the base comes from it.
+**Still broken / not tested:** Shuriken damage.
+**Next:** Your test.
+
+## 2026-10-08 Test of damage option 2 part 1 and FOV option B: health bars fixed
+
+**Changed:** Nothing in code. `STATUS.md` (health bars) marked resolved and moved to
+`docs/STATUS-2026-10-08-health-bars.md`.
+**Why:** Test of commits `daa46d6`, `af55c29`.
+**Tested how:** You played; I read `logs/genji.log`.
+**Result:** Health bars stay on the enemies (far ones slightly off, sound right: fine by you). The game now produces
+the 70.5 field of view itself. Dash damage "perfect" (still lowered directly: 76 at dexterity 25). Shuriken: far too
+weak (see the entry above).
+**Still broken / not tested:** Shuriken damage.
+**Next:** Fix shuriken damage.
+
 ## 2026-10-08 Shuriken damage dealt by the game (damage option 2, part 1)
 
 **Changed:** `genji/src/shuriken.rs`: the dagger's AtkParam attack power is now 27 x dexterity multiplier x 2.0

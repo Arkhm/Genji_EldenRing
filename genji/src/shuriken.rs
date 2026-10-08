@@ -166,6 +166,11 @@ struct RowValues {
     /// The AtkParam_Pc row the bullet uses (not always the bullet's own id: Glintstone Pebble uses 40000).
     atk_row: u32,
     atk_phys: u16,
+    /// AtkParam "Is Base Attack Added". The player's attacks take their damage from a base attack power supplied by
+    /// the item or weapon, times the row's correction percentage; `atkPhys` is ignored unless this is set (Paramdex
+    /// notes; test of 2026-10-08: attack power 82 and 1 both dealt 4, the game's minimum, because our throws carry no
+    /// item). Set while Genji mode is on so `atkPhys` (our attack power) counts.
+    add_base_atk: bool,
 }
 
 /// One of our shuriken, as tracked frame to frame.
@@ -261,6 +266,7 @@ impl Thrower {
                     sfx_delete_by_life_end: bullet.bullet_sfx_delete_type_by_life_dead(),
                     atk_row,
                     atk_phys: atk.atk_phys(),
+                    add_base_atk: atk.is_add_base_atk(),
                 };
                 let shuriken = RowValues {
                     init_velocity: SHURIKEN_SPEED,
@@ -277,6 +283,7 @@ impl Thrower {
                     sfx_delete_by_life_end: SFX_DELETE,
                     atk_row,
                     atk_phys: ENGINE_ATK_PHYS,
+                    add_base_atk: true,
                 };
                 write_values(params, id, &shuriken);
                 glog!(
@@ -702,6 +709,7 @@ fn write_values(params: &mut SoloParamRepository, id: u32, v: &RowValues) {
     }
     if let Some(atk) = params.get_mut::<AtkParam_Pc>(v.atk_row) {
         atk.set_atk_phys(v.atk_phys);
+        atk.set_is_add_base_atk(v.add_base_atk);
     }
 }
 
