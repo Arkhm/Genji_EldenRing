@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Elimination window 5 s (Overwatch community figure)
+
+**Changed:** `genji/src/kills.rs`: a character we damaged that dies within 5 s (was 3) counts as our elimination.
+`docs/DESIGN.md`: noted.
+**Why:** You asked for Overwatch's rule. Blizzard publishes no number (any elimination credit resets Swift Strike);
+community reports put elimination credit at about 4-5 s, "no later than 5 s" (not official). Your last test: bleed on
+every dash works (17 hits, 17 bleeds); dash pushes ignored (0.01-0.07 m each); one death 3.84 s after our last hit
+didn't count.
+**Tested how:** Build OK; 26 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Nothing new.
+**Next:** Step 8, Deflect.
+
 ## 2026-10-08 Swift Strike: every hit bleeds; pushes ignored mid-dash; log deaths that aren't ours
 
 **Changed:**

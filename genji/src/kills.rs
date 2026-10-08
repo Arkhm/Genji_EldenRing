@@ -1,5 +1,5 @@
 //! Eliminations (step 7): a character we damaged that dies within CREDIT_WINDOW counts as our kill. Swift Strike's
-//! cooldown resets on one. The window is an assumption (Overwatch's exact rule not verified).
+//! cooldown resets on one.
 //!
 //! Characters are identified by their address and only ever read through the game's live character list, so an
 //! unloaded character is never touched.
@@ -15,8 +15,11 @@ use fromsoftware_shared::FromStatic;
 
 use crate::glog;
 
-/// Seconds after our last damage during which a death counts as our elimination.
-const CREDIT_WINDOW: f32 = 3.0;
+/// Seconds after our last damage during which a death counts as our elimination. Overwatch publishes no number
+/// (Blizzard: any elimination credit resets Swift Strike); community reports put elimination credit at about 4-5 s,
+/// "no later than 5 s" (searched 2026-10-08; not official). Was 3.0 (a guess); test of 2026-10-08: a kill 3.84 s
+/// after our last hit didn't count.
+const CREDIT_WINDOW: f32 = 5.0;
 /// A death is judged "not ours" only after this long (a one-shot shuriken kill is matched a frame after the death).
 const JUDGE_AFTER: f32 = 0.6;
 /// How long we remember damaging a character, for the diagnostic.

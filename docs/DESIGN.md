@@ -286,7 +286,7 @@ elimination).
 - `swift.rs` (new): cooldown; each frame of the dash, the stretch travelled is checked against every nearby
   character's collision cylinder (our body: radius 0.35 m, height 1.75 m, plus 0.5 m reach); each one touched takes 50 once (HP set
   directly, like the shuriken), logged as `DASH HIT`.
-- `kills.rs` (new): remembers every character we damaged (shuriken or dash) for 3 s; if one of them dies in that
+- `kills.rs` (new): remembers every character we damaged (shuriken or dash) for 5 s (was 3; community figure for Overwatch's elimination credit); if one of them dies in that
   time, that's an elimination: the Swift Strike cooldown resets (`SWIFT reset`).
 - `targets.rs` (new): the "living characters near the player" list, moved out of `shuriken.rs` so both use it.
 
