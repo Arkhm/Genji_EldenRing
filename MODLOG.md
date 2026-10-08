@@ -3,6 +3,20 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Shuriken damage dealt by the game (damage option 2, part 1)
+
+**Changed:** `genji/src/shuriken.rs`: the dagger's AtkParam attack power is now 27 x dexterity multiplier x 2.0
+(`ATTACK_FACTOR`, a first guess), updated whenever dexterity changes (`THROW shuriken attack power ...`); we no longer
+lower HP for body hits. A confirmed headshot gets the game's damage again on top (x2, not in the floating number).
+`HIT` lines now log what the game dealt and the attack power; `BLOCKED` when it dealt nothing. `docs/DESIGN.md`:
+section 5e (how damage is dealt).
+**Why:** Your choice: the game deals the damage (right floating numbers; defenses and shields apply like any weapon).
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game. How much the game deals at this attack power against Limgrave enemies is unknown;
+the HIT lines will show it.
+**Still broken / not tested:** Damage balance (ATTACK_FACTOR); dash still lowers HP directly (part 2 next).
+**Next:** Your test, then part 2: dash via an invisible Kukri hit, with the half bar of bleed.
+
 ## 2026-10-08 Health bars, STATUS option B: Overwatch FOV through LockCamParam
 
 **Changed:** `genji/src/camera.rs`: while first person is on, every LockCamParam row's `camFovY` (the game's own

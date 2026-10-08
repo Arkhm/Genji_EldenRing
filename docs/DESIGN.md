@@ -298,6 +298,25 @@ if runes are missing, the dash can spawn an invisible 1-damage projectile on eac
 |---|---|---|---|
 | 7 | Dash, damage, cooldown, kill reset | dash on flat ground, into a wall, up, through enemies; kill with shuriken then dash | `DASH` distance about 15 m in about 0.3 s; stops at walls; `DASH HIT` 50 per enemy; `SWIFT reset` after a kill |
 
+## 5e. How Genji's damage is dealt (changed 2026-10-08)
+
+**Before:** the game's own hit did almost nothing (attack power 1) and we lowered the enemy's HP directly by the
+Overwatch damage. HP was right, but the floating damage number showed only the game's tiny part, and nothing reacted
+to dash hits.
+
+**Now (your choice, option 2):** the game deals the damage, like a real weapon. Our number becomes the **attack
+power** of the hit: Overwatch base x dexterity scaling (`scaling.rs`) x ATTACK_FACTOR (2.0, a first guess to bring
+Overwatch numbers to Elden Ring's scale: an early dagger has about 100-150 attack power). Enemy defenses, damage
+negation and shields then apply as for any weapon, and the damage number is right.
+- **Shuriken:** the dagger's AtkParam row gets that attack power (in memory, updated when dexterity changes).
+- **Headshots:** the game has no headshots for projectiles. We still detect them from where the shuriken ends; on a
+  confirmed headshot we add the same damage again ourselves (x2 like Overwatch). That extra part isn't in the
+  number.
+- **Swift Strike (next part):** each enemy the dash touches gets an invisible point-blank projectile (the Kukri's
+  row, in memory: no flight visual, our attack power, and later the half bar of bleed), so the game registers a real
+  hit: number, sound, reaction, bleed.
+- The `HIT` lines log the attack power and what the game dealt, to tune ATTACK_FACTOR.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.

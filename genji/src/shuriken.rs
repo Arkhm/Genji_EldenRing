@@ -72,9 +72,12 @@ const SFX_DELETE: i8 = 1;
 /// The dagger's hit effect (SFX 300002) stays on (your choice, 2026-10-07). Switching it off (attempt 5) removed the
 /// stuck daggers from walls but did not stop the second pool from filling, so it isn't the cause.
 
-/// The engine's own damage is reduced to almost nothing (it still gives the hit reaction, aggro and the "last hit
-/// by" record); the Overwatch damage below is applied by us when a shuriken ends next to a character.
+/// Attack power until the dexterity-scaled one is applied (`update_attack`, a frame later).
 const ENGINE_ATK_PHYS: u16 = 1;
+/// The game deals shuriken damage itself (your choice, 2026-10-08; DESIGN.md 5e): the dagger's attack power is
+/// Overwatch damage x dexterity scaling x ATTACK_FACTOR, and enemy defenses apply. 2.0 is a first guess (an early
+/// dagger has about 100-150 attack power); the HIT lines log attack power and damage dealt, to tune it.
+pub const ATTACK_FACTOR: f32 = 2.0;
 /// Overwatch shuriken damage (your numbers, 2026-10-07). DAMAGE_MULTIPLIER scales both if Elden Ring's health pools
 /// turn out to need it.
 const BODY_DAMAGE: f32 = 27.0;
@@ -206,12 +209,13 @@ pub struct Thrower {
     /// Hits waiting for the game's confirmation.
     pending: Vec<Pending>,
     blocked: u32,
+    /// Attack power currently on the dagger's AtkParam row (0 = not applied yet).
+    attack: u16,
 }
 
 /// A shuriken ended next to a character; damage waits for the game's own hit (CONFIRM_FRAMES).
 struct Pending {
     chr: usize,
-    damage: i32,
     head: bool,
     /// `engine_taken` for this character before the impact frame.
     engine_before: i64,
@@ -292,6 +296,27 @@ impl Thrower {
         }
     }
 
+    /// Keeps the dagger's attack power at Overwatch damage x dexterity scaling x ATTACK_FACTOR while our values
+    /// are applied.
+    fn update_attack(&mut self, player: &PlayerIns) {
+        let Some(vanilla) = self.vanilla else {
+            self.attack = 0;
+            return;
+        };
+        let attack = (BODY_DAMAGE * DAMAGE_MULTIPLIER * crate::scaling::dex_multiplier(player) * ATTACK_FACTOR).round() as u16;
+        if attack == self.attack {
+            return;
+        }
+        let Ok(params) = (unsafe { SoloParamRepository::instance_mut() }) else {
+            return;
+        };
+        if let Some(atk) = params.get_mut::<AtkParam_Pc>(vanilla.atk_row) {
+            atk.set_atk_phys(attack);
+            glog!("THROW", "shuriken attack power {} -> {attack} (27 x dexterity x {ATTACK_FACTOR})", self.attack);
+            self.attack = attack;
+        }
+    }
+
     fn bullet_id(&self) -> i32 {
         CANDIDATES[self.candidate].0
     }
@@ -363,6 +388,7 @@ impl Thrower {
     /// Every frame: follows our shuriken; at impact applies Overwatch damage; removes shuriken that got stuck.
     pub fn tick(&mut self, player: &PlayerIns, dt: f32) {
         self.clock += dt;
+        self.update_attack(player);
         let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
             return;
         };
@@ -522,12 +548,10 @@ impl Thrower {
             return;
         };
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
-        let damage = crate::scaling::scaled((if head { HEAD_DAMAGE } else { BODY_DAMAGE }) * DAMAGE_MULTIPLIER, player);
         let chr = target.chr.as_ptr() as usize;
         crate::kills::damaged(chr); // kill credit even if the game's own hit finishes it
         self.pending.push(Pending {
             chr,
-            damage,
             head,
             engine_before: engine_before.get(&chr).copied().unwrap_or(0),
             frames: 0,
@@ -536,7 +560,8 @@ impl Thrower {
         });
     }
 
-    /// Applies pending hits the game confirmed (the character lost HP to the engine's own hit); drops blocked ones.
+    /// Logs pending hits once the game dealt its damage; a confirmed headshot gets the same damage again (Overwatch's
+    /// x2, HEAD_DAMAGE / BODY_DAMAGE). Hits the game dealt nothing for (shield, guard) are logged as blocked.
     fn confirm(&mut self, living: &[Target]) {
         let mut still = Vec::new();
         for mut p in std::mem::take(&mut self.pending) {
@@ -546,22 +571,22 @@ impl Thrower {
             };
             let engine = self.engine_taken.get(&p.chr).copied().unwrap_or(0) - p.engine_before;
             if engine > 0 {
-                // Our full damage on top of the game's own small hit (you preferred this to subtracting it,
-                // 2026-10-08).
-                let ours = p.damage;
-                let Some((before, after, max)) = targets::damage(target, ours) else {
-                    continue;
-                };
+                let bonus = if p.head { (engine as f32 * (HEAD_DAMAGE / BODY_DAMAGE - 1.0)).round() as i32 } else { 0 };
+                let hp = if bonus > 0 { targets::damage(target, bonus) } else { None };
                 self.hits += 1;
                 if p.head {
                     self.headshots += 1;
                 }
+                let data = &unsafe { target.chr.as_ref() }.modules.data;
                 glog!(
                     "HIT",
-                    "{} {} on character {:#x}: ours {ours} (dexterity-scaled) + game {engine}, hp {before} -> {after} / {max} (confirmed after {} frames; shuriken flew {:.2} s, hit at {:.0}% of its height)",
+                    "{} on character {:#x}: game dealt {engine} (attack power {}){}, hp now {} / {} (confirmed after {} frames; shuriken flew {:.2} s, hit at {:.0}% of its height)",
                     if p.head { "HEADSHOT" } else { "body" },
-                    p.damage,
                     p.chr,
+                    self.attack,
+                    if p.head { format!(" + headshot bonus {bonus}") } else { String::new() },
+                    hp.map(|h| h.1).unwrap_or(data.hp),
+                    data.max_hp,
                     p.frames,
                     p.age,
                     100.0 * p.height_share
@@ -570,7 +595,7 @@ impl Thrower {
                 self.blocked += 1;
                 glog!(
                     "HIT",
-                    "BLOCKED on character {:#x}: the game registered no hit in {CONFIRM_FRAMES} frames (shield or guard); no damage",
+                    "BLOCKED on character {:#x}: the game dealt nothing in {CONFIRM_FRAMES} frames (shield or guard)",
                     p.chr
                 );
             } else {
