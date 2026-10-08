@@ -3,6 +3,53 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: Overwatch-like portrait, same-size health numbers, ultimate higher with light, new cooldown flash
+
+**Changed:**
+- `tools/make_hud_art.py`, the portrait:
+  - Now Overwatch's side bust (`0000000106EC`), zoomed to head and shoulders.
+  - It fills a dark hexagon; the helmet rises over the top edge, in front of the outline.
+  - Thick cyan outline from the hexagon's own edge (Overwatch's outline texture is open at the top) with a blurred
+    glow.
+- `genji/src/hud.rs`:
+  - Portrait drawn at its proportions.
+  - Health numbers both the same size (max dimmer).
+  - Ultimate raised by 34 px (at 1080p).
+  - Ultimate ready: the spinning rings are replaced by light (a wide breathing blue halo, a brighter inner glow,
+    faint slowly turning light rays, the glow ring).
+  - Cooldown finished: a rectangle of light centred on the box, as tall above as below, shrinking to the box while
+    fading, fast (0.45 s), with a white core and pixel sparks drifting up.
+
+**Why:** Your test of commit `af6711b`, points 2-4 (with your Overwatch frames).
+**Tested how:** Build OK; unit tests pass. Looked at the portrait picture: it matches your screenshot's layout.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game. F7 test key still in.
+**Next:** Your screenshots.
+
+## 2026-10-08 Elden Ring's HUD switched off in Genji mode
+
+**Changed:**
+- `genji/src/controls.rs`:
+  - While Genji input is captured, Elden Ring's HUD option is set to Off (`GameSettings.hud_type`, the same as
+    Options > Display > HUD) and set back to your setting when capture ends (menus, F9, loading).
+  - The "gameplay" rule no longer needs the HUD's UI state 0x07. Gameplay = 0x08 visible, 0x07 visible or the HUD
+    switched off by us, and no UI state outside the ones seen during play in your logs (0x04, 05, 07, 08, 09, 0f,
+    11, 12, 13, 17, 1a).
+  - An unknown state counts as a menu (safe side) and is logged once.
+  - `MODE` lines log the switch.
+- `genji/src/lib.rs`: if our per-frame code crashes, the HUD is switched back on.
+
+**Why:** Your test of commit `af6711b`, point 1: Elden Ring's HUD makes it uglier; remove it completely in Genji
+mode, rune gains included.
+**Tested how:** Build OK; unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Whether hiding the HUD also hides enemy health bars and damage numbers (likely; they're part of it).
+- Whether some pop-up during play uses a state not in the list (it would release Genji input briefly; the log will
+  name it).
+
+**Next:** Your test.
+
 ## 2026-10-08 HUD closer to Overwatch 2, with its animations
 
 **Changed:**

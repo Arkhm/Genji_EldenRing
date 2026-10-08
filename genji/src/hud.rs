@@ -30,8 +30,10 @@ const LABEL_FONT: &str = r"C:\Windows\Fonts\bahnschrift.ttf";
 const REFERENCE_HEIGHT: f32 = 1080.0;
 /// Ticks around the ultimate ring (Overwatch shows the charge as cyan ticks).
 const ULT_TICKS: usize = 48;
-/// Length of the flash when a cooldown finishes, and of the burst when the ultimate becomes ready, seconds.
+/// Length of the burst when the ultimate becomes ready, seconds.
 const FLASH: f32 = 0.6;
+/// Length of the flash when a cooldown finishes ("fast", your Overwatch frames), seconds.
+const COOLDOWN_FLASH: f32 = 0.45;
 
 /// Everything the HUD shows, written by the game thread each frame.
 #[derive(Clone, Copy, Default)]
@@ -281,13 +283,18 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     let base = height - 62.0 * k;
 
     // ---- Bottom left: hexagon portrait, "+" box, health "hp | max", 10 white segments.
-    let (pw, ph) = (88.0 * k, 106.0 * k);
-    let (px, py) = (36.0 * k, base - ph + 8.0 * k);
-    picture(&draw, r.glow_dot, [px + pw / 2.0, py + ph / 2.0], pw * 1.9, 0.0, [80, 220, 255, 70]);
+    // The picture is the hexagon (200 of its 272 px width) with the helmet rising above and 36 px of glow around.
+    let hex_w = 92.0 * k;
+    let (img_w, img_h) = r.portrait.map(|(_, [w, h])| (w, h)).unwrap_or((272.0, 364.0));
+    let pw = hex_w * img_w / 200.0;
+    let ph = pw * img_h / img_w;
+    let glow_below = ph * 36.0 / img_h;
+    let px = 30.0 * k;
+    let py = base + 8.0 * k + glow_below - ph;
     if let Some((id, _)) = r.portrait {
         draw.add_image(id, [px, py], [px + pw, py + ph]).build();
     }
-    let hx = px + pw + 16.0 * k;
+    let hx = px + pw - 8.0 * k;
     let seg_top = base - 30.0 * k;
     let plus = 22.0 * k;
     let num_mid = seg_top - 22.0 * k;
@@ -298,9 +305,10 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     let t = measure(r.bold_big, &hp);
     text([nx, num_mid - t[1] / 2.0], r.bold_big, WHITE, &hp);
     let sep_x = nx + t[0] + 6.0 * k;
-    draw.add_line([sep_x, num_mid - 9.0 * k], [sep_x, num_mid + 11.0 * k], col(DIM)).thickness(1.5 * k).build();
-    let m = measure(r.bold_small, &s.max_hp.to_string());
-    text([sep_x + 6.0 * k, num_mid - m[1] / 2.0 + 2.0 * k], r.bold_small, DIM, &s.max_hp.to_string());
+    draw.add_line([sep_x, num_mid - 11.0 * k], [sep_x, num_mid + 12.0 * k], col(DIM)).thickness(1.5 * k).build();
+    let max = s.max_hp.to_string();
+    let m = measure(r.bold_big, &max);
+    text([sep_x + 7.0 * k, num_mid - m[1] / 2.0], r.bold_big, DIM, &max);
     let (seg_w, seg_h, gap) = (17.0 * k, 22.0 * k, 3.0 * k);
     let fill = if s.max_hp > 0 { (s.hp.max(0) as f32 / s.max_hp as f32).clamp(0.0, 1.0) * 10.0 } else { 0.0 };
     for i in 0..10 {
@@ -314,7 +322,7 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
 
     // ---- Bottom centre: the ultimate.
     let radius = 34.0 * k;
-    let (cx, cy) = (width / 2.0, base - radius - 24.0 * k);
+    let (cx, cy) = (width / 2.0, base - radius - 58.0 * k);
     // Faint outer rings and the dotted circle.
     for i in 0..60 {
         let a = TAU * i as f32 / 60.0;
@@ -336,10 +344,12 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         key_box(cx, cy + radius * 1.62 + 6.0 * k, "Q", false);
     } else if ult_ready {
         // Ready: pulsing blue glow, spinning light, white centre with the icon, side markers, burst when it arrives.
-        let pulse = 0.7 + 0.3 * (now * 3.0).sin();
-        picture(&draw, r.glow_ring, [cx, cy], radius * 3.3, 0.0, alpha(BLUE_GLOW, pulse));
-        picture(&draw, r.dash_ring, [cx, cy], radius * 3.0, now * 1.4, alpha(CYAN, 0.55));
-        picture(&draw, r.dash_ring, [cx, cy], radius * 2.6, -now * 0.9, alpha(BLUE_GLOW, 0.4));
+        // Light around it: a wide soft blue halo breathing, a brighter inner glow, faint slow light rays.
+        let breathe = 0.5 + 0.5 * (now * 2.2).sin();
+        picture(&draw, r.glow_dot, [cx, cy], radius * (5.2 + 0.6 * breathe), 0.0, alpha(BLUE_GLOW, 0.55 + 0.25 * breathe));
+        picture(&draw, r.glow_dot, [cx, cy], radius * 3.2, 0.0, alpha([150, 225, 255, 255], 0.5 + 0.3 * breathe));
+        picture(&draw, r.flare, [cx, cy], radius * 4.2, now * 0.25, alpha([140, 210, 255, 255], 0.35 + 0.2 * breathe));
+        picture(&draw, r.glow_ring, [cx, cy], radius * 3.0, 0.0, alpha(BLUE_GLOW, 0.6 + 0.4 * breathe));
         draw.add_circle([cx, cy], radius * 1.12, col(alpha(BLUE_GLOW, 0.9))).thickness(4.0 * k).num_segments(72).build();
         draw.add_circle([cx, cy], radius * 0.92, col(PANEL_WHITE)).filled(true).num_segments(64).build();
         picture(&draw, r.blade, [cx, cy], radius * 1.25, 0.0, ICON_ON_WHITE);
@@ -399,19 +409,31 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
             let pulse = 0.6 + 0.4 * (now * 10.0).sin();
             draw.add_rect([x0 - 2.0 * k, y0 - 2.0 * k], [x1 + 2.0 * k, y1 + 2.0 * k], col(alpha(CYAN, pulse))).thickness(3.0 * k).build();
         }
-        // Ready flash: a beam of light through the box and a burst.
+        // Ready flash (your Overwatch frames, 2026-10-08): a rectangle of light centred on the box, as tall above as
+        // below, that shrinks to the box while losing its light, fast; a white core; pixel sparks drifting up.
         if let Some(t0) = ready_at {
-            let p = (now - t0) / FLASH;
+            let p = (now - t0) / COOLDOWN_FLASH;
             if p < 1.0 {
-                let fade = 1.0 - p;
-                let bw = size * (0.35 + 0.25 * p);
-                let mid = x0 + size / 2.0;
-                let (top, bottom) = (y0 - size * 1.6, y1 + size * 0.6);
-                let c0 = col(alpha(BLUE_GLOW, 0.0));
-                let c1 = col(alpha([150, 220, 255, 255], 0.9 * fade));
-                draw.add_rect_filled_multicolor([mid - bw / 2.0, top], [mid, bottom], c0, c1, c1, c0);
-                draw.add_rect_filled_multicolor([mid, top], [mid + bw / 2.0, bottom], c1, c0, c0, c1);
-                picture(&draw, r.flare, [mid, y0 + size / 2.0], size * (1.2 + 1.8 * p), 0.0, alpha(WHITE, fade));
+                let ease = 1.0 - (1.0 - p) * (1.0 - p);
+                let fade = (1.0 - p).powf(1.4);
+                let (mx, my) = (x0 + size / 2.0, y0 + size / 2.0);
+                let half_h = size * (0.5 + 2.6 * (1.0 - ease));
+                let half_w = size * (0.42 + 0.08 * (1.0 - ease));
+                let edge = col(alpha(BLUE_GLOW, 0.0));
+                let body = col(alpha([70, 175, 255, 255], 0.85 * fade));
+                let core = col(alpha([215, 245, 255, 255], 0.95 * fade));
+                draw.add_rect_filled_multicolor([mx - half_w, my - half_h], [mx - half_w * 0.25, my + half_h], edge, body, body, edge);
+                draw.add_rect_filled_multicolor([mx - half_w * 0.25, my - half_h], [mx, my + half_h], body, core, core, body);
+                draw.add_rect_filled_multicolor([mx, my - half_h], [mx + half_w * 0.25, my + half_h], core, body, body, core);
+                draw.add_rect_filled_multicolor([mx + half_w * 0.25, my - half_h], [mx + half_w, my + half_h], body, edge, edge, body);
+                picture(&draw, r.glow_dot, [mx, my], size * (1.6 + 1.2 * (1.0 - ease)), 0.0, alpha(WHITE, 0.8 * fade));
+                for i in 0..14 {
+                    let f = i as f32;
+                    let sx = mx + ((f * 37.0).sin() * 0.5) * size * 1.1;
+                    let sy = my + ((f * 53.0).cos() * 0.5) * size * 2.2 - size * 1.2 * ease;
+                    let sq = (2.0 + (i % 3) as f32 * 1.5) * k;
+                    draw.add_rect([sx, sy], [sx + sq, sy + sq], col(alpha([170, 230, 255, 255], fade))).filled(true).build();
+                }
             }
         }
         key_box(x0 + size / 2.0, y1 + 10.0 * k, key, ready);
