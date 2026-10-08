@@ -29,6 +29,18 @@ use crate::swift::Swift;
 
 /// Height of the eyes above the character's feet, in metres.
 const EYE_HEIGHT: f32 = 1.6;
+/// Your Overwatch field of view (2026-10-08): 103 degrees, which Overwatch measures horizontally on a 16:9 screen.
+/// Elden Ring's camera stores the vertical angle, so we write the vertical angle that gives 103 at 16:9 (70.5);
+/// on your 21:9 screen that shows about 119 degrees across, as Overwatch does (assuming both widen the view on
+/// ultrawide screens rather than crop it). Elden Ring's own is 48 vertical (76.7 at 16:9), restored outside
+/// first person.
+const OVERWATCH_FOV: f32 = 103.0;
+
+/// Vertical field of view (radians) for a horizontal one measured at 16:9.
+fn vertical_fov(horizontal_16_9_degrees: f32) -> f32 {
+    2.0 * ((horizontal_16_9_degrees.to_radians() / 2.0).tan() * 9.0 / 16.0).atan()
+}
+
 /// Camera pushed this far forward (horizontally) from the body's centre, in metres.
 const FORWARD_OFFSET: f32 = 0.1;
 
@@ -210,6 +222,10 @@ fn camera_step_inner(dt: f32) -> bool {
     if let Some(mut chr_cam) = chr_cam {
         look.write_camera(&mut unsafe { chr_cam.as_mut() }.pers_cam.matrix, eye);
     }
+    // 3c. Overwatch field of view, on the drawn camera and the follow camera (health bars are placed with it).
+    let fov = vertical_fov(OVERWATCH_FOV);
+    camera.pers_cam_1.fov = fov;
+    camera.pers_cam_2.fov = fov;
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
@@ -231,5 +247,17 @@ fn cannot_drive(player: &PlayerIns) -> Option<&'static str> {
         Some("on a ladder")
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overwatch_103_is_about_70_5_vertical() {
+        assert!((vertical_fov(103.0).to_degrees() - 70.53).abs() < 0.05);
+        // Elden Ring's own 48 degrees vertical is 76.7 at 16:9 (logged 2026-10-07).
+        assert!((vertical_fov(76.7).to_degrees() - 48.0).abs() < 0.05);
     }
 }

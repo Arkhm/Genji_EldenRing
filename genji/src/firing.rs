@@ -20,9 +20,8 @@ const BURST_SPACING: f32 = 0.1;
 const BURST_CYCLE: f32 = 0.88;
 /// Time from a fan to the earliest next burst or fan, seconds (Overwatch's 0.68 s recovery; measured 0.687). Was 0.75.
 const FAN_CYCLE: f32 = 0.68;
-/// Sideways angle of the fan's outer shuriken, degrees: Genji's fan is 9 degrees in total, 4.5 to each side.
-/// Elden Ring's narrower view makes it look about 1.6 times wider on screen than in Overwatch; 2.84 would match the
-/// look instead of the real angle. Was 9.0.
+/// Sideways angle of the fan's outer shuriken, degrees: Genji's fan is 9 degrees in total, 4.5 to each side. With the
+/// Overwatch field of view in first person (camera.rs, 2026-10-08) it also looks as wide as in Overwatch. Was 9.0.
 const FAN_ANGLE: f32 = 4.5;
 /// Automatic reload when empty, seconds.
 const RELOAD_TIME: f32 = 1.5;

@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 First person uses your Overwatch FOV (103)
+
+**Changed:** `genji/src/camera.rs`: in first person, the drawn camera and the follow camera get a vertical field of
+view of 70.5 degrees, which is Overwatch's 103 measured at 16:9 (about 119 across on your 21:9 screen, assuming both
+games widen rather than crop on ultrawide). Outside first person the game's own (48 vertical) comes back. 1 new unit
+test for the conversion. `genji/src/firing.rs`: fan comment updated (it now also looks as wide as in Overwatch).
+**Why:** You asked for the same FOV as Overwatch.
+**Tested how:** Build OK; 23 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether the game keeps our FOV (it may overwrite it); the next `CAMERA fov` line
+when first person starts will show the game's value before ours.
+**Next:** Your test; then the half bar of bleed on Swift Strike.
+
 ## 2026-10-08 Game's follow camera kept in line with our view (health bars, enemy sounds)
 
 **Changed:** `genji/src/camera.rs`: every frame in first person, our view is also written into the game's follow
