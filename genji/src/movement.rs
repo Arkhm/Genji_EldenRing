@@ -353,7 +353,7 @@ impl Mover {
 
         let p0 = player.chr_ins.modules.physics.position;
         let w = p0.3;
-        let start = Vec3::new(p0.0, p0.1, p0.2);
+        let mut start = Vec3::new(p0.0, p0.1, p0.2);
         let mut frame_push = 0.0;
         if let Some(last) = self.last_written {
             let moved = (start - last).length();
@@ -364,6 +364,12 @@ impl Mover {
             } else {
                 self.outside_push += moved;
                 frame_push = moved;
+                if self.dash_left > 0.0 && moved > 0.01 {
+                    // Swift Strike goes straight through: undo pushes from the game's own collision (test of
+                    // 2026-10-08: in a row of enemies, one dying in front pushed us 2.07 m aside mid-dash).
+                    glog!("DASH", "ignored a {moved:.2} m push from the game's collision");
+                    start = last;
+                }
             }
         }
 
