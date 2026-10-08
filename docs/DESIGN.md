@@ -161,7 +161,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 6 | **Shuriken + Fan of Blades** (params + projectile spawn) | hit an enemy | `HIT` lines with damage; projectiles never pass through walls |
 | 7 | **Swift Strike** with kill reset (built 2026-10-07, not tested in game; see 5d) | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
 | 8 | **Deflect** (done 2026-10-08, see 5f) | block an archer | frontal hits blocked while active; returned projectiles logged |
-| 9 | **Dragonblade + ult charge** (built 2026-10-08, not tested in game; see 5g) | build charge, press Q | charge numbers rise with damage; swing hits logged |
+| 9 | **Dragonblade + ult charge** (done 2026-10-08, see 5g) | build charge, press Q | charge numbers rise with damage; swing hits logged |
 | 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
 | 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
 | 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair built 2026-10-07 ahead of the rest, `crosshair.rs`, hudhook Direct3D 12 overlay; not tested in game) | play | (visual check by you) |

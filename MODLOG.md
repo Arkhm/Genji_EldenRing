@@ -3,6 +3,17 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 9 validated; F7 test key removed
+
+**Changed:** `genji/src/camera.rs`, `genji/src/ult.rs`, `genji/src/dinput.rs`: the temporary F7 full-charge key is
+removed. `README.md`, `docs/DESIGN.md`: step 9 done.
+**Why:** You validated Dragonblade (and melee, Deflect during it); your test of commit `4260db3`: the ghost dash
+works and no more falling through the map.
+**Tested how:** Build OK; unit tests pass.
+**Result:** Works.
+**Still broken / not tested:** Nothing known.
+**Next:** Step 10 needs Overwatch's assets (step 2).
+
 ## 2026-10-08 Fell through the map after a ghost dash: three fixes
 
 **Changed:** `genji/src/movement.rs`:
