@@ -522,7 +522,7 @@ impl Thrower {
             return;
         };
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
-        let damage = ((if head { HEAD_DAMAGE } else { BODY_DAMAGE }) * DAMAGE_MULTIPLIER).round() as i32;
+        let damage = crate::scaling::scaled((if head { HEAD_DAMAGE } else { BODY_DAMAGE }) * DAMAGE_MULTIPLIER, player);
         let chr = target.chr.as_ptr() as usize;
         crate::kills::damaged(chr); // kill credit even if the game's own hit finishes it
         self.pending.push(Pending {
@@ -546,8 +546,9 @@ impl Thrower {
             };
             let engine = self.engine_taken.get(&p.chr).copied().unwrap_or(0) - p.engine_before;
             if engine > 0 {
-                // Total per shuriken = Overwatch damage: the game's part plus ours.
-                let ours = (p.damage as i64 - engine).max(0) as i32;
+                // Our full damage on top of the game's own small hit (you preferred this to subtracting it,
+                // 2026-10-08).
+                let ours = p.damage;
                 let Some((before, after, max)) = targets::damage(target, ours) else {
                     continue;
                 };
@@ -557,7 +558,7 @@ impl Thrower {
                 }
                 glog!(
                     "HIT",
-                    "{} {} on character {:#x}: game {engine} + ours {ours}, hp {before} -> {after} / {max} (confirmed after {} frames; shuriken flew {:.2} s, hit at {:.0}% of its height)",
+                    "{} {} on character {:#x}: ours {ours} (dexterity-scaled) + game {engine}, hp {before} -> {after} / {max} (confirmed after {} frames; shuriken flew {:.2} s, hit at {:.0}% of its height)",
                     if p.head { "HEADSHOT" } else { "body" },
                     p.damage,
                     p.chr,

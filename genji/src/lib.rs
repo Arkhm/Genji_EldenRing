@@ -18,6 +18,7 @@ mod log;
 mod look;
 mod movement;
 mod obstacles;
+mod scaling;
 mod shuriken;
 mod swift;
 mod targets;

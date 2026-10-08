@@ -3,6 +3,32 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Dexterity scaling for all Genji damage; full shuriken damage again
+
+**Changed:** New `genji/src/scaling.rs`: damage = Overwatch base x (1 + 1.5 x curve(dexterity)/100), with Elden Ring's
+own "Default" scaling curve (CalcCorrectGraph row 0, read from the game at runtime; your regulation.bin: 18 -> 25%,
+60 -> 75%, 80 -> 90%, exponents 1.2/-1.2/1/1). 1.5 is grade A in the game's terms. A `SCALING` line logs your
+dexterity and the resulting damage whenever it changes. Used by shuriken (27/54) and Swift Strike (50).
+`genji/src/shuriken.rs`: a confirmed hit deals our full (scaled) damage on top of the game's own 4-6 again, as
+before the last change. 2 unit tests for the curve.
+**Why:** You: blocking works, but damage felt weaker (the game's part was being subtracted); change back, and all of
+Genji's abilities should scale with dexterity.
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game; balance (example: dexterity 40 -> x1.81: 49/98 shuriken, 91 dash).
+**Next:** Your test; then the half bar of bleed.
+
+## 2026-10-08 chr_cam gets the Overwatch FOV too (health bars)
+
+**Changed:** `genji/src/camera.rs`: the game's ChrCam gets the same field of view as the screen (70.5 vertical).
+**Why:** Your F8 marks: all cameras face where we look, but chr_cam still had 48 degrees, which places things about
+1.6 times further from the screen centre: likely the misplaced health bars (more often far away, you said). Not
+proven: the marks don't say which bar was wrong.
+**Tested how:** Build OK.
+**Result:** Not tested in game.
+**Still broken / not tested:** Health bars.
+**Next:** F8 again if a bar is still wrong.
+
 ## 2026-10-08 F8 camera snapshot (health bars in the wrong place)
 
 **Changed:** `genji/src/camera.rs`, `genji/src/dinput.rs`: in first person, F8 writes `MARK` lines: every camera's

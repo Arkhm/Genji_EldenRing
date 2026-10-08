@@ -75,8 +75,9 @@ impl Swift {
             }
             self.near.remove(&id);
             self.hit.insert(id);
-            if let Some((before, after, max)) = targets::damage(&target, DAMAGE) {
-                glog!("DASH", "HIT {DAMAGE} on character {id:#x}: hp {before} -> {after} / {max}");
+            let damage = crate::scaling::scaled(DAMAGE as f32, player);
+            if let Some((before, after, max)) = targets::damage(&target, damage) {
+                glog!("DASH", "HIT {damage} (dexterity-scaled from {DAMAGE}) on character {id:#x}: hp {before} -> {after} / {max}");
             }
         }
     }
