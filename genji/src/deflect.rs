@@ -14,8 +14,8 @@ use crate::look::Look;
 
 /// Overwatch: 2 s, ended early by pressing E again.
 const DURATION: f32 = 2.0;
-/// Overwatch: 8 s (you confirmed, 2026-10-08). **1 s while we test (your request); back to 8 s once validated.**
-const COOLDOWN: f32 = 1.0;
+/// Overwatch: 8 s (you confirmed, 2026-10-08). Was 1 s while we tested; back to 8 s after you validated Deflect.
+const COOLDOWN: f32 = 8.0;
 /// Enemies and enemy projectiles closer than this in our rear half can hit us: no protection on those frames.
 const REAR_RANGE: f32 = 4.0;
 

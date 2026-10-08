@@ -3,6 +3,16 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Deflect validated; cooldown back to 8 s
+
+**Changed:** `genji/src/deflect.rs`: cooldown 8 s (was 1 s for testing). `README.md`, `docs/DESIGN.md`: step 8 done.
+**Why:** Your test of commit `2b8366b`: projectiles come back as themselves, damage good; you validated Deflect.
+**Tested how:** You played; I read `logs/genji.log`: 76 projectiles sent back as themselves, 0 Bone Dart
+fallbacks, 13 kinds (arrows, pebbles, the mage's volleys, other spells). Build OK; 29 unit tests pass.
+**Result:** Works (cooldown change itself not tested in game).
+**Still broken / not tested:** Nothing known for Deflect.
+**Next:** Step 9, Dragonblade and ultimate charge.
+
 ## 2026-10-08 Deflect sends projectiles back as themselves
 
 **Changed:** `genji/src/deflect.rs`:
