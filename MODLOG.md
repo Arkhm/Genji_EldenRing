@@ -3,6 +3,41 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 9: Dragonblade, ultimate charge, quick melee
+
+**Changed:**
+- New `genji/src/ult.rs`:
+  - Ultimate charge in Overwatch points: 27/54 per confirmed shuriken hit (27 for a killing blow), 50 per Swift
+    Strike hit, 40 per quick melee hit.
+  - Plus 5 per second, paused during Dragonblade. Cost 2000.
+  - `ULT` lines every 10%.
+- New `genji/src/blade.rs`:
+  - Q when full starts Dragonblade for 6 s; it resets Swift Strike.
+  - Holding left click swings every 0.61 s. Each swing hits every living character within 5 m in a 60-degree-each-side
+    cone (and at reachable height).
+  - Each hit is an invisible point-blank projectile from behind the target. Its carrier is the Ruin Fragment's
+    Bullet row, pointed at Corpse Piler's damage row (Rivers of Blood); attack power 100 x dexterity. Direct damage
+    is the fallback.
+  - A third of the target's bleed bar per swing hit.
+  - Each swing fires the Blood Blade crescent with its damage row removed (only a look).
+  - Mouse 5 is quick melee outside Dragonblade: 40 x dexterity to the nearest character within 2.5 m in front, same
+    carrier, 0.8 s recovery.
+  - All rows changed in memory while Genji mode is on.
+- `genji/src/camera.rs`: wiring. No shuriken and no Deflect during Dragonblade.
+- `genji/src/crosshair.rs`: "ULT n%", "ULT READY (Q)", "DRAGONBLADE n s" under the crosshair.
+- `genji/src/swift.rs`, `genji/src/shuriken.rs`: charge hooks; Swift Strike reset.
+
+**Why:** Step 9 (DESIGN.md 5g) with your Season 5 numbers and choices.
+**Tested how:** Build OK, no warnings; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Everything in game: whether the Corpse Piler row's hit and the crescent look right.
+- The swing cone angle and the melee recovery aren't Overwatch-verified.
+- Swing hits don't add ultimate charge (as in Overwatch).
+
+**Next:** Your test. To try it quickly you'll need about 400 s of passive charge or a lot of hits: tell me if you want
+a temporary full-charge key for testing.
+
 ## 2026-10-08 Step 9 plan; reminder for step 10
 
 **Changed:** `docs/DESIGN.md` section 5g with your Overwatch numbers and choices (Corpse Piler hits with bleed,

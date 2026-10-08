@@ -31,6 +31,15 @@ const REFERENCE_HEIGHT: f32 = 1080.0;
 
 static VISIBLE: AtomicBool = AtomicBool::new(false);
 static DEFLECTING: AtomicBool = AtomicBool::new(false);
+/// Ultimate charge in percent, and Dragonblade's seconds left in tenths (0 = not active).
+static ULT_PERCENT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static BLADE_TENTHS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// "ULT n%" or "DRAGONBLADE n s" under the crosshair (until the real HUD, step 12).
+pub fn set_ult(percent: u32, blade_left: Option<f32>) {
+    ULT_PERCENT.store(percent, Ordering::Relaxed);
+    BLADE_TENTHS.store(blade_left.map(|s| (s * 10.0).ceil() as u32).unwrap_or(0), Ordering::Relaxed);
+}
 
 /// Shows "DEFLECT" under the crosshair while Deflect is up (until Genji's sword is drawn, step 10).
 pub fn set_deflecting(on: bool) {
@@ -97,6 +106,17 @@ impl Overlay {
                 .filled(true)
                 .build();
         }
+        let tenths = BLADE_TENTHS.load(Ordering::Relaxed);
+        let ult = if tenths > 0 {
+            format!("DRAGONBLADE {:.1} s", tenths as f32 / 10.0)
+        } else {
+            let p = ULT_PERCENT.load(Ordering::Relaxed);
+            if p >= 100 { "ULT READY (Q)".to_string() } else { format!("ULT {p}%") }
+        };
+        let size = ui.calc_text_size(&ult);
+        let pos = [(width - size[0]) / 2.0, height / 2.0 + 70.0 * height / REFERENCE_HEIGHT];
+        draw.add_text([pos[0] + 1.0, pos[1] + 1.0], imgui::ImColor32::from_rgba(0, 0, 0, 160), &ult);
+        draw.add_text(pos, imgui::ImColor32::from_rgba(COLOR_U8[0], COLOR_U8[1], COLOR_U8[2], 200), &ult);
         if DEFLECTING.load(Ordering::Relaxed) {
             let text = "DEFLECT";
             let size = ui.calc_text_size(text);

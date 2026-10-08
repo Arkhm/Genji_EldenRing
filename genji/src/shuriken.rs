@@ -550,6 +550,7 @@ impl Thrower {
             // The game's damage already killed it (one-shot): this shuriken was the killing blow.
             self.hits += 1;
             self.killing_blows += 1;
+            crate::ult::add(BODY_DAMAGE, "shuriken killing blow");
             glog!(
                 "HIT",
                 "killing blow on character {chr:#x} (died {:.2} s before we matched the shuriken to it)",
@@ -584,6 +585,7 @@ impl Thrower {
                 if p.head {
                     self.headshots += 1;
                 }
+                crate::ult::add(if p.head { HEAD_DAMAGE } else { BODY_DAMAGE }, "shuriken");
                 let data = &unsafe { target.chr.as_ref() }.modules.data;
                 glog!(
                     "HIT",

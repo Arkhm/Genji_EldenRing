@@ -19,6 +19,7 @@ use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::dinput::{self, dik};
+use crate::blade::Blade;
 use crate::deflect::Deflect;
 use crate::firing::Firing;
 use crate::gamepad;
@@ -68,6 +69,9 @@ struct View {
     f8_was_down: bool,
     deflect: Deflect,
     e_was_down: bool,
+    blade: Blade,
+    q_was_down: bool,
+    melee_was_down: bool,
     /// LockCamParam field of view of every row, saved while ours is applied (STATUS.md option B).
     lock_cam_fov: Option<Vec<(u32, f32)>>,
 }
@@ -98,6 +102,9 @@ fn camera_step_inner(dt: f32) -> bool {
     view.mover.watch_hp(player);
     view.thrower.tick(player, dt);
     view.swift.tick(dt, crate::kills::tick(dt));
+    view.blade.advance(dt);
+    crate::ult::tick(dt, view.blade.active());
+    crate::crosshair::set_ult(crate::ult::percent(), view.blade.left());
     let buttons = gamepad::mouse_buttons();
     let (left_down, right_down) = (buttons & 1 != 0, buttons & 2 != 0);
 
@@ -120,6 +127,8 @@ fn camera_step_inner(dt: f32) -> bool {
     view.thrower.set_shuriken_values(reason.is_none());
     view.swift.set_values(reason.is_none());
     view.deflect.set_values(reason.is_none());
+    view.blade.set_values(reason.is_none());
+    view.blade.confirm(player);
     view.swift.confirm(player);
 
     // STATUS.md option B: the Overwatch field of view through the game's own setting (LockCamParam), while first
@@ -264,17 +273,31 @@ fn camera_step_inner(dt: f32) -> bool {
     player.chr_ins.chr_flags1c5.set_enable_render(false);
     view.model_hidden = true;
 
-    // 4. Deflect (step 8a): E, while we drive. No shuriken while deflecting (Overwatch).
-    let e_down = dinput::key_down(&dinput::raw_keys(), dik::E);
-    let e_pressed = e_down && !view.e_was_down;
+    // 4. Dragonblade and quick melee (step 9): Q, held left click, mouse 5, while we drive.
+    let keys_now = dinput::raw_keys();
+    let q_down = dinput::key_down(&keys_now, dik::Q);
+    let q_pressed = q_down && !view.q_was_down;
+    view.q_was_down = q_down;
+    let melee_down = buttons & (1 << 4) != 0;
+    let melee_pressed = melee_down && !view.melee_was_down;
+    view.melee_was_down = melee_down;
+    if driving && view.blade.act(q_pressed, left_down, melee_pressed, player, &look, eye) {
+        view.swift.reset("Dragonblade");
+    }
+    let blade = view.blade.active();
+
+    // 5. Deflect (step 8a): E, while we drive. No shuriken while deflecting, no Deflect during Dragonblade (Overwatch).
+    let e_down = dinput::key_down(&keys_now, dik::E);
+    let e_pressed = e_down && !view.e_was_down && !blade;
     view.e_was_down = e_down;
     let deflecting = view.deflect.tick(dt, e_pressed, driving);
     view.deflect.apply(player, feet, look.flat_forward());
     view.deflect.reflect(player, &look, eye);
     crate::crosshair::set_deflecting(deflecting);
 
-    // 5. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive.
-    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting) {
+    // 6. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive (not during
+    // Deflect or Dragonblade).
+    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade) {
         view.thrower.throw(player, &look, eye, angle);
     }
     true

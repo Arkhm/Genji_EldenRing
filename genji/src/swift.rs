@@ -115,6 +115,14 @@ impl Swift {
         self.cooldown <= 0.0
     }
 
+    /// Dragonblade's activation resets Swift Strike (Overwatch).
+    pub fn reset(&mut self, why: &str) {
+        if self.cooldown > 0.0 {
+            glog!("SWIFT", "reset by {why} ({:.1} s of cooldown left)", self.cooldown);
+            self.cooldown = 0.0;
+        }
+    }
+
     /// A dash started (the movement controller accepted it).
     pub fn started(&mut self) {
         self.cooldown = COOLDOWN;
@@ -339,11 +347,13 @@ impl Swift {
                     s.chr, s.attack, data.hp, data.max_hp, s.frames
                 );
                 self.bleed(target, s.bleed);
+                crate::ult::add(DAMAGE as f32, "Swift Strike");
             } else if data.hp <= 0 {
                 continue; // died meanwhile (another hit)
             } else if s.frames >= CONFIRM_FRAMES {
                 self.direct(target, s.damage, &format!("the game registered no strike hit in {CONFIRM_FRAMES} frames"));
                 self.bleed(target, s.bleed);
+                crate::ult::add(DAMAGE as f32, "Swift Strike");
             } else {
                 still.push(s);
             }

@@ -7,6 +7,7 @@
 //! - Genji's own mouse look and movement (step 5).
 //! - Shuriken: the engine's own projectiles, thrown from the eye (step 6).
 
+mod blade;
 mod camera;
 mod controls;
 mod crosshair;
@@ -23,6 +24,7 @@ mod scaling;
 mod shuriken;
 mod swift;
 mod targets;
+mod ult;
 mod ultrawide;
 
 use std::ffi::c_void;
