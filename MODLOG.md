@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 2 unblocked: old Overwatch build via download_depot; extraction to D:
+
+**Changed:**
+- `tools/extract_genji.ps1`: reads from the old build by default; writes to `D:\GenjiBridgeAssetsaw` (your
+  choice: C: is full; outside the repository, so never committed).
+- `docs/DESIGN.md`: step 2 route.
+- Outside the repository:
+  - `D:\SteamDepotDownloadspp_2357570\Overwatch_2.24.1` combines the three depots you downloaded (99 hard links,
+    no extra space; the downloads themselves unchanged).
+
+**Why:** DataTool v2.24.1 (2026-09-15) can't read your live Overwatch. You downloaded the Sept 8 build with Steam's
+console (`download_depot 2357570`: depots 2357571, 2357572 English, 2437288).
+**Tested how:** DataTool `list-heroes` on the combined folder: build `prometheus-2_24_1_0-153264`, CASC ready, Genji
+listed.
+**Result:** Works; full extraction running.
+**Still broken / not tested:** Extraction output.
+**Next:** Look at what came out (model, first-person parts, animations, sounds).
+
 ## 2026-10-08 Step 9 validated; F7 test key removed
 
 **Changed:** `genji/src/camera.rs`, `genji/src/ult.rs`, `genji/src/dinput.rs`: the temporary F7 full-charge key is

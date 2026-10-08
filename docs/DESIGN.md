@@ -80,7 +80,7 @@ me3 (launches the game offline, no EAC, separate save ER0000.genji.sl2)
          ├─ audio     plays Genji's sounds and voice lines
          └─ log       writes logs/genji.log: every state change, with numbers
 regulation.bin  built from YOUR vanilla copy + our extra rows (shuriken bullets, damage effects)
-owassets/       Genji's assets converted from YOUR Overwatch install (gitignored, never committed)
+owassets/       (unused: C: is full; Genji's assets live in D:\GenjiBridgeAssets, outside the repo, never committed)
 ```
 
 **Who decides what:** Elden Ring is authoritative for the world, enemies, damage to you and saves. Our DLL is
@@ -99,7 +99,7 @@ tune it without rebuilding.
 | `profile/` | the me3 profile and `genji.toml` | yes |
 | `docs/` | this file and notes | yes |
 | `build/` | built DLL and `regulation.bin` | no |
-| `owassets/` | converted Overwatch assets | no |
+| `D:\GenjiBridgeAssets` (outside the repo) | extracted and converted Overwatch assets | no |
 | `erdata/` | unpacked copy of your vanilla `regulation.bin` | no |
 | `backups/` | copies of your saves | no |
 | `logs/` | game logs | no |
@@ -154,7 +154,7 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 |---|---|---|---|
 | 0 | Repo, rules, this plan | reading this file | |
 | 1 | **Done 2026-10-07.** **Lab setup**: build tools, me3 profile with separate save, save backup script, "hello" DLL that logs boot and the player's position once per second | launch through me3, walk around, quit | `genji.log` shows boot OK and positions changing; your normal save untouched |
-| 2 | **Asset recon**: DataTool lists heroes and extracts Genji (model, animations, sounds) from your Steam Overwatch into `owassets/`. **Blocked since 2026-10-07** until DataTool supports Overwatch 2.25; steps 3 to 9 go first. | `tools\extract_genji.ps1` | file counts and names logged; Genji's first-person model found (or not) |
+| 2 | **Asset recon**: DataTool lists heroes and extracts Genji (model, animations, sounds) into `D:\GenjiBridgeAssetsaw`. Your live Overwatch is newer than DataTool v2.24.1 supports, so (2026-10-08) you downloaded the Sept 8 build with Steam's `download_depot` (depots 2357571, 2357572, 2437288), combined with hard links into `D:\SteamDepotDownloadspp_2357570\Overwatch_2.24.1`; DataTool reads it (build prometheus-2_24_1_0-153264). | `tools\extract_genji.ps1` | file counts and names logged; Genji's first-person model found (or not) |
 | 3 | **Done 2026-10-07.** **Input**: our DLL reads keys and mouse; Elden Ring stops seeing Genji's keys | press each key in game | each key logged once per press; Elden Ring doesn't roll on Shift |
 | 4 | **Done 2026-10-07.** **First-person camera** | look around, walk | camera at head height follows the mouse; your character body hidden |
 | 5 | **Done 2026-10-07** (see 5b). **Movement**: Overwatch speed, double jump, wall climb, safe gravity and fall damage | run, jump, climb, drop from a ledge | speeds and jump heights match `genji.toml`; no fall death from small drops |

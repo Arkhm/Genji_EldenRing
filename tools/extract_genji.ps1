@@ -1,16 +1,22 @@
-# Step 2: extract Genji's model, animations, ability effects and voice lines from YOUR Overwatch install into
-# owassets\raw\ (gitignored, never committed). Read-only on the Overwatch folder. DataTool runs with
-# --online=false so it never downloads anything from Blizzard. Overwatch does not need to be running.
+# Step 2: extract Genji's model, animations, ability effects and voice lines from YOUR Overwatch files into
+# D:\GenjiBridgeAssets\raw (outside the repository, so never committed; C: is full, your choice 2026-10-08).
+# Read-only on the Overwatch folder. DataTool runs with --online=false so it never downloads anything from
+# Blizzard. Overwatch does not need to be running.
+#
+# Default source: the Sept 8 2026 build (prometheus-2_24_1_0-153264) you downloaded with Steam's download_depot,
+# combined with hard links into one folder, because DataTool v2.24.1 can't read your newer live install. Pass
+# -Overwatch "D:\SteamLibrary\steamapps\common\Overwatch" once a DataTool release supports it.
 #
 # Every DataTool output goes to logs\datatool-*.txt; a file count summary goes to logs\extract-summary.txt.
 param(
-    [string]$Overwatch = "D:\SteamLibrary\steamapps\common\Overwatch",
-    [string]$Skin = "Overwatch 2"
+    [string]$Overwatch = "D:\SteamDepotDownloads\app_2357570\Overwatch_2.24.1",
+    [string]$Skin = "Overwatch 2",
+    [string]$Assets = "D:\GenjiBridgeAssets"
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $dt = Join-Path $root "third_party\datatool\DataTool.exe"
-$out = Join-Path $root "owassets\raw"
+$out = Join-Path $Assets "raw"
 $logs = Join-Path $root "logs"
 if (-not (Test-Path $dt)) { throw "DataTool not found. Run tools\get_datatool.ps1 first." }
 New-Item -ItemType Directory -Force $out, $logs | Out-Null
