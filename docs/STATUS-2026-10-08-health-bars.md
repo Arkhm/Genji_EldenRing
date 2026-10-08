@@ -1,5 +1,10 @@
 # STATUS: enemy health bars drawn away from the enemy in first person
 
+## Resolved (2026-10-08, option B)
+With the Overwatch field of view set through LockCamParam (commit `daa46d6`), the game produces 70.5 itself
+(`CAMERA ... the game's own fov this frame: follow 70.5, chr_cam 70.5`) and you saw the bars stay on the enemies.
+Far-away enemies' bars are slightly off, but their sounds are right; you said that's not a problem.
+
 Date: 2026-10-08
 Step: 4 (first-person camera) and 12 (HUD); see `docs/DESIGN.md`
 
