@@ -61,7 +61,16 @@ const COYOTE_TIME: f32 = 0.1;
 const DASH_DISTANCE: f32 = 15.0;
 const DASH_SPEED: f32 = 50.0;
 /// A dash started on the ground lifts off when the view points up more than this (vertical part of the direction).
-const DASH_LIFT: f32 = 0.05;
+/// Was 0.05 (about 3 degrees). Test of 2026-10-08 (ghost dash): a dash started on the ground while looking 3 degrees up
+/// lifted off, skimmed along the ground with no ground check, went into rising terrain and the character fell through
+/// the map. Now about 7 degrees.
+const DASH_LIFT: f32 = 0.12;
+/// While in the air, a ray from this far above the feet checks we haven't sunk into the ground (same test: the dash
+/// ended inside the terrain and the landing ray, starting below the surface, never found it). Metres.
+const SUNK_CHECK: f32 = 0.6;
+/// Pushes from the game's collision are only ignored mid-dash when a character is this close (the pushes that
+/// redirected the dash came from bodies; pushes out of terrain must stay). Metres.
+const DASH_PUSH_BODY_RANGE: f32 = 2.0;
 /// Aiming down at least this much (vertical part of the view direction), a dash stops where the view meets the
 /// ground (your rule, 2026-10-08: "Genji stops where the dash hits the ground"). The ray starts at eye height.
 const DASH_AIM_DOWN: f32 = -0.02;
@@ -364,10 +373,16 @@ impl Mover {
             } else {
                 self.outside_push += moved;
                 frame_push = moved;
-                if self.dash_left > 0.0 && moved > 0.01 {
-                    // Swift Strike goes straight through: undo pushes from the game's own collision (test of
-                    // 2026-10-08: in a row of enemies, one dying in front pushed us 2.07 m aside mid-dash).
-                    glog!("DASH", "ignored a {moved:.2} m push from the game's collision");
+                let body_near = || {
+                    obstacles::bodies(&player.chr_ins, last, DASH_PUSH_BODY_RANGE).iter().any(|b| {
+                        b.pos.y <= last.y + HEAD_HEIGHT && b.pos.y + b.height >= last.y
+                    })
+                };
+                if self.dash_left > 0.0 && moved > 0.01 && body_near() {
+                    // Swift Strike goes straight through characters: undo their pushes (test of 2026-10-08: in a
+                    // row of enemies, one dying in front pushed us 2.07 m aside mid-dash). Only with a character
+                    // close by: a push out of terrain is kept.
+                    glog!("DASH", "ignored a {moved:.2} m push from the game's collision (character close by)");
                     start = last;
                 }
             }
@@ -492,6 +507,18 @@ impl Mover {
                     self.apex_y = pos.y;
                     glog!("MOVE", "left the ground at ({:.2}, {:.2}, {:.2}); what each filter sees here:", pos.x, pos.y, pos.z);
                     choose_filter(phys_world, player, pos, w, true);
+                }
+            }
+        }
+        if !self.grounded {
+            // Sunk into the ground (tunnelled in, or the game's collision put us there)? Back on top.
+            if let Some(hit) = ray(phys_world, player, self.filter, pos + Vec3::Y * SUNK_CHECK, Vec3::NEG_Y * SUNK_CHECK, w) {
+                if hit.y > pos.y + 0.02 {
+                    glog!("MOVE", "feet {:.2} m below a surface in the air: put back on top ({:.2}, {:.2}, {:.2})", hit.y - pos.y, hit.x, hit.y, hit.z);
+                    pos.y = hit.y + GROUND_GAP;
+                    if self.vy < 0.0 {
+                        self.vy = 0.0;
+                    }
                 }
             }
         }
@@ -692,8 +719,23 @@ impl Mover {
     }
 
     /// Call every frame, before anything else: when HP drops, writes the black box to the log.
+    /// Lets the controller try again after it gave up (respawn, or Genji mode switched off with F9). Test of
+    /// 2026-10-08: after falling through the map, Genji mode never came back that session.
+    pub fn allow_again(&mut self, why: &str) {
+        if self.gave_up {
+            self.gave_up = false;
+            self.ever_hit = false;
+            self.frames_since_start = 0;
+            self.fall_time = 0.0;
+            glog!("MOVE", "controller may take over again ({why})");
+        }
+    }
+
     pub fn watch_hp(&mut self, player: &PlayerIns) {
         let hp = player.chr_ins.modules.data.hp;
+        if self.last_hp.is_some_and(|last| last <= 0) && hp > 0 {
+            self.allow_again("respawned");
+        }
         if let Some(last) = self.last_hp
             && hp < last
             && !self.black_box.is_empty()

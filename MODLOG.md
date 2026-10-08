@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Fell through the map after a ghost dash: three fixes
+
+**Changed:** `genji/src/movement.rs`:
+1. Mid-dash, a push from the game's collision is only undone when a character is within 2 m (pushes out of terrain
+   are kept).
+2. In the air, every frame, a ray from 0.6 m above the feet checks we haven't sunk into the ground; if we have, the
+   feet go back on top.
+3. A dash lifts off the ground only when looking up more than about 7 degrees (was 3).
+4. After the controller gave up, it may take over again after a respawn or when Genji input is released (F9 off,
+   or a menu).
+
+`genji/src/camera.rs`: wiring.
+
+**Why:** Your test of commit `0e13c9f`: everything else works (Dragonblade through shields, wider cone, melee
+breaking guards, Deflect during Dragonblade). But the ghost dash (dash, kill, 180, dash again) dropped you through
+the map, and after respawning Genji mode never came back. The ghost dash itself worked (three resets 0.4 s apart).
+The log shows:
+- Dash #5 started on the ground looking 3 degrees up, so it lifted off and skimmed at ground height with no ground
+  check.
+- Rising terrain pushed us 0.3 m per frame back out, and the dash undid every push (the body-redirect fix).
+- It ended inside the terrain, the landing ray (starting below the surface) never found ground, and the 5 s
+  falling safety net gave up for the whole session.
+
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Ghost dash on slopes.
+- Whether the sunk check misfires next to ledges (it could put us on top of a ledge we jump beside; that's also
+  how a vault ends).
+
+**Next:** Your test.
+
 ## 2026-10-08 Dragonblade ignores shields, wider cone; melee breaks guards; Deflect allowed during Dragonblade
 
 **Changed:**

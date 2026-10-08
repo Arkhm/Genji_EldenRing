@@ -135,6 +135,9 @@ fn camera_step_inner(dt: f32) -> bool {
     // person is on; restored otherwise.
     set_lock_cam_fov(&mut view.lock_cam_fov, reason.is_none());
 
+    if reason == Some("Genji input not captured") {
+        view.mover.allow_again("Genji input released (F9 or a menu)");
+    }
     if reason.is_some() {
         view.firing.tick(dt, false, false, false);
         view.deflect.tick(dt, false, false);
