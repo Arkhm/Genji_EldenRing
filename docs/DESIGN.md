@@ -334,10 +334,11 @@ was off because of a rear threat, and HP changes while deflecting.
 
 **8b, sending projectiles back (built 2026-10-08):**
 - Enemy projectiles within 3 m of our chest, flying at us from the front, are removed.
-- For each one, a Bone Dart (its rows changed in memory while Genji mode is on) is fired along our aim, at the
-  original's speed. It carries the original's damage values from its AtkParam_Npc row.
-- Not the same projectile row: an enemy projectile's damage row is an NPC one, and spawning it as ours could make
-  the game look it up in the player table.
+- For each one, the same kind of projectile (its own Bullet row) is fired back along our aim, owned by us.
+- While deflecting, that kind's Bullet row points at our damage row (the Bone Dart's AtkParam_Pc, changed in memory
+  to carry the original's damage values). Fired by us, the game looks damage up among the player's rows, where the
+  NPC row doesn't exist.
+- If the game refuses a kind, the Bone Dart (changed in memory) goes instead.
 - Kill credit goes to the character under the crosshair (approximation).
 
 **Unknowns:** whether the invincible flag also stops hit reactions and status buildup (the log and you will tell);

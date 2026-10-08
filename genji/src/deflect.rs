@@ -3,7 +3,7 @@
 //! frame where nothing threatens from behind (no living enemy within REAR_RANGE in our rear half, no enemy
 //! projectile within REAR_RANGE flying the way we face, i.e. coming from behind). Sending projectiles back is step 8b.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use eldenring::cs::{AtkParam_Npc, AtkParam_Pc, Bullet as BulletParam, CSBulletManager, PlayerIns, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
@@ -46,6 +46,8 @@ pub struct Deflect {
     reflected_total: u32,
     /// The Bone Dart rows' vanilla values while ours are applied.
     dart_vanilla: Option<DartValues>,
+    /// Caught projectile kinds (Bullet rows) pointed at our damage row while deflecting: row -> its own damage row.
+    retargeted: HashMap<u32, i32>,
 }
 
 #[derive(Clone, Copy)]
@@ -147,6 +149,7 @@ impl Deflect {
     pub fn reflect(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
         if !self.active() {
             self.reflected.clear();
+            self.restore_kinds();
             return;
         }
         let Some(dart) = self.dart_vanilla else {
@@ -230,7 +233,28 @@ impl Deflect {
         let dir = (aim - from).normalize_or(forward);
         let right = Vec3::Y.cross(dir).normalize_or(look.right());
         let up = dir.cross(right).normalize_or(Vec3::Y);
-        let result = crate::shuriken::spawn(player, REFLECT_BULLET as i32, from, right, up, dir);
+        // Send it back as itself (your choice, 2026-10-08): the same Bullet row, fired by us. An enemy projectile's
+        // damage row is an NPC one (AtkParam_Npc); fired by us the game would look it up among the player's rows, so
+        // while deflecting that kind is pointed at our damage row (the Bone Dart's AtkParam_Pc, carrying the copied
+        // values above). If the game refuses it, the Bone Dart goes instead.
+        let mut sent_as = "itself";
+        let mut result = Err(3);
+        if param_id > 0 {
+            let row = param_id as u32;
+            if let Ok(params) = unsafe { SoloParamRepository::instance_mut() } {
+                if let Some(b) = params.get_mut::<BulletParam>(row) {
+                    if !self.retargeted.contains_key(&row) {
+                        self.retargeted.insert(row, b.atk_id_bullet());
+                    }
+                    b.set_atk_id_bullet(dart.atk_row as i32);
+                }
+            }
+            result = crate::shuriken::spawn(player, param_id, from, right, up, dir);
+        }
+        if result.is_err() {
+            sent_as = "Bone Dart (the game refused the original kind)";
+            result = crate::shuriken::spawn(player, REFLECT_BULLET as i32, from, right, up, dir);
+        }
         // Kill credit: the character under the crosshair, if any (approximation: the dart's own hit isn't tracked).
         let mut credited = None;
         for t in crate::targets::living(player) {
@@ -243,7 +267,7 @@ impl Deflect {
         self.reflected_total += 1;
         glog!(
             "DEFLECT",
-            "sent back projectile {param_id} (#{} total) at {speed:.0} m/s with damage phys/mag/fire/lightning/holy {:?} (from {source}), aim {aim_distance:.1} m{}: {}",
+            "sent back projectile {param_id} as {sent_as} (#{} total), dart speed {speed:.0} m/s, damage phys/mag/fire/lightning/holy {:?} (from {source}), aim {aim_distance:.1} m{}: {}",
             self.reflected_total,
             atk,
             credited.map(|c| format!(", at character {c:#x}")).unwrap_or_default(),
@@ -252,6 +276,22 @@ impl Deflect {
                 Err(code) => format!("FAILED, engine error {code}"),
             }
         );
+    }
+
+    /// Points the caught kinds back at their own damage rows (when Deflect ends or Genji mode lets go).
+    fn restore_kinds(&mut self) {
+        if self.retargeted.is_empty() {
+            return;
+        }
+        if let Ok(params) = unsafe { SoloParamRepository::instance_mut() } {
+            for (row, atk) in &self.retargeted {
+                if let Some(b) = params.get_mut::<BulletParam>(*row) {
+                    b.set_atk_id_bullet(*atk);
+                }
+            }
+        }
+        glog!("DEFLECT", "{} projectile kinds pointed back at their own damage rows", self.retargeted.len());
+        self.retargeted.clear();
     }
 
     /// Applies (true) or restores (false) the returned projectile's values on the Bone Dart rows, in memory.
@@ -308,6 +348,11 @@ impl Deflect {
                 self.dart_vanilla = Some(v);
             }
             Some(v) => {
+                for (row, atk) in self.retargeted.drain() {
+                    if let Some(b) = params.get_mut::<BulletParam>(row) {
+                        b.set_atk_id_bullet(atk);
+                    }
+                }
                 if let Some(b) = params.get_mut::<BulletParam>(REFLECT_BULLET) {
                     b.set_sfx_id_flick(v.sfx_flick);
                     b.set_bullet_sfx_delete_type_by_hit(v.sfx_delete_by_hit);

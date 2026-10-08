@@ -3,6 +3,28 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Deflect sends projectiles back as themselves
+
+**Changed:** `genji/src/deflect.rs`:
+- A caught projectile is fired back with its own Bullet row, so arrows come back as arrows and pebbles as pebbles,
+  owned by us.
+- While deflecting, each caught kind's Bullet row points at our damage row (the Bone Dart's AtkParam_Pc, carrying
+  the copied values), because fired by us the game looks damage up among the player's rows. Restored when Deflect
+  ends or Genji mode lets go.
+- If the game refuses a kind, the Bone Dart goes instead (`as Bone Dart` in the log).
+
+**Why:** Your choice (option B). Your test of commit `fbd85e9`: Deflect works on arrows, Glintstone Pebbles and the
+two-headed mage's volleys. Log: 40 sent back, all ok (arrows 100 physical, pebbles 120-190 magic, six caught in one
+frame).
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- How special kinds behave fired by us (homing, exploding spells).
+- An enemy firing the same kind while we deflect also uses our row (same values).
+- Cooldown still 1 s for testing.
+
+**Next:** Your test.
+
 ## 2026-10-08 Step 8b: Deflect sends projectiles back; cooldown 1 s for testing
 
 **Changed:**
