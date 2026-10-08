@@ -41,7 +41,7 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   the first-person view is on (part of step 12). Tested 2026-10-07: it shows up.
 - All Genji damage scales with dexterity (Elden Ring's own scaling curve, grade A). **Not tested** yet.
 - Swift Strike (step 7): Left Shift dashes about 15 m where you look, through enemies (50 damage each), stopped by
-  walls; 8 s cooldown, reset by a kill (tested 2026-10-08). Each dash hit is a real game hit with half a bar of bleed
+  walls; 8 s cooldown, reset by a kill (tested 2026-10-08). Each dash hit is a real game hit and makes the enemy bleed
   (**not tested** yet).
 - `tools/play_nomod.ps1` starts the Genji save without our DLL, to tell mod problems from game behaviour.
 

@@ -25,9 +25,10 @@ const STRIKE_GAP: f32 = 0.3;
 /// Attack power = 50 x dexterity multiplier x this. 1.0 keeps the dash near the damage you called perfect (76 at
 /// dexterity 25, when it lowered HP directly).
 const DASH_ATTACK_FACTOR: f32 = 1.0;
-/// Half a bar of bleed per hit (your choice; Overwatch's beta Genji had bleed on Swift Strike): the buildup is this
-/// share of the target's own bleed resistance (NpcParam `resistBlood`). 999 and above means immune: no buildup.
-const BLEED_SHARE: f32 = 0.5;
+/// Every dash hit makes the target bleed (your choice, 2026-10-08, replacing half a bar): the buildup is far above any
+/// bleed bar. Half a bar didn't proc on guards: two hits 4+ s apart, and the buildup fades in between. A target with
+/// bleed resistance 999 or more (NpcParam `resistBlood`) is immune: no buildup.
+const BLEED_PROC: i32 = 9999;
 const BLEED_IMMUNE: u16 = 999;
 /// If the game registered no hit within this many frames, the dash's damage is applied directly instead.
 const CONFIRM_FRAMES: u32 = 10;
@@ -253,7 +254,7 @@ impl Swift {
             if let Some(npc) = params.get::<NpcParam>(chr.npc_param_id as u32) {
                 resist = npc.resist_blood();
                 if resist > 0 && resist < BLEED_IMMUNE {
-                    bleed = (resist as f32 * BLEED_SHARE).round() as i32;
+                    bleed = BLEED_PROC;
                 }
             }
             if let Some(sp) = params.get_mut::<SpEffectParam>(v.sp_effect as u32) {

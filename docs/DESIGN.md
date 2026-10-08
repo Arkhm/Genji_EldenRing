@@ -313,7 +313,7 @@ negation and shields then apply as for any weapon, and the damage number is righ
   confirmed headshot we add the same damage again ourselves (x2 like Overwatch). That extra part isn't in the
   number.
 - **Swift Strike (next part):** each enemy the dash touches gets an invisible point-blank projectile (the Kukri's
-  row, in memory: no flight visual, our attack power, and later the half bar of bleed), so the game registers a real
+  row, in memory: no flight visual, our attack power), and every hit makes the enemy bleed (since 2026-10-08), so the game registers a real
   hit: number, sound, reaction, bleed.
 - The `HIT` lines log the attack power and what the game dealt, to tune ATTACK_FACTOR.
 
