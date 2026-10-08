@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Test of dexterity scaling and chr_cam FOV; STATUS.md for health bars
+
+**Changed:** `STATUS.md` (new: health bars, two failed attempts, options); the old one (shuriken limit, resolved)
+moved to `docs/STATUS-2026-10-07-shuriken-limit.md`. Test of commits `a61dc64`, `4405f4e`.
+**Why:** You: damage still seems weak; health bars further away than before.
+**Tested how:** I read `logs/genji.log`.
+**Result:** Scaling works in the numbers: `SCALING dexterity 25: x1.52 (shuriken 41/82, Swift Strike 76)`; hits take
+41 / 82 / 76 HP (e.g. headshot hp 210 -> 128). What looks weak is the floating damage number: it shows only the
+game's own small hit (4), not the HP we take directly. Health bars: two attempts failed, written up in STATUS.md.
+**Still broken / not tested:** Damage numbers show only the game's part; health bars.
+**Next:** Your choice in STATUS.md, and how damage should be dealt (asked you).
+
 ## 2026-10-08 Dexterity scaling for all Genji damage; full shuriken damage again
 
 **Changed:** New `genji/src/scaling.rs`: damage = Overwatch base x (1 + 1.5 x curve(dexterity)/100), with Elden Ring's
