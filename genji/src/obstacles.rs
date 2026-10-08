@@ -62,6 +62,50 @@ pub fn nearby(me: &ChrIns, center: Vec3) -> Vec<Obstacle> {
         .collect()
 }
 
+/// A character's collision cylinder, dead or alive. Swift Strike passes through these: the map rays also hit
+/// characters (and dead bodies), and the dash ignores such hits (test of 2026-10-08: shielded soldiers and enemies
+/// killed in the path "body blocked" the dash).
+#[derive(Clone, Copy)]
+pub struct Body {
+    pub pos: Vec3,
+    pub radius: f32,
+    pub height: f32,
+}
+
+/// Every character within `range` (horizontally) of `center`, dead or alive, except `me`.
+pub fn bodies(me: &ChrIns, center: Vec3, range: f32) -> Vec<Body> {
+    let Ok(world) = (unsafe { WorldChrMan::instance() }) else {
+        return Vec::new();
+    };
+    let me_id = me as *const ChrIns as usize;
+    world
+        .chr_inses_by_distance
+        .iter()
+        .take(MAX_CHECKED)
+        .filter(|entry| entry.chr_ins.as_ptr() as usize != me_id)
+        .filter_map(|entry| {
+            let physics = &unsafe { entry.chr_ins.as_ref() }.modules.physics;
+            let p = physics.position;
+            let pos = Vec3::new(p.0, p.1, p.2);
+            if Vec3::new(pos.x - center.x, 0.0, pos.z - center.z).length() > range {
+                return None;
+            }
+            let radius = physics.hit_radius.max(physics.chr_hit_radius).clamp(0.2, 3.0);
+            let height = physics.hit_height.max(physics.chr_hit_height).clamp(0.5, 8.0);
+            Some(Body { pos, radius, height })
+        })
+        .collect()
+}
+
+/// Is `p` within `margin` of any of these bodies?
+pub fn inside_any(p: Vec3, bodies: &[Body], margin: f32) -> bool {
+    bodies.iter().any(|b| {
+        p.y >= b.pos.y - margin
+            && p.y <= b.pos.y + b.height + margin
+            && Vec3::new(p.x - b.pos.x, 0.0, p.z - b.pos.z).length() <= b.radius + margin
+    })
+}
+
 /// Removes the part of `delta` (horizontal move from `start`) that would take us into a character.
 /// Returns the clipped move and whether anything was in the way.
 pub fn clip(start: Vec3, delta: Vec3, my_radius: f32, my_height: f32, obstacles: &[Obstacle]) -> (Vec3, bool) {

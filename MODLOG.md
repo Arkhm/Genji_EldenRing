@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Swift Strike passes through bodies (living and dead)
+
+**Changed:** `genji/src/obstacles.rs`: `bodies()` lists every character's cylinder, dead or alive. `genji/src/movement.rs`:
+during a dash, the map rays (wall stop and the "aimed at the ground" ray) skip hits within 0.6 m of a body and go on.
+**Why:** Your test of commit `e43bc3c`: shielded enemies, and enemies killed in the path, body-blocked the dash. The
+log shows why: the map rays also hit characters. Aiming slightly down at an enemy, the "aimed at the ground" ray hit
+the enemy's body (e.g. "3.8 m ahead" where the view meets the ground about 9 m ahead), so the dash stopped there.
+**Tested how:** Build OK; 22 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Dashing through shielded soldiers and dead bodies.
+**Next:** Camera sync (health bars, sound), FOV, then the half bar of bleed.
+
 ## 2026-10-08 Swift Strike: wider hit reach; stops where you aim at the ground
 
 **Changed:** `genji/src/swift.rs`: the dash hits characters within 0.5 m beyond our body (`REACH`; a soldier is hit

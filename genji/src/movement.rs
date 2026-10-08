@@ -33,7 +33,7 @@ use glam::Vec3;
 
 use crate::glog;
 use crate::look::Look;
-use crate::obstacles::{self, ContactMonitor};
+use crate::obstacles::{self, Body, ContactMonitor};
 
 /// Overwatch ground speed for most heroes, metres per second.
 const RUN_SPEED: f32 = 5.5;
@@ -66,6 +66,11 @@ const DASH_LIFT: f32 = 0.05;
 /// ground (your rule, 2026-10-08: "Genji stops where the dash hits the ground"). The ray starts at eye height.
 const DASH_AIM_DOWN: f32 = -0.02;
 const DASH_EYE_HEIGHT: f32 = 1.6;
+/// The dash passes through characters: ray hits within this distance of a character's body (dead or alive) are
+/// ignored, metres (a held shield or a falling dead body sticks out beyond the body's collision radius).
+const DASH_BODY_MARGIN: f32 = 0.6;
+/// Characters this far around the dash start are considered for that.
+const DASH_BODY_RANGE: f32 = 20.0;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
 const HEAD_HEIGHT: f32 = 1.75;
 // No fall damage in Genji mode (your choice, 2026-10-07, like Overwatch). Falls are only logged. An Elden
@@ -359,6 +364,11 @@ impl Mover {
         }
 
         // Swift Strike: start a dash along the view.
+        let bodies: Vec<Body> = if wish.dash || self.dash_left > 0.0 {
+            obstacles::bodies(&player.chr_ins, start, DASH_BODY_RANGE)
+        } else {
+            Vec::new()
+        };
         if wish.dash && self.dash_left <= 0.0 {
             self.dash_dir = look.forward();
             self.dash_left = DASH_DISTANCE / DASH_SPEED;
@@ -369,7 +379,7 @@ impl Mover {
             self.dash_stop = None;
             if self.dash_dir.y <= DASH_AIM_DOWN {
                 let eye = start + Vec3::Y * DASH_EYE_HEIGHT;
-                if let Some(hit) = ray(phys_world, player, self.filter, eye, self.dash_dir * DASH_DISTANCE, w) {
+                if let Some(hit) = ray_through_bodies(phys_world, player, self.filter, eye, self.dash_dir * DASH_DISTANCE, w, &bodies) {
                     let flat = Vec3::new(hit.x - start.x, 0.0, hit.z - start.z).length();
                     self.dash_stop = Some(flat);
                     glog!("DASH", "aimed at the ground {flat:.1} m ahead ({:.2}, {:.2}, {:.2}): stops there", hit.x, hit.y, hit.z);
@@ -412,7 +422,7 @@ impl Mover {
             self.character_blocks += 1;
         }
         let heights: &[f32] = if self.grounded { &WALL_RAY_HEIGHTS } else { &AIR_WALL_RAY_HEIGHTS };
-        let horizontal = self.clip_horizontal(phys_world, player, start, wanted, w, heights);
+        let horizontal = self.clip_horizontal(phys_world, player, start, wanted, w, heights, &bodies);
         let mut pos = start + horizontal;
 
         // Jump: Space pressed (not held) while on the ground, or just after walking off an edge.
@@ -699,6 +709,7 @@ impl Mover {
         wanted: Vec3,
         w: f32,
         heights: &[f32],
+        bodies: &[Body],
     ) -> Vec3 {
         let len = wanted.length();
         if len < 1e-5 {
@@ -714,7 +725,7 @@ impl Mover {
             let mut allowed = l;
             for &h in heights {
                 let origin = start + Vec3::Y * h;
-                if let Some(hit) = ray(world, player, filter, origin, dir * (l + RADIUS), w) {
+                if let Some(hit) = ray_through_bodies(world, player, filter, origin, dir * (l + RADIUS), w, bodies) {
                     let dist = Vec3::new(hit.x - origin.x, 0.0, hit.z - origin.z).length() - RADIUS;
                     allowed = allowed.min(dist.max(0.0));
                 }
@@ -791,6 +802,38 @@ fn ray(world: &eldenring::cs::CSPhysWorld, player: &PlayerIns, filter: u32, orig
         player,
     )?;
     Some(Vec3::new(hit.0, hit.1, hit.2))
+}
+
+/// Like `ray`, but hits within DASH_BODY_MARGIN of one of `bodies` (characters) are skipped and the ray goes on.
+/// With no bodies it is `ray`.
+fn ray_through_bodies(
+    world: &eldenring::cs::CSPhysWorld,
+    player: &PlayerIns,
+    filter: u32,
+    origin: Vec3,
+    delta: Vec3,
+    w: f32,
+    bodies: &[Body],
+) -> Option<Vec3> {
+    let length = delta.length();
+    if bodies.is_empty() || length < 1e-5 {
+        return ray(world, player, filter, origin, delta, w);
+    }
+    let dir = delta / length;
+    let (mut from, mut left) = (origin, length);
+    for _ in 0..8 {
+        let hit = ray(world, player, filter, from, dir * left, w)?;
+        if !obstacles::inside_any(hit, bodies, DASH_BODY_MARGIN) {
+            return Some(hit);
+        }
+        let skip = (hit - from).length() + 0.3;
+        from += dir * skip;
+        left -= skip;
+        if left <= 0.0 {
+            return None;
+        }
+    }
+    None
 }
 
 /// Turns the (hidden) body to face where we look. The character's forward is its rotation applied to (0, 0, -1)
