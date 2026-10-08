@@ -19,10 +19,12 @@ UI = r'D:\GenjiBridgeAssets\ui-textures\UITextureDump'
 VEC = r'D:\GenjiBridgeAssets\ui-vectors\VectorImages'
 OUT = r'D:\GenjiBridgeAssets\hud'
 
-# The side bust Overwatch's HUD shows (helmet facing right, horn on top), 368x500.
-PORTRAIT = os.path.join(RAW, r'Heroes\Genji\GUI\0000000106EC.01C.png')
-# Head-and-shoulders crop of it (left, top, right, bottom), matched to your Overwatch screenshot of 2026-10-08.
-PORTRAIT_CROP = (120, 36, 340, 290)
+# Genji's helmet portrait, 256x256 (your choice, 2026-10-08: keep this picture, only fix the framing).
+PORTRAIT = os.path.join(RAW, r'Heroes\Genji\GUI\0000000040C7.01C.png')
+# Crop of it (left, top, right, bottom): all of it, zoomed so it fills the hexagon and the helmet rises over the top.
+PORTRAIT_CROP = (0, 0, 256, 256)
+# This picture is an opaque square: it stays inside the hexagon (a transparent bust could rise over the top edge).
+RISE_ABOVE = False
 HEX_FILL = os.path.join(UI, '000000039E89.png')     # 100x120 filled hexagon
 HEX_OUTLINE = os.path.join(UI, '000000027AB5.png')  # 120x144 hexagon outline
 ULT_DISC = os.path.join(UI, '000000021660.png')     # 120x120 dark disc with ring
@@ -53,15 +55,17 @@ def main():
     # Where the portrait may show: the hexagon, plus the band above its upper half (between its side corners).
     show = hex_mask.copy()
     band = Image.new('L', (int(hex_w * 0.84), rise + hex_h // 2), 255)
-    show.paste(band, (hx + int(hex_w * 0.08), pad), band)
+    if RISE_ABOVE:
+        show.paste(band, (hx + int(hex_w * 0.08), pad), band)
     canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     inside = Image.new('RGBA', (W, H), (14, 26, 44, 225))
     canvas.paste(inside, (0, 0), hex_mask)
     bust = Image.open(PORTRAIT).convert('RGBA').crop(PORTRAIT_CROP)
-    bw = int(hex_w * 1.22)
+    bw = int(hex_w * (1.3 if RISE_ABOVE else 1.12))
     bust = bust.resize((bw, int(bust.height * bw / bust.width)), Image.LANCZOS)
     layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    layer.paste(bust, (hx + (hex_w - bw) // 2, pad))
+    top = pad if RISE_ABOVE else hy + (hex_h - bust.height) // 2
+    layer.paste(bust, (hx + (hex_w - bw) // 2, top))
     layer.putalpha(ImageChops.multiply(layer.getchannel('A'), show))
     canvas.alpha_composite(layer)
     # Outline: Overwatch's hexagon outline, thickened, cyan, with a blurred glow under it.
@@ -81,9 +85,10 @@ def main():
     # The helmet in front of the outline's top edge, as in Overwatch.
     top_only = Image.new('L', (W, H), 0)
     top_only.paste(band, (hx + int(hex_w * 0.08), pad), band)
-    helmet = layer.copy()
-    helmet.putalpha(ImageChops.multiply(helmet.getchannel('A'), top_only))
-    under.alpha_composite(helmet)
+    if RISE_ABOVE:
+        helmet = layer.copy()
+        helmet.putalpha(ImageChops.multiply(helmet.getchannel('A'), top_only))
+        under.alpha_composite(helmet)
     under.resize((W // 2, H // 2), Image.LANCZOS).save(os.path.join(OUT, 'portrait_hex.png'))
 
     Image.open(ULT_DISC).convert('RGBA').save(os.path.join(OUT, 'ult_disc.png'))

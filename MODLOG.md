@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Portrait: back to the original picture, fitted to fill the hexagon
+
+**Changed:** `tools/make_hud_art.py`: the portrait is Genji's helmet picture again (`0000000040C7`, your choice:
+"use this image, only fix the portrait"), zoomed so it fills the hexagon edge to edge, with the thick glowing cyan
+outline. It's an opaque square, so it stays inside the hexagon (no rising over the top edge, which would show a
+hard-edged block; that option remains for a transparent picture, `RISE_ABOVE`).
+**Why:** You, while I was building the previous entry.
+**Tested how:** Rebuilt `D:\GenjiBridgeAssets\hud\portrait_hex.png` and looked at it on a grey background. No code
+change in the mod (it reads the picture at startup).
+**Result:** Picture as intended; not seen in game yet.
+**Still broken / not tested:** In game.
+**Next:** Your test of the HUD changes.
+
 ## 2026-10-08 HUD: Overwatch-like portrait, same-size health numbers, ultimate higher with light, new cooldown flash
 
 **Changed:**
