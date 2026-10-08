@@ -47,7 +47,7 @@ pub fn percent() -> u32 {
     (s.charge / COST * 100.0) as u32
 }
 
-/// **Testing only (your request, 2026-10-08): F7 fills the charge. Remove once Dragonblade is validated.**
+/// **Testing only (2026-10-08, like the 1 s Deflect cooldown): F7 fills the charge. Remove once Dragonblade is validated.**
 pub fn fill_for_testing() {
     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
     s.charge = COST;
