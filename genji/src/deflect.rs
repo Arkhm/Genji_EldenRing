@@ -128,6 +128,11 @@ impl Deflect {
         self.left.is_some()
     }
 
+    /// Deflects started so far (the HUD plays its "pressed" animation when this changes).
+    pub fn uses(&self) -> u32 {
+        self.uses
+    }
+
     /// While deflecting: sets the invincible flag unless something threatens from behind. `feet`: our position;
     /// `forward`: where we look, flat. Call every frame (also when not deflecting: it clears the flag).
     pub fn apply(&mut self, player: &mut PlayerIns, feet: Vec3, forward: Vec3) {

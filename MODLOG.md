@@ -3,6 +3,26 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: "pressed" cyan ability boxes; bigger ultimate with breathing aura, blue flames and electric wisps
+
+**Changed:**
+- `genji/src/hud.rs`, ability boxes: when you dash or Deflect, the box dips in and springs back (0.22 s) and turns
+  cyan with a dark icon, as in your Overwatch frame. Swift Strike stays cyan 0.45 s (about the dash), Deflect for as
+  long as it is up. The key label stays lit meanwhile. The old pulsing cyan outline during Deflect is gone.
+- `genji/src/hud.rs`, ultimate:
+  - Bigger (radius 34 to 41 at 1080p), sized from your screenshot: white centre, thick bright blue/cyan ring, faint
+    outer ring, side markers outside the ring, Q just below.
+  - Ready: a blue aura breathing slowly (about 4 s per cycle); blue flame particles rising out of the ring and fading;
+    5 electric wisps that grow out of the ring, curl sideways, flicker and fade, each at a new place every time.
+    The rotating light rays are gone.
+- `swift.rs`, `deflect.rs`, `camera.rs`: use counters passed to the HUD (to know when to play the press).
+**Why:** You, with Overwatch frames of the ready ultimate and the pressed Swift Strike box.
+**Tested how:** Build and the 29 unit tests pass. The ult's wisps and flames were checked as a mock-up drawn from the
+same formulas outside the game (Python), to tune their length and curl. Not seen in game.
+**Result:** Not tested in game.
+**Still broken / not tested:** Everything above in game; F7 (fill ult) still in for testing.
+**Next:** Your test.
+
 ## 2026-10-08 Portrait: back to the original picture, fitted to fill the hexagon
 
 **Changed:** `tools/make_hud_art.py`: the portrait is Genji's helmet picture again (`0000000040C7`, your choice:

@@ -320,6 +320,8 @@ fn camera_step_inner(dt: f32) -> bool {
         reloading,
         swift_cooldown: view.swift.cooldown(),
         swift_cooldown_max: view.swift.cooldown_max(),
+        swift_uses: view.swift.uses(),
+        deflect_uses: view.deflect.uses(),
         deflect_left,
         deflect_cooldown,
         deflect_cooldown_max: view.deflect.cooldown_max(),

@@ -7,7 +7,7 @@
 //! HUD animations are engine effects, not pictures in its UI files, so they are redrawn here. A missing picture is
 //! logged and left out.
 
-use std::f32::consts::{FRAC_PI_2, TAU};
+use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -34,6 +34,13 @@ const ULT_TICKS: usize = 48;
 const FLASH: f32 = 0.6;
 /// Length of the flash when a cooldown finishes ("fast", your Overwatch frames), seconds.
 const COOLDOWN_FLASH: f32 = 0.45;
+/// Length of the "pressed" dip of an ability box, seconds.
+const PRESS: f32 = 0.22;
+/// How long Swift Strike's box stays cyan after the dash starts (the dash itself lasts about this long), seconds.
+const SWIFT_LIT: f32 = 0.45;
+/// Electric wisps around the ready ultimate, and blue flame particles.
+const ULT_WISPS: u32 = 5;
+const ULT_FLAMES: u32 = 40;
 
 /// Everything the HUD shows, written by the game thread each frame.
 #[derive(Clone, Copy, Default)]
@@ -47,6 +54,9 @@ pub struct State {
     pub reloading: Option<f32>,
     pub swift_cooldown: f32,
     pub swift_cooldown_max: f32,
+    /// Uses so far, to play the "pressed" animation when they change.
+    pub swift_uses: u32,
+    pub deflect_uses: u32,
     pub deflect_left: Option<f32>,
     pub deflect_cooldown: f32,
     pub deflect_cooldown_max: f32,
@@ -64,6 +74,8 @@ static STATE: Mutex<State> = Mutex::new(State {
     reloading: None,
     swift_cooldown: 0.0,
     swift_cooldown_max: 1.0,
+    swift_uses: 0,
+    deflect_uses: 0,
     deflect_left: None,
     deflect_cooldown: 0.0,
     deflect_cooldown_max: 1.0,
@@ -112,6 +124,11 @@ struct Anim {
     swift_ready_at: Option<f32>,
     deflect_ready_at: Option<f32>,
     ult_ready_at: Option<f32>,
+    /// Use counters last seen (None until the first frame, so loading in doesn't play a press).
+    swift_uses: Option<u32>,
+    deflect_uses: Option<u32>,
+    swift_pressed_at: Option<f32>,
+    deflect_pressed_at: Option<f32>,
 }
 
 // SAFETY: font ids are pointers into ImGui's font atlas; they are created and used only on the overlay's render
@@ -254,6 +271,14 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         r.anim.ult_ready_at = Some(now);
     }
     r.anim.ult_was_ready = ult_ready;
+    if r.anim.swift_uses.is_some_and(|u| u != s.swift_uses) {
+        r.anim.swift_pressed_at = Some(now);
+    }
+    r.anim.swift_uses = Some(s.swift_uses);
+    if r.anim.deflect_uses.is_some_and(|u| u != s.deflect_uses) {
+        r.anim.deflect_pressed_at = Some(now);
+    }
+    r.anim.deflect_uses = Some(s.deflect_uses);
 
     let k = height / REFERENCE_HEIGHT;
     let draw = ui.get_foreground_draw_list();
@@ -321,15 +346,17 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     }
 
     // ---- Bottom centre: the ultimate.
-    let radius = 34.0 * k;
-    let (cx, cy) = (width / 2.0, base - radius - 58.0 * k);
+    // Sizes measured on your Overwatch screenshot (2026-10-08): white centre 38, bright ring out to 57, centre 151
+    // above the bottom edge (at 1080 lines).
+    let radius = 41.0 * k;
+    let (cx, cy) = (width / 2.0, base - radius - 48.0 * k);
     // Faint outer rings and the dotted circle.
     for i in 0..60 {
         let a = TAU * i as f32 / 60.0;
-        let rr = radius * 1.62;
+        let rr = radius * 1.75;
         draw.add_circle([cx + rr * a.cos(), cy + rr * a.sin()], 0.9 * k, col([255, 255, 255, 55])).filled(true).build();
     }
-    draw.add_circle([cx, cy], radius * 1.32, col([255, 255, 255, 40])).thickness(1.5 * k).num_segments(72).build();
+    draw.add_circle([cx, cy], radius * 1.85, col([255, 255, 255, 40])).thickness(1.5 * k).num_segments(72).build();
     if let Some(left) = s.blade_left {
         // Dragonblade: glowing ring draining with the time left, the blade icon, seconds.
         let pulse = 0.75 + 0.25 * (now * 6.0).sin();
@@ -341,20 +368,25 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         let t = format!("{left:.1}");
         let tw = measure(r.italic_small, &t);
         text([cx - tw[0] / 2.0, cy + radius * 0.38], r.italic_small, CYAN, &t);
-        key_box(cx, cy + radius * 1.62 + 6.0 * k, "Q", false);
+        key_box(cx, cy + radius * 1.6, "Q", false);
     } else if ult_ready {
-        // Ready: pulsing blue glow, spinning light, white centre with the icon, side markers, burst when it arrives.
-        // Light around it: a wide soft blue halo breathing, a brighter inner glow, faint slow light rays.
-        let breathe = 0.5 + 0.5 * (now * 2.2).sin();
-        picture(&draw, r.glow_dot, [cx, cy], radius * (5.2 + 0.6 * breathe), 0.0, alpha(BLUE_GLOW, 0.55 + 0.25 * breathe));
-        picture(&draw, r.glow_dot, [cx, cy], radius * 3.2, 0.0, alpha([150, 225, 255, 255], 0.5 + 0.3 * breathe));
-        picture(&draw, r.flare, [cx, cy], radius * 4.2, now * 0.25, alpha([140, 210, 255, 255], 0.35 + 0.2 * breathe));
-        picture(&draw, r.glow_ring, [cx, cy], radius * 3.0, 0.0, alpha(BLUE_GLOW, 0.6 + 0.4 * breathe));
-        draw.add_circle([cx, cy], radius * 1.12, col(alpha(BLUE_GLOW, 0.9))).thickness(4.0 * k).num_segments(72).build();
-        draw.add_circle([cx, cy], radius * 0.92, col(PANEL_WHITE)).filled(true).num_segments(64).build();
+        // Ready (your Overwatch frames, 2026-10-08): a blue aura breathing slowly, blue flames licking out of the
+        // ring, electric wisps curling away from it; the thick bright ring, the white centre with the icon.
+        let breathe = 0.5 + 0.5 * (now * 1.6).sin();
+        picture(&draw, r.glow_dot, [cx, cy], radius * (4.4 + 0.8 * breathe), 0.0, alpha(BLUE_GLOW, 0.4 + 0.3 * breathe));
+        picture(&draw, r.glow_dot, [cx, cy], radius * (2.9 + 0.3 * breathe), 0.0, alpha([110, 200, 255, 255], 0.45 + 0.3 * breathe));
+        ult_flames(&draw, r.glow_dot, [cx, cy], radius, now);
+        ult_wisps(&draw, [cx, cy], radius, now, k);
+        picture(&draw, r.glow_ring, [cx, cy], radius * 2.9, 0.0, alpha(BLUE_GLOW, 0.7 + 0.3 * breathe));
+        // The ring: deep blue outside, bright cyan, light inner edge; a thin dark line around the white centre.
+        draw.add_circle([cx, cy], radius * 1.2, col([40, 120, 255, 255])).thickness(radius * 0.42).num_segments(96).build();
+        draw.add_circle([cx, cy], radius * 1.17, col([70, 215, 255, 255])).thickness(radius * 0.24).num_segments(96).build();
+        draw.add_circle([cx, cy], radius * 1.08, col([190, 245, 255, 255])).thickness(radius * 0.06).num_segments(96).build();
+        draw.add_circle([cx, cy], radius * 0.98, col([20, 40, 80, 255])).filled(true).num_segments(96).build();
+        draw.add_circle([cx, cy], radius * 0.93, col(PANEL_WHITE)).filled(true).num_segments(96).build();
         picture(&draw, r.blade, [cx, cy], radius * 1.25, 0.0, ICON_ON_WHITE);
         for side in [-1.0f32, 1.0] {
-            let x = cx + side * radius * 1.42;
+            let x = cx + side * radius * 1.62;
             draw.add_triangle([x, cy - 5.0 * k], [x, cy + 5.0 * k], [x - side * 7.0 * k, cy], col(WHITE)).filled(true).build();
         }
         if let Some(t0) = r.anim.ult_ready_at {
@@ -363,7 +395,7 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
                 picture(&draw, r.flare, [cx, cy], radius * (2.0 + 4.0 * p), 0.0, alpha(WHITE, 1.0 - p));
             }
         }
-        key_box(cx, cy + radius * 1.62 + 6.0 * k, "Q", true);
+        key_box(cx, cy + radius * 1.6, "Q", true);
     } else {
         // Charging: navy disc, teal ring, cyan ticks for the charge, italic number.
         draw.add_circle([cx, cy], radius, col(NAVY)).filled(true).num_segments(64).build();
@@ -378,37 +410,50 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         let t = s.ult_percent.to_string();
         let tw = measure(r.italic_big, &t);
         text([cx - tw[0] / 2.0, cy - tw[1] / 2.0], r.italic_big, WHITE, &t);
-        key_box(cx, cy + radius * 1.62 + 6.0 * k, "Q", false);
+        key_box(cx, cy + radius * 1.6, "Q", false);
     }
 
     // ---- Bottom right: Swift Strike and Deflect boxes, then the ammo panel.
     let size = 52.0 * k;
     let box_top = base - size - 16.0 * k;
     let mut x = width - 410.0 * k;
-    for (icon, key, cooldown, max, active, ready_at) in [
-        (r.swift, "LSHIFT", s.swift_cooldown, s.swift_cooldown_max, None, r.anim.swift_ready_at),
-        (r.deflect, "E", s.deflect_cooldown, s.deflect_cooldown_max, s.deflect_left, r.anim.deflect_ready_at),
+    let swift_lit = r.anim.swift_pressed_at.is_some_and(|t| now - t < SWIFT_LIT);
+    for (icon, key, cooldown, max, lit, pressed_at, ready_at) in [
+        (r.swift, "LSHIFT", s.swift_cooldown, s.swift_cooldown_max, swift_lit, r.anim.swift_pressed_at, r.anim.swift_ready_at),
+        (r.deflect, "E", s.deflect_cooldown, s.deflect_cooldown_max, s.deflect_left.is_some(), r.anim.deflect_pressed_at, r.anim.deflect_ready_at),
     ] {
         let ready = cooldown <= 0.0;
-        let (x0, y0, x1, y1) = (x, box_top, x + size, box_top + size);
-        if ready {
+        let (bx0, by1) = (x, box_top + size);
+        // Pressed (your Overwatch frame, 2026-10-08): the box dips in and springs back, and turns cyan with a dark
+        // icon while the ability runs.
+        let dip = pressed_at.map_or(0.0, |t| {
+            let p = (now - t) / PRESS;
+            if (0.0..1.0).contains(&p) { (PI * p).sin() } else { 0.0 }
+        });
+        let shrink = size * 0.12 * dip / 2.0;
+        let (x0, y0, x1, y1) = (bx0 + shrink, box_top + shrink, bx0 + size - shrink, by1 - shrink);
+        let bsize = x1 - x0;
+        if lit {
+            picture(&draw, r.glow_dot, [x0 + bsize / 2.0, y0 + bsize / 2.0], size * 2.4, 0.0, alpha(BLUE_GLOW, 0.55));
+            let (top, bottom) = (col([130, 245, 255, 255]), col([40, 195, 240, 255]));
+            draw.add_rect_filled_multicolor([x0, y0], [x1, y1], top, top, bottom, bottom);
+            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, [12, 40, 62, 255]);
+            draw.add_rect([bx0, by1 + 3.0 * k], [bx0 + size, by1 + 5.0 * k], col(CYAN)).filled(true).build();
+        } else if ready {
             draw.add_rect_filled_multicolor([x0, y0], [x1, y1], col(WHITE), col(PANEL_WHITE), col([205, 210, 220, 235]), col([215, 220, 228, 235]));
-            picture(&draw, icon, [x0 + size / 2.0, y0 + size / 2.0], size * 0.8, 0.0, ICON_ON_WHITE);
-            draw.add_rect([x0, y1 + 3.0 * k], [x1, y1 + 5.0 * k], col(PANEL_WHITE)).filled(true).build();
+            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, ICON_ON_WHITE);
+            draw.add_rect([bx0, by1 + 3.0 * k], [bx0 + size, by1 + 5.0 * k], col(PANEL_WHITE)).filled(true).build();
         } else {
             draw.add_rect([x0, y0], [x1, y1], col(COOLING)).filled(true).build();
             // Cyan rising from the bottom as the cooldown runs.
             let done = (1.0 - cooldown / max.max(0.01)).clamp(0.0, 1.0);
-            draw.add_rect([x0, y1 - size * done], [x1, y1], col(alpha(CYAN, 0.85))).filled(true).build();
-            picture(&draw, icon, [x0 + size / 2.0, y0 + size / 2.0], size * 0.8, 0.0, [255, 255, 255, 90]);
+            draw.add_rect([x0, y1 - bsize * done], [x1, y1], col(alpha(CYAN, 0.85))).filled(true).build();
+            picture(&draw, icon, [x0 + bsize / 2.0, y0 + bsize / 2.0], bsize * 0.8, 0.0, [255, 255, 255, 90]);
             let t = format!("{}", cooldown.ceil() as u32);
             let tw = measure(r.italic_big, &t);
-            text([x0 + (size - tw[0]) / 2.0, y0 + (size - tw[1]) / 2.0], r.italic_big, WHITE, &t);
+            text([x0 + (bsize - tw[0]) / 2.0, y0 + (bsize - tw[1]) / 2.0], r.italic_big, WHITE, &t);
         }
-        if active.is_some() {
-            let pulse = 0.6 + 0.4 * (now * 10.0).sin();
-            draw.add_rect([x0 - 2.0 * k, y0 - 2.0 * k], [x1 + 2.0 * k, y1 + 2.0 * k], col(alpha(CYAN, pulse))).thickness(3.0 * k).build();
-        }
+        let (x0, y0, y1) = (bx0, box_top, by1);
         // Ready flash (your Overwatch frames, 2026-10-08): a rectangle of light centred on the box, as tall above as
         // below, that shrinks to the box while losing its light, fast; a white core; pixel sparks drifting up.
         if let Some(t0) = ready_at {
@@ -436,7 +481,7 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
                 }
             }
         }
-        key_box(x0 + size / 2.0, y1 + 10.0 * k, key, ready);
+        key_box(x0 + size / 2.0, y1 + 10.0 * k, key, ready || lit);
         x += size + 12.0 * k;
     }
     // Ammo panel between two glowing cyan bars.
@@ -474,6 +519,75 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
             text([sx + 7.0 * k, mid - mt[1] / 2.0], r.bold_big, WHITE, &m);
         }
     }
+}
+
+/// A number in 0..1 from a seed (the same seed always gives the same number).
+fn hash(n: u32) -> f32 {
+    let mut x = n.wrapping_mul(0x9E37_79B9) ^ 0x85EB_CA6B;
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^= x >> 12;
+    (x & 0xFFFF) as f32 / 65536.0
+}
+
+/// Blue flames licking out of the ultimate's ring: soft glow particles that rise outward, swirl a little and fade.
+fn ult_flames(draw: &DrawListMut, glow: Picture, center: [f32; 2], radius: f32, now: f32) {
+    for i in 0..ULT_FLAMES {
+        let period = 0.9 + 0.6 * hash(i * 7 + 1);
+        let t = now / period + hash(i * 7 + 2);
+        let (cycle, u) = (t.floor() as u32, t.fract());
+        let seed = i * 977 + cycle * 131;
+        let a = TAU * hash(seed) + (hash(seed + 1) - 0.5) * 0.8 * u;
+        let rr = radius * (1.2 + 0.6 * u * (0.6 + 0.4 * hash(seed + 2)));
+        let fade = (u * 6.0).min(1.0) * (1.0 - u).powf(1.3);
+        let size = radius * (0.55 + 0.5 * u) * (0.7 + 0.5 * hash(seed + 3));
+        let c = [center[0] + rr * a.cos(), center[1] + rr * a.sin()];
+        picture(draw, glow, c, size, 0.0, alpha([60, 150, 255, 255], 0.8 * fade));
+        picture(draw, glow, c, size * 0.45, 0.0, alpha([150, 225, 255, 255], 0.7 * fade));
+    }
+}
+
+/// Electric wisps (your Overwatch frames, 2026-10-08): thin strands of blue light that grow out of the ring,
+/// curl sideways, flicker, and fade, each at a new place every time.
+fn ult_wisps(draw: &DrawListMut, center: [f32; 2], radius: f32, now: f32, k: f32) {
+    const POINTS: usize = 28;
+    for i in 0..ULT_WISPS {
+        let period = 1.8 + 0.9 * hash(i * 13 + 1);
+        let t = now / period + hash(i * 13 + 2);
+        let (cycle, u) = (t.floor() as u32, t.fract());
+        let seed = i * 7919 + cycle * 271;
+        let dir = if hash(seed + 1) < 0.5 { -1.0 } else { 1.0 };
+        let start = TAU * hash(seed) + dir * 0.5 * u;
+        let length = radius * (0.5 + 0.6 * hash(seed + 2)) * smooth((u / 0.35).min(1.0));
+        let curl = dir * (0.5 + 0.5 * hash(seed + 3));
+        let life = (PI * u).sin().powf(0.7);
+        let phase = hash(seed + 4) * 20.0;
+        let points: Vec<[f32; 2]> = (0..POINTS)
+            .map(|j| {
+                let f = j as f32 / (POINTS - 1) as f32;
+                let rr = radius * 1.3 + length * f;
+                let a = start + curl * f * f;
+                // Slow wave plus a fast flicker across the strand: an electric look.
+                let side = radius * (0.14 * f * (f * 8.0 + now * 5.0 + phase).sin()
+                    + 0.035 * (f * 37.0 - now * 31.0 + phase).sin());
+                let (sa, ca) = a.sin_cos();
+                [center[0] + rr * ca - side * sa, center[1] + rr * sa + side * ca]
+            })
+            .collect();
+        for (width, color, strength) in [(12.0, [50, 130, 255, 255], 0.3), (5.5, [80, 190, 255, 255], 0.55), (2.0, [215, 245, 255, 255], 0.95)] {
+            for j in 0..POINTS - 1 {
+                let f = j as f32 / (POINTS - 1) as f32;
+                let fade = life * (1.0 - f).powf(0.8) * strength;
+                draw.add_line(points[j], points[j + 1], col(alpha(color, fade)))
+                    .thickness(width * k * (1.0 - 0.7 * f))
+                    .build();
+            }
+        }
+    }
+}
+
+fn smooth(x: f32) -> f32 {
+    x * x * (3.0 - 2.0 * x)
 }
 
 /// A clockwise arc from 12 o'clock covering `share` of the circle.

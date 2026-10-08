@@ -125,6 +125,11 @@ impl Swift {
         self.cooldown <= 0.0
     }
 
+    /// Dashes started so far (the HUD plays its "pressed" animation when this changes).
+    pub fn uses(&self) -> u32 {
+        self.dashes
+    }
+
     /// Dragonblade's activation resets Swift Strike (Overwatch).
     pub fn reset(&mut self, why: &str) {
         if self.cooldown > 0.0 {
