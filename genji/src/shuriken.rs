@@ -349,37 +349,12 @@ impl Thrower {
         let right = if right.dot(view_right) < 0.0 { -right } else { right };
         let up = forward.cross(right).normalize_or(Vec3::Y);
         let up = if up.y < 0.0 { -up } else { up };
-        let owner = unsafe { std::ptr::read(&player.chr_ins.field_ins_handle as *const _ as *const u64) };
-        let request = SpawnRequest {
-            owner,
-            behavior_id: -1,
-            magic_id: -1,
-            unk10: 0,
-            bullet_id: self.bullet_id(),
-            goods_id: -1,
-            dummy_poly_id: -1,
-            target: u64::MAX,
-            unk28: 0,
-            unk2c: 0,
-            unk30: [0.0; 4],
-            unk40: 0,
-            unk44: SPAWN_ONE_SHOT,
-            pad48: [0; 8],
-            right: [right.x, right.y, right.z, 0.0],
-            up: [up.x, up.y, up.z, 0.0],
-            forward: [forward.x, forward.y, forward.z, 0.0],
-            position: [from.x, from.y, from.z, 1.0],
-            rest: [0; 0x80],
-        };
-        let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
-            glog!("THROW", "bullet manager not available");
-            return;
-        };
-        let data = unsafe { &*(&request as *const SpawnRequest as *const BulletSpawnData) };
-        let result = manager.spawn_bullet(data);
+        let result = spawn(player, self.bullet_id(), from, right, up, forward);
         self.throws += 1;
         if result.is_err() {
-            glog!("THROW", "{}", pool_levels(manager));
+            if let Ok(manager) = unsafe { CSBulletManager::instance() } {
+                glog!("THROW", "{}", pool_levels(manager));
+            }
         }
         glog!(
             "THROW",
@@ -636,6 +611,39 @@ impl Thrower {
         }
         self.pending = still;
     }
+}
+
+/// Spawns one projectile of Bullet row `bullet_id`, owned by the player (hits, aggro and kills count as ours), at
+/// `from` flying along `forward` (`right`, `up` complete its orientation). Error codes from the engine: 3 = invalid
+/// bullet id, 4 = construction failed, -1 = no bullet manager.
+pub fn spawn(player: &PlayerIns, bullet_id: i32, from: Vec3, right: Vec3, up: Vec3, forward: Vec3) -> Result<(), i32> {
+    let owner = unsafe { std::ptr::read(&player.chr_ins.field_ins_handle as *const _ as *const u64) };
+    let request = SpawnRequest {
+        owner,
+        behavior_id: -1,
+        magic_id: -1,
+        unk10: 0,
+        bullet_id,
+        goods_id: -1,
+        dummy_poly_id: -1,
+        target: u64::MAX,
+        unk28: 0,
+        unk2c: 0,
+        unk30: [0.0; 4],
+        unk40: 0,
+        unk44: SPAWN_ONE_SHOT,
+        pad48: [0; 8],
+        right: [right.x, right.y, right.z, 0.0],
+        up: [up.x, up.y, up.z, 0.0],
+        forward: [forward.x, forward.y, forward.z, 0.0],
+        position: [from.x, from.y, from.z, 1.0],
+        rest: [0; 0x80],
+    };
+    let Ok(manager) = (unsafe { CSBulletManager::instance_mut() }) else {
+        return Err(-1);
+    };
+    let data = unsafe { &*(&request as *const SpawnRequest as *const BulletSpawnData) };
+    manager.spawn_bullet(data)
 }
 
 /// Fill levels of the bullet manager's first three pools, read from fromsoftware-rs's layout (the counters are

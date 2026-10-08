@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Swift Strike: real game hit (invisible Kukri) with half a bar of bleed
+
+**Changed:** `genji/src/swift.rs`: each character the dash touches gets an invisible point-blank projectile from the
+Kukri's rows, fired from behind it (shields face you): attack power 50 x dexterity x 1.0 (`DASH_ATTACK_FACTOR`, to stay
+near the damage you liked), bleed buildup = half of that character's own bleed resistance (NpcParam `resistBlood`;
+999+ = immune, none). The Kukri rows are changed in memory while Genji mode is on (no flight visual, 50 m/s, 0.2 s,
+"Is Base Attack Added") and restored afterwards. If the game registers no hit within 10 frames, the damage is applied
+directly as before (`DASH HIT ... directly`). Logs: `DASH strike on ...` (attack, bleed, resistance), `DASH HIT ...
+game dealt`. `genji/src/shuriken.rs`: the projectile spawn is a shared function. `genji/src/camera.rs`: wiring.
+Earlier test: you confirmed the dash now resets after one-shot shuriken kills.
+**Why:** Your choices: the game deals the damage (number, sound, reaction) and half a bar of bleed per dash hit.
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether the strike lands from behind; bleed amounts in game (resistances may be
+raised in later areas by effects the NpcParam value doesn't include).
+**Next:** Your test.
+
 ## 2026-10-08 One-shot shuriken kills count as eliminations (Swift Strike reset)
 
 **Changed:** `genji/src/shuriken.rs`: shuriken are matched against characters that died within the last 0.5 s too;

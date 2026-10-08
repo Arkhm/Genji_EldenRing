@@ -3,14 +3,34 @@
 
 use std::collections::{HashMap, HashSet};
 
-use eldenring::cs::PlayerIns;
+use eldenring::cs::{AtkParam_Pc, Bullet as BulletParam, NpcParam, PlayerIns, SoloParamRepository, SpEffectParam};
+use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::glog;
 use crate::targets::{self, Target};
 
-/// Damage to each character the dash passes through.
+/// Damage to each character the dash passes through (Overwatch), before dexterity scaling.
 const DAMAGE: i32 = 50;
+/// The dash's hit is a real game hit (your choice, 2026-10-08; DESIGN.md 5e): an invisible projectile of the Kukri's
+/// rows (Bullet and AtkParam_Pc 10173000, status effect 3115 for its bleed) fired at each character the dash
+/// touches, from behind it (shields face you), at point blank. Its values are changed in memory while Genji mode is
+/// on and restored afterwards; a real Kukri thrown in plain Elden Ring is unchanged.
+const KUKRI: u32 = 10_173_000;
+const STRIKE_SPEED: f32 = 50.0;
+const STRIKE_LIFE: f32 = 0.2;
+const STRIKE_RANGE: f32 = 5.0;
+/// Starts this far outside the target's collision radius, metres.
+const STRIKE_GAP: f32 = 0.3;
+/// Attack power = 50 x dexterity multiplier x this. 1.0 keeps the dash near the damage you called perfect (76 at
+/// dexterity 25, when it lowered HP directly).
+const DASH_ATTACK_FACTOR: f32 = 1.0;
+/// Half a bar of bleed per hit (your choice; Overwatch's beta Genji had bleed on Swift Strike): the buildup is this
+/// share of the target's own bleed resistance (NpcParam `resistBlood`). 999 and above means immune: no buildup.
+const BLEED_SHARE: f32 = 0.5;
+const BLEED_IMMUNE: u16 = 999;
+/// If the game registered no hit within this many frames, the dash's damage is applied directly instead.
+const CONFIRM_FRAMES: u32 = 10;
 /// Cooldown after a dash starts, seconds.
 const COOLDOWN: f32 = 8.0;
 /// Characters that came this close (gap between the cylinders, metres) without being hit are logged at the end of
@@ -33,6 +53,40 @@ pub struct Swift {
     /// Closest approach of characters not hit in the current dash: gap in metres, vertical overlap, their radius.
     near: HashMap<usize, (f32, bool, f32)>,
     dashes: u32,
+    /// The Kukri rows' vanilla values while ours are applied.
+    kukri_vanilla: Option<KukriValues>,
+    /// Strikes waiting for the game's hit.
+    pending: Vec<Strike>,
+}
+
+#[derive(Clone, Copy)]
+struct KukriValues {
+    sfx_bullet: i32,
+    sfx_flick: i32,
+    init_velocity: f32,
+    max_velocity: f32,
+    min_velocity: f32,
+    accel_out_range: f32,
+    gravity_in_range: f32,
+    gravity_out_range: f32,
+    life: f32,
+    dist: f32,
+    atk_row: u32,
+    atk_phys: u16,
+    add_base_atk: bool,
+    sp_effect: i32,
+    blood: i32,
+}
+
+/// A strike fired at a character, waiting for the game's hit.
+struct Strike {
+    chr: usize,
+    hp_before: i32,
+    own_before: i64,
+    frames: u32,
+    damage: i32,
+    attack: u16,
+    bleed: i32,
 }
 
 impl Swift {
@@ -75,11 +129,187 @@ impl Swift {
             }
             self.near.remove(&id);
             self.hit.insert(id);
-            let damage = crate::scaling::scaled(DAMAGE as f32, player);
-            if let Some((before, after, max)) = targets::damage(&target, damage) {
-                glog!("DASH", "HIT {damage} (dexterity-scaled from {DAMAGE}) on character {id:#x}: hp {before} -> {after} / {max}");
+            self.strike(player, &target, to);
+        }
+    }
+
+    /// Applies (true) or restores (false) the strike values on the Kukri's rows, in memory.
+    pub fn set_values(&mut self, on: bool) {
+        if on == self.kukri_vanilla.is_some() {
+            return;
+        }
+        let Ok(params) = (unsafe { SoloParamRepository::instance_mut() }) else {
+            return;
+        };
+        match self.kukri_vanilla.take() {
+            None => {
+                let Some(bullet) = params.get::<BulletParam>(KUKRI) else {
+                    glog!("DASH", "Kukri Bullet row {KUKRI} not found; dash hits lower HP directly");
+                    return;
+                };
+                let (atk_row, sp_effect) = (bullet.atk_id_bullet() as u32, bullet.sp_effect_id0());
+                let mut v = KukriValues {
+                    sfx_bullet: bullet.sfx_id_bullet(),
+                    sfx_flick: bullet.sfx_id_flick(),
+                    init_velocity: bullet.init_vellocity(),
+                    max_velocity: bullet.max_vellocity(),
+                    min_velocity: bullet.min_vellocity(),
+                    accel_out_range: bullet.accel_out_range(),
+                    gravity_in_range: bullet.gravity_in_range(),
+                    gravity_out_range: bullet.gravity_out_range(),
+                    life: bullet.life(),
+                    dist: bullet.dist(),
+                    atk_row,
+                    atk_phys: 0,
+                    add_base_atk: false,
+                    sp_effect,
+                    blood: 0,
+                };
+                if let Some(atk) = params.get::<AtkParam_Pc>(atk_row) {
+                    (v.atk_phys, v.add_base_atk) = (atk.atk_phys(), atk.is_add_base_atk());
+                }
+                if let Some(sp) = params.get::<SpEffectParam>(sp_effect as u32) {
+                    v.blood = sp.blood_attack_power();
+                }
+                if let Some(bullet) = params.get_mut::<BulletParam>(KUKRI) {
+                    bullet.set_sfx_id_bullet(-1); // invisible
+                    bullet.set_sfx_id_flick(-1);
+                    bullet.set_init_vellocity(STRIKE_SPEED);
+                    bullet.set_max_vellocity(STRIKE_SPEED);
+                    bullet.set_min_vellocity(STRIKE_SPEED);
+                    bullet.set_accel_out_range(0.0);
+                    bullet.set_gravity_in_range(0.0);
+                    bullet.set_gravity_out_range(0.0);
+                    bullet.set_life(STRIKE_LIFE);
+                    bullet.set_dist(STRIKE_RANGE);
+                }
+                if let Some(atk) = params.get_mut::<AtkParam_Pc>(atk_row) {
+                    atk.set_is_add_base_atk(true);
+                }
+                glog!(
+                    "DASH",
+                    "strike values ON on the Kukri rows (bullet {KUKRI}, attack {atk_row}, status effect {sp_effect}): vanilla attack {}, vanilla bleed buildup {}",
+                    v.atk_phys,
+                    v.blood
+                );
+                self.kukri_vanilla = Some(v);
+            }
+            Some(v) => {
+                if let Some(bullet) = params.get_mut::<BulletParam>(KUKRI) {
+                    bullet.set_sfx_id_bullet(v.sfx_bullet);
+                    bullet.set_sfx_id_flick(v.sfx_flick);
+                    bullet.set_init_vellocity(v.init_velocity);
+                    bullet.set_max_vellocity(v.max_velocity);
+                    bullet.set_min_vellocity(v.min_velocity);
+                    bullet.set_accel_out_range(v.accel_out_range);
+                    bullet.set_gravity_in_range(v.gravity_in_range);
+                    bullet.set_gravity_out_range(v.gravity_out_range);
+                    bullet.set_life(v.life);
+                    bullet.set_dist(v.dist);
+                }
+                if let Some(atk) = params.get_mut::<AtkParam_Pc>(v.atk_row) {
+                    atk.set_atk_phys(v.atk_phys);
+                    atk.set_is_add_base_atk(v.add_base_atk);
+                }
+                if let Some(sp) = params.get_mut::<SpEffectParam>(v.sp_effect as u32) {
+                    sp.set_blood_attack_power(v.blood);
+                }
+                glog!("DASH", "strike values OFF: vanilla Kukri restored");
             }
         }
+    }
+
+    /// Fires the strike at one character: dexterity-scaled attack power and half of its bleed bar.
+    fn strike(&mut self, player: &PlayerIns, target: &Target, our_feet: Vec3) {
+        let id = target.chr.as_ptr() as usize;
+        let damage = crate::scaling::scaled(DAMAGE as f32, player);
+        let attack = (DAMAGE as f32 * crate::scaling::dex_multiplier(player) * DASH_ATTACK_FACTOR).round() as u16;
+        let chr = unsafe { target.chr.as_ref() };
+        let (hp_before, own_before) = (chr.modules.data.hp, targets::own_damage(id));
+        crate::kills::damaged(id);
+        let Some(v) = self.kukri_vanilla else {
+            self.direct(target, damage, "strike values not applied");
+            return;
+        };
+        // Half of this character's bleed bar.
+        let mut resist = 0u16;
+        let mut bleed = 0;
+        if let Ok(params) = unsafe { SoloParamRepository::instance_mut() } {
+            if let Some(npc) = params.get::<NpcParam>(chr.npc_param_id as u32) {
+                resist = npc.resist_blood();
+                if resist > 0 && resist < BLEED_IMMUNE {
+                    bleed = (resist as f32 * BLEED_SHARE).round() as i32;
+                }
+            }
+            if let Some(sp) = params.get_mut::<SpEffectParam>(v.sp_effect as u32) {
+                sp.set_blood_attack_power(bleed);
+            }
+            if let Some(atk) = params.get_mut::<AtkParam_Pc>(v.atk_row) {
+                atk.set_atk_phys(attack);
+            }
+        }
+        // From behind the character (its shield faces us), at chest height, flying into it.
+        let center = target.feet + Vec3::Y * (target.height * 0.5);
+        let mut away = Vec3::new(center.x - our_feet.x, 0.0, center.z - our_feet.z);
+        if away.length_squared() < 1e-4 {
+            away = Vec3::X;
+        }
+        let away = away.normalize();
+        let from = center + away * (target.radius + STRIKE_GAP);
+        let forward = -away;
+        let right = Vec3::Y.cross(forward).normalize_or(Vec3::X);
+        let up = forward.cross(right).normalize_or(Vec3::Y);
+        match crate::shuriken::spawn(player, KUKRI as i32, from, right, up, forward) {
+            Ok(()) => {
+                glog!(
+                    "DASH",
+                    "strike on character {id:#x}: attack power {attack}, bleed buildup {bleed} (its bleed resistance {resist}{})",
+                    if resist >= BLEED_IMMUNE { ", immune" } else { "" }
+                );
+                self.pending.push(Strike { chr: id, hp_before, own_before, frames: 0, damage, attack, bleed });
+            }
+            Err(code) => self.direct(target, damage, &format!("spawn failed, engine error {code}")),
+        }
+    }
+
+    /// The dash's damage applied by lowering HP (when the game's hit isn't available).
+    fn direct(&self, target: &Target, damage: i32, why: &str) {
+        let id = target.chr.as_ptr() as usize;
+        if let Some((before, after, max)) = targets::damage(target, damage) {
+            glog!("DASH", "HIT {damage} directly on character {id:#x} ({why}): hp {before} -> {after} / {max}");
+        }
+    }
+
+    /// Once per frame: strikes the game hit are logged; ones it didn't hit within CONFIRM_FRAMES get the damage
+    /// directly.
+    pub fn confirm(&mut self, player: &PlayerIns) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let everyone = targets::all(player);
+        let mut still = Vec::new();
+        for mut s in std::mem::take(&mut self.pending) {
+            s.frames += 1;
+            let Some(target) = everyone.iter().find(|t| t.chr.as_ptr() as usize == s.chr) else {
+                continue; // unloaded
+            };
+            let data = &unsafe { target.chr.as_ref() }.modules.data;
+            let game = (s.hp_before - data.hp) as i64 - (targets::own_damage(s.chr) - s.own_before);
+            if game > 0 {
+                glog!(
+                    "DASH",
+                    "HIT on character {:#x}: game dealt {game} (attack power {}, bleed buildup {}), hp now {} / {} (after {} frames)",
+                    s.chr, s.attack, s.bleed, data.hp, data.max_hp, s.frames
+                );
+            } else if data.hp <= 0 {
+                continue; // died meanwhile (another hit)
+            } else if s.frames >= CONFIRM_FRAMES {
+                self.direct(target, s.damage, &format!("the game registered no strike hit in {CONFIRM_FRAMES} frames"));
+            } else {
+                still.push(s);
+            }
+        }
+        self.pending = still;
     }
 
     /// The dash ended: log characters that came close but weren't hit.
