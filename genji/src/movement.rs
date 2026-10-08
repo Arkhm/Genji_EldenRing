@@ -66,6 +66,10 @@ const DASH_LIFT: f32 = 0.05;
 /// ground (your rule, 2026-10-08: "Genji stops where the dash hits the ground"). The ray starts at eye height.
 const DASH_AIM_DOWN: f32 = -0.02;
 const DASH_EYE_HEIGHT: f32 = 1.6;
+/// The aim point only counts as ground if it is at most this far above our feet. Test of 2026-10-08: twice the view
+/// ray hit something at eye height right next to us ("aimed at the ground 0.1 m ahead", 1.3-1.5 m above the feet)
+/// and the dash ended after 0.1-0.7 m, cooldown spent.
+const DASH_GROUND_ABOVE_FEET: f32 = 0.3;
 /// The dash passes through characters: ray hits within this distance of a character's body (dead or alive) are
 /// ignored, metres (a held shield or a falling dead body sticks out beyond the body's collision radius).
 const DASH_BODY_MARGIN: f32 = 0.6;
@@ -381,8 +385,16 @@ impl Mover {
                 let eye = start + Vec3::Y * DASH_EYE_HEIGHT;
                 if let Some(hit) = ray_through_bodies(phys_world, player, self.filter, eye, self.dash_dir * DASH_DISTANCE, w, &bodies) {
                     let flat = Vec3::new(hit.x - start.x, 0.0, hit.z - start.z).length();
-                    self.dash_stop = Some(flat);
-                    glog!("DASH", "aimed at the ground {flat:.1} m ahead ({:.2}, {:.2}, {:.2}): stops there", hit.x, hit.y, hit.z);
+                    if hit.y <= start.y + DASH_GROUND_ABOVE_FEET {
+                        self.dash_stop = Some(flat);
+                        glog!("DASH", "aimed at the ground {flat:.1} m ahead ({:.2}, {:.2}, {:.2}): stops there", hit.x, hit.y, hit.z);
+                    } else {
+                        glog!(
+                            "DASH",
+                            "view ray hit something {:.2} m above our feet, {flat:.1} m ahead: not ground, no stop",
+                            hit.y - start.y
+                        );
+                    }
                 }
             }
             glog!(
