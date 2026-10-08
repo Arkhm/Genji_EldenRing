@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use eldenring::cs::{AtkParam_Pc, Bullet as BulletParam, NpcParam, PlayerIns, SoloParamRepository, SpEffectParam};
+use eldenring::cs::{AtkParam_Pc, Bullet as BulletParam, ChrInsExt, NpcParam, PlayerIns, SoloParamRepository, SpEffectParam};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
@@ -31,6 +31,10 @@ const BLEED_SHARE: f32 = 0.5;
 const BLEED_IMMUNE: u16 = 999;
 /// If the game registered no hit within this many frames, the dash's damage is applied directly instead.
 const CONFIRM_FRAMES: u32 = 10;
+/// An elimination this many seconds before a dash starts also resets it. Test of 2026-10-08: Fan of Blades, then
+/// Shift right away: the fan's kill was counted a moment before the dash started (the dash was still ready, so
+/// nothing to reset), and the dash then went on cooldown although the kill showed during it.
+const KILL_GRACE: f32 = 0.25;
 /// Cooldown after a dash starts, seconds.
 const COOLDOWN: f32 = 8.0;
 /// Characters that came this close (gap between the cylinders, metres) without being hit are logged at the end of
@@ -57,6 +61,8 @@ pub struct Swift {
     kukri_vanilla: Option<KukriValues>,
     /// Strikes waiting for the game's hit.
     pending: Vec<Strike>,
+    /// Seconds since an elimination that happened while the dash was ready (for KILL_GRACE).
+    ready_kill_age: Option<f32>,
 }
 
 #[derive(Clone, Copy)]
@@ -93,9 +99,14 @@ impl Swift {
     /// Once per frame: cooldown, and kill reset (`eliminations` from `kills::tick`).
     pub fn tick(&mut self, dt: f32, eliminations: u32) {
         self.cooldown = (self.cooldown - dt).max(0.0);
-        if eliminations > 0 && self.cooldown > 0.0 {
-            glog!("SWIFT", "reset by an elimination ({:.1} s of cooldown left)", self.cooldown);
-            self.cooldown = 0.0;
+        self.ready_kill_age = self.ready_kill_age.map(|a| a + dt).filter(|a| *a <= KILL_GRACE);
+        if eliminations > 0 {
+            if self.cooldown > 0.0 {
+                glog!("SWIFT", "reset by an elimination ({:.1} s of cooldown left)", self.cooldown);
+                self.cooldown = 0.0;
+            } else {
+                self.ready_kill_age = Some(0.0);
+            }
         }
     }
 
@@ -110,6 +121,10 @@ impl Swift {
         self.near.clear();
         self.dashes += 1;
         glog!("SWIFT", "dash #{} started, cooldown {COOLDOWN} s", self.dashes);
+        if let Some(age) = self.ready_kill_age.take() {
+            self.cooldown = 0.0;
+            glog!("SWIFT", "reset by an elimination {age:.2} s before this dash");
+        }
     }
 
     /// The dash moved our feet from `from` to `to` this frame: damage every character on that stretch once.
@@ -248,13 +263,15 @@ impl Swift {
                 atk.set_atk_phys(attack);
             }
         }
-        // From behind the character (its shield faces us), at chest height, flying into it.
+        // From behind the character's own facing (a shield is held in front; test of 2026-10-08: placing it behind
+        // as seen from us was nearly random, since we are inside or next to it at that moment), at chest height.
         let center = target.feet + Vec3::Y * (target.height * 0.5);
-        let mut away = Vec3::new(center.x - our_feet.x, 0.0, center.z - our_feet.z);
+        let facing = glam::Quat::from(chr.modules.physics.orientation) * Vec3::NEG_Z;
+        let mut away = Vec3::new(-facing.x, 0.0, -facing.z);
         if away.length_squared() < 1e-4 {
-            away = Vec3::X;
+            away = Vec3::new(center.x - our_feet.x, 0.0, center.z - our_feet.z);
         }
-        let away = away.normalize();
+        let away = away.normalize_or(Vec3::X);
         let from = center + away * (target.radius + STRIKE_GAP);
         let forward = -away;
         let right = Vec3::Y.cross(forward).normalize_or(Vec3::X);
@@ -270,6 +287,25 @@ impl Swift {
             }
             Err(code) => self.direct(target, damage, &format!("spawn failed, engine error {code}")),
         }
+    }
+
+    /// Puts the bleed buildup on the character directly: the Kukri's status effect (3115) with our buildup, applied
+    /// to it. Test of 2026-10-08: the invisible Kukri hit landed but no bleed bar ever appeared, so the projectile
+    /// doesn't pass its effect on when spawned this way.
+    fn bleed(&self, target: &Target, amount: i32) {
+        let Some(v) = self.kukri_vanilla else {
+            return;
+        };
+        if amount <= 0 || unsafe { target.chr.as_ref() }.modules.data.hp <= 0 {
+            return;
+        }
+        if let Ok(params) = unsafe { SoloParamRepository::instance_mut() } {
+            if let Some(sp) = params.get_mut::<SpEffectParam>(v.sp_effect as u32) {
+                sp.set_blood_attack_power(amount);
+            }
+        }
+        unsafe { &mut *target.chr.as_ptr() }.apply_speffect(v.sp_effect, true);
+        glog!("DASH", "bleed {amount} applied to character {:#x} (status effect {})", target.chr.as_ptr() as usize, v.sp_effect);
     }
 
     /// The dash's damage applied by lowering HP (when the game's hit isn't available).
@@ -298,13 +334,15 @@ impl Swift {
             if game > 0 {
                 glog!(
                     "DASH",
-                    "HIT on character {:#x}: game dealt {game} (attack power {}, bleed buildup {}), hp now {} / {} (after {} frames)",
-                    s.chr, s.attack, s.bleed, data.hp, data.max_hp, s.frames
+                    "HIT on character {:#x}: game dealt {game} (attack power {}), hp now {} / {} (after {} frames)",
+                    s.chr, s.attack, data.hp, data.max_hp, s.frames
                 );
+                self.bleed(target, s.bleed);
             } else if data.hp <= 0 {
                 continue; // died meanwhile (another hit)
             } else if s.frames >= CONFIRM_FRAMES {
                 self.direct(target, s.damage, &format!("the game registered no strike hit in {CONFIRM_FRAMES} frames"));
+                self.bleed(target, s.bleed);
             } else {
                 still.push(s);
             }
@@ -383,5 +421,18 @@ mod tests {
         assert!(!s.ready());
         s.tick(0.0, 1);
         assert!(s.ready());
+    }
+
+    #[test]
+    fn kill_just_before_a_dash_resets_it() {
+        let mut s = Swift::default();
+        s.tick(0.016, 1); // kill while ready
+        s.tick(0.1, 0);
+        s.started();
+        assert!(s.ready(), "kill 0.1 s before the dash");
+        s.tick(0.016, 1);
+        s.tick(0.3, 0);
+        s.started();
+        assert!(!s.ready(), "kill 0.3 s before the dash is too early");
     }
 }

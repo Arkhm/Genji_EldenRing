@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Swift Strike: bleed applied directly, strike from behind the enemy's facing, kill grace, no fizzle
+
+**Changed:**
+- `genji/src/swift.rs`: once the strike lands (or the direct fallback is used), the bleed is applied to the
+  enemy directly (the Kukri's status effect 3115 with our buildup, via the game's apply-status-effect function;
+  `DASH bleed N applied`). The strike now comes from behind the enemy's own facing. An elimination up to 0.25 s
+  before a dash starts also resets it (`SWIFT reset by an elimination 0.xx s before this dash`); 1 new unit test.
+- `genji/src/movement.rs`: the "aimed at the ground" stop only counts hits at most 0.3 m above our feet.
+
+**Why:** Your test of commit `aefce72`.
+- No bleed bar ever appeared, although the strikes landed (game dealt 42-99) with buildup set to half the bar.
+- Shielded enemies sometimes took 7-8. The strike's "behind" was measured from us, and we are inside or next to
+  the enemy at that moment.
+- The Fan of Blades + dash combo sometimes didn't reset. In the log, twice the view ray hit something at eye height
+  next to us and the dash ended after 0.1-0.7 m, cooldown spent. Also a kill counted just before the dash started
+  reset nothing.
+
+**Tested how:** Build OK; 26 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Whether a directly applied status effect builds up bleed (if not, next is the hit
+itself carrying it via AtkParam's own status-effect slot).
+**Next:** Your test.
+
 ## 2026-10-08 Swift Strike: real game hit (invisible Kukri) with half a bar of bleed
 
 **Changed:** `genji/src/swift.rs`: each character the dash touches gets an invisible point-blank projectile from the
