@@ -281,9 +281,10 @@ elimination).
 - `movement.rs`: Left Shift (only while our controller drives and the cooldown is ready) starts a dash: for 0.3 s
   the controller moves at 50 m/s along the view, ignores gravity and other characters, and still stops at walls
   (same wall rays as walking). On the ground and looking flat or down, the dash runs along the ground at full speed;
-  looking up lifts off. At the end, in the air, you start falling normally. No wall climb during the dash.
+  looking up lifts off. Aiming at the ground, it stops where the view meets the ground (2026-10-08). At the end,
+  in the air, you start falling normally. No wall climb during the dash.
 - `swift.rs` (new): cooldown; each frame of the dash, the stretch travelled is checked against every nearby
-  character's collision cylinder (our body: radius 0.35 m, height 1.75 m); each one touched takes 50 once (HP set
+  character's collision cylinder (our body: radius 0.35 m, height 1.75 m, plus 0.5 m reach); each one touched takes 50 once (HP set
   directly, like the shuriken), logged as `DASH HIT`.
 - `kills.rs` (new): remembers every character we damaged (shuriken or dash) for 3 s; if one of them dies in that
   time, that's an elimination: the Swift Strike cooldown resets (`SWIFT reset`).

@@ -18,6 +18,10 @@ const COOLDOWN: f32 = 8.0;
 const NEAR_MISS: f32 = 2.0;
 /// Our body as seen by the dash's hit test: radius and height in metres (same as the movement controller).
 const BODY_RADIUS: f32 = 0.35;
+/// Extra reach of the dash's hit beyond our body, metres. Test of 2026-10-08: misses passed 0.07-0.46 m outside the
+/// body-only reach (soldiers, radius 0.40), while the dash visibly went through them. With 0.5 the dash hits what it
+/// passes within 1.25 m of a soldier's centre. Overwatch's exact width is not verified.
+const REACH: f32 = 0.5;
 const BODY_HEIGHT: f32 = 1.75;
 
 #[derive(Default)]
@@ -111,7 +115,7 @@ fn closest(from: Vec3, to: Vec3, target: &Target) -> (f32, bool) {
     let p = Vec3::new(target.feet.x, 0.0, target.feet.z);
     let ab = b - a;
     let t = if ab.length_squared() < 1e-8 { 0.0 } else { ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) };
-    ((a + ab * t - p).length() - target.radius - BODY_RADIUS, overlaps)
+    ((a + ab * t - p).length() - target.radius - BODY_RADIUS - REACH, overlaps)
 }
 
 #[cfg(test)]
@@ -127,15 +131,15 @@ mod tests {
     fn passing_through_or_beside_hits() {
         let (from, to) = (Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0));
         assert!(touches(from, to, &target(0.0, -0.5, 0.0)));
-        assert!(touches(from, to, &target(0.8, -0.5, 0.0)), "body radius + target radius = 0.85");
-        assert!(!touches(from, to, &target(0.9, -0.5, 0.0)));
+        assert!(touches(from, to, &target(1.3, -0.5, 0.0)), "body radius + target radius + reach = 1.35");
+        assert!(!touches(from, to, &target(1.4, -0.5, 0.0)));
     }
 
     #[test]
     fn ahead_behind_above_miss() {
         let (from, to) = (Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0));
-        assert!(!touches(from, to, &target(0.0, -2.0, 0.0)));
-        assert!(!touches(from, to, &target(0.0, 1.0, 0.0)));
+        assert!(!touches(from, to, &target(0.0, -2.5, 0.0)));
+        assert!(!touches(from, to, &target(0.0, 1.5, 0.0)));
         assert!(!touches(from, to, &target(0.0, -0.5, 2.0)));
     }
 

@@ -62,6 +62,10 @@ const DASH_DISTANCE: f32 = 15.0;
 const DASH_SPEED: f32 = 50.0;
 /// A dash started on the ground lifts off when the view points up more than this (vertical part of the direction).
 const DASH_LIFT: f32 = 0.05;
+/// Aiming down at least this much (vertical part of the view direction), a dash stops where the view meets the
+/// ground (your rule, 2026-10-08: "Genji stops where the dash hits the ground"). The ray starts at eye height.
+const DASH_AIM_DOWN: f32 = -0.02;
+const DASH_EYE_HEIGHT: f32 = 1.6;
 /// Height of the top of the head above the feet, for ceiling checks, metres.
 const HEAD_HEIGHT: f32 = 1.75;
 // No fall damage in Genji mode (your choice, 2026-10-07, like Overwatch). Falls are only logged. An Elden
@@ -183,6 +187,9 @@ pub struct Mover {
     dash_left: f32,
     dash_dir: Vec3,
     dash_travelled: f32,
+    /// Horizontal distance from the dash start to where the view met the ground, if aimed at the ground.
+    dash_stop: Option<f32>,
+    dash_start: Vec3,
     /// This frame: a dash started / the stretch the dash moved our feet (for its damage, `swift.rs`).
     pub dash_started: bool,
     pub dash_segment: Option<(Vec3, Vec3)>,
@@ -358,6 +365,16 @@ impl Mover {
             self.dash_travelled = 0.0;
             self.dash_started = true;
             self.climbing = false;
+            self.dash_start = start;
+            self.dash_stop = None;
+            if self.dash_dir.y <= DASH_AIM_DOWN {
+                let eye = start + Vec3::Y * DASH_EYE_HEIGHT;
+                if let Some(hit) = ray(phys_world, player, self.filter, eye, self.dash_dir * DASH_DISTANCE, w) {
+                    let flat = Vec3::new(hit.x - start.x, 0.0, hit.z - start.z).length();
+                    self.dash_stop = Some(flat);
+                    glog!("DASH", "aimed at the ground {flat:.1} m ahead ({:.2}, {:.2}, {:.2}): stops there", hit.x, hit.y, hit.z);
+                }
+            }
             glog!(
                 "DASH",
                 "start at ({:.2}, {:.2}, {:.2}) toward ({:.2}, {:.2}, {:.2}), {}",
@@ -378,7 +395,16 @@ impl Mover {
             // Through characters; along the ground at full speed unless it lifts off (see DASH_LIFT).
             let flat = Vec3::new(self.dash_dir.x, 0.0, self.dash_dir.z);
             let along = if self.grounded && self.dash_dir.y <= DASH_LIFT { flat.normalize_or_zero() } else { flat };
-            (along * DASH_SPEED * dt, false)
+            let mut step = along * DASH_SPEED * dt;
+            if let Some(stop) = self.dash_stop {
+                // Don't pass the aim point on the ground.
+                let done = Vec3::new(start.x - self.dash_start.x, 0.0, start.z - self.dash_start.z).length();
+                let left = (stop - done).max(0.0);
+                if step.length() > left {
+                    step = step.normalize_or_zero() * left;
+                }
+            }
+            (step, false)
         } else {
             obstacles::clip(start, dir * RUN_SPEED * dt, RADIUS, HEAD_HEIGHT, &others)
         };
@@ -524,6 +550,12 @@ impl Mover {
             self.dash_segment = Some((start, pos));
             self.dash_travelled += (pos - start).length();
             self.dash_left -= dt;
+            if let Some(stop) = self.dash_stop {
+                let done = Vec3::new(pos.x - self.dash_start.x, 0.0, pos.z - self.dash_start.z).length();
+                if done >= stop - 0.05 {
+                    self.dash_left = 0.0; // reached the aim point on the ground
+                }
+            }
             if self.dash_left <= 0.0 {
                 self.dash_ended = true;
                 if !self.grounded {

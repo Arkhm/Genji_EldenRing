@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Swift Strike: wider hit reach; stops where you aim at the ground
+
+**Changed:** `genji/src/swift.rs`: the dash hits characters within 0.5 m beyond our body (`REACH`; a soldier is hit
+when the dash passes within 1.25 m of its centre). `genji/src/movement.rs`: aiming down, the dash stops where the
+view meets the ground (ray from eye height, `DASH aimed at the ground ... stops there`); otherwise unchanged.
+**Why:** Your test of commit `eb01728` (23 dashes): enemies with shields took no dash damage, and the dash should
+damage what it touches up to its end. The near-miss log showed the missed enemies (soldiers, radius 0.40) passed only
+0.07-0.13 m (and 0.35-0.46 m) outside the old reach. Dash damage lowers HP directly, so a shield can't block it; the
+shielded soldiers most likely were these near misses (a held shield sticks out beyond the body's collision radius).
+Your rule for the ground: Genji stops where the dash hits the ground. I briefly also made shield deflections count as
+shuriken hits; you said shields blocking shuriken is right, so that was reverted before commit.
+**Tested how:** Build OK; 22 unit tests pass (reach test updated).
+**Result:** Not tested in game.
+**Still broken / not tested:** Shielded enemies with the new reach; the ground stop; no sound or hit reaction on
+dash hits; the bleed idea (asked you).
+**Next:** Your test.
+
 ## 2026-10-07 Step 7 tested; dash near-miss logging
 
 **Changed:** `genji/src/swift.rs`, `genji/src/movement.rs`, `genji/src/camera.rs`: at the end of every dash, each
