@@ -3,6 +3,34 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 8b: Deflect sends projectiles back; cooldown 1 s for testing
+
+**Changed:**
+- `genji/src/deflect.rs`, while deflecting, every frame:
+  - Enemy projectiles within 3 m of our chest that fly at us from the front are removed (no life, no speed, moved
+    50 m down).
+  - For each one, a Bone Dart is fired along our aim at the original's speed (20-80 m/s). It carries the
+    original's damage values (physical, magic, fire, lightning, holy from its AtkParam_Npc row).
+  - The Bone Dart rows are changed in memory while Genji mode is on (straight flight, no homing, no bounce effect,
+    80 m) and restored afterwards.
+  - The character under the crosshair gets kill credit (approximation).
+  - `DEFLECT sent back ...` logs each one.
+- **Cooldown 1 s while we test (your request); back to 8 s (confirmed by you) once Deflect is validated.**
+- `genji/src/shuriken.rs`: aim helpers shared.
+- `genji/src/camera.rs`: wiring.
+
+**Why:** Step 8b. Your test of commit `bf12089`: no damage with arrows anywhere on screen; melee blocked too. In
+Overwatch, anything shooting you within your view can be deflected (your screenshot); ours covers 90 degrees each
+side.
+**Tested how:** Build OK; 29 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- Sending back in game.
+- Whether removing the enemy projectile this way works for every kind (arrows, spells, fire pots).
+- Cooldown is 1 s (testing).
+
+**Next:** Your test.
+
 ## 2026-10-08 Deflect: projectiles judged by where they come from
 
 **Changed:** `genji/src/deflect.rs`: an enemy projectile switches protection off only if it flies the way we face

@@ -332,9 +332,13 @@ behind. That approximates "front only": an enemy hitting us from the front can't
 held while deflecting. The overlay shows "DEFLECT" under the crosshair. Logged: start, end (why), every frame the flag
 was off because of a rear threat, and HP changes while deflecting.
 
-**8b, sending projectiles back (second):** enemy projectiles that come within about 2 m of us from the front are
-removed and an equal projectile of ours is fired back along our aim (first try: the same projectile row with us as
-owner; if the game refuses it, our shuriken row with the damage the original would have done). Details after 8a.
+**8b, sending projectiles back (built 2026-10-08):**
+- Enemy projectiles within 3 m of our chest, flying at us from the front, are removed.
+- For each one, a Bone Dart (its rows changed in memory while Genji mode is on) is fired along our aim, at the
+  original's speed. It carries the original's damage values from its AtkParam_Npc row.
+- Not the same projectile row: an enemy projectile's damage row is an NPC one, and spawning it as ours could make
+  the game look it up in the player table.
+- Kill credit goes to the character under the crosshair (approximation).
 
 **Unknowns:** whether the invincible flag also stops hit reactions and status buildup (the log and you will tell);
 how enemy melee that starts in front but swings around is judged.

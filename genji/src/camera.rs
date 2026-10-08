@@ -119,6 +119,7 @@ fn camera_step_inner(dt: f32) -> bool {
     // Shuriken flight and damage values on the projectile's rows: on in Genji mode, vanilla otherwise.
     view.thrower.set_shuriken_values(reason.is_none());
     view.swift.set_values(reason.is_none());
+    view.deflect.set_values(reason.is_none());
     view.swift.confirm(player);
 
     // STATUS.md option B: the Overwatch field of view through the game's own setting (LockCamParam), while first
@@ -269,6 +270,7 @@ fn camera_step_inner(dt: f32) -> bool {
     view.e_was_down = e_down;
     let deflecting = view.deflect.tick(dt, e_pressed, driving);
     view.deflect.apply(player, feet, look.flat_forward());
+    view.deflect.reflect(player, &look, eye);
     crate::crosshair::set_deflecting(deflecting);
 
     // 5. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive.

@@ -676,7 +676,7 @@ fn buffer_marked(manager: &CSBulletManager) -> u32 {
 }
 
 /// Distance along the view to what's under the crosshair: map (ray) or a character (cylinder), up to the range.
-fn aim_distance(player: &PlayerIns, eye: Vec3, forward: Vec3) -> f32 {
+pub fn aim_distance(player: &PlayerIns, eye: Vec3, forward: Vec3) -> f32 {
     let mut best = SHURIKEN_RANGE;
     if let Ok(havok) = unsafe { CSHavokMan::instance() } {
         let w = player.chr_ins.modules.physics.position.3;
@@ -699,7 +699,7 @@ fn aim_distance(player: &PlayerIns, eye: Vec3, forward: Vec3) -> f32 {
 }
 
 /// Distance along the ray (`eye`, unit `forward`) to where it enters an upright cylinder standing at `feet`.
-fn ray_cylinder(eye: Vec3, forward: Vec3, feet: Vec3, radius: f32, height: f32) -> Option<f32> {
+pub fn ray_cylinder(eye: Vec3, forward: Vec3, feet: Vec3, radius: f32, height: f32) -> Option<f32> {
     let flat = Vec3::new(forward.x, 0.0, forward.z);
     let flat_len = flat.length();
     if flat_len < 1e-3 {
