@@ -111,6 +111,11 @@ impl Swift {
         }
     }
 
+    /// The full cooldown, seconds (HUD).
+    pub fn cooldown_max(&self) -> f32 {
+        COOLDOWN
+    }
+
     /// Seconds of cooldown left (HUD).
     pub fn cooldown(&self) -> f32 {
         self.cooldown

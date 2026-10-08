@@ -279,6 +279,9 @@ fn camera_step_inner(dt: f32) -> bool {
 
     // 4. Dragonblade and quick melee (step 9): Q, held left click, mouse 5, while we drive.
     let keys_now = dinput::raw_keys();
+    if dinput::key_down(&keys_now, dik::F7) {
+        crate::ult::fill_for_testing(); // TESTING ONLY: remove once the HUD is approved
+    }
     let q_down = dinput::key_down(&keys_now, dik::Q);
     let q_pressed = q_down && !view.q_was_down;
     view.q_was_down = q_down;
@@ -316,8 +319,10 @@ fn camera_step_inner(dt: f32) -> bool {
         ammo_max,
         reloading,
         swift_cooldown: view.swift.cooldown(),
+        swift_cooldown_max: view.swift.cooldown_max(),
         deflect_left,
         deflect_cooldown,
+        deflect_cooldown_max: view.deflect.cooldown_max(),
         ult_percent: crate::ult::percent(),
         blade_left: view.blade.left(),
         blade_duration: view.blade.duration(),

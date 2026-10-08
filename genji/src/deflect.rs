@@ -114,6 +114,11 @@ impl Deflect {
         );
     }
 
+    /// The full cooldown, seconds (HUD).
+    pub fn cooldown_max(&self) -> f32 {
+        COOLDOWN
+    }
+
     /// For the HUD: seconds of Deflect left (while up) and of cooldown.
     pub fn hud(&self) -> (Option<f32>, f32) {
         (self.left, self.cooldown)

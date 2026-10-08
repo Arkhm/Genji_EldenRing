@@ -96,7 +96,7 @@ impl Overlay {
                     .build();
             }
         }
-        crate::hud::draw(ui, &self.hud, width, height);
+        crate::hud::draw(ui, &mut self.hud, width, height);
     }
 }
 

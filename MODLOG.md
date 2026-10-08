@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD closer to Overwatch 2, with its animations
+
+**Changed:**
+- `genji/src/hud.rs` rewritten after your Overwatch screenshots:
+  - Health: upright bold numbers with a divider; straight white segments; a soft cyan glow behind the hexagon portrait.
+  - Ultimate, charging: navy disc, teal inner ring, faint outer ring, dotted circle, the charge as 48 cyan ticks,
+    italic number.
+  - Ultimate, ready: pulsing blue glow ring, two counter-rotating rings of dashes, white centre with the Dragonblade
+    icon, white side markers, a light burst when it becomes ready, filled Q box.
+  - Ultimate during Dragonblade: glow, a ring draining with the time left, the seconds.
+  - Abilities: straight light boxes with a white underline when ready; while cooling, grey with cyan rising from the
+    bottom and italic seconds; outlined key box while cooling, filled when ready.
+  - Abilities, cooldown finishing: a vertical beam of light and a burst.
+  - Abilities, Deflect up: a pulsing cyan edge.
+  - Ammo: panel between two glowing cyan bars with angled ends; bold numbers with a cyan divider.
+- `tools/make_hud_art.py`: also copies Overwatch's UI effect pictures (glow ring, ring of dashes, light flare, soft
+  glow; found on contact sheets of the blue UI textures).
+- `genji/src/swift.rs`, `deflect.rs`, `camera.rs`: full cooldowns for the HUD.
+- **Temporary for testing: F7 fills the ultimate again (remove once the HUD is approved).**
+
+**Why:** Your test of commit `173a5d5`: good but far from Overwatch; the ultimate ring and Overwatch's little HUD
+animations (cooldown finished, ultimate ready). Overwatch's animations are engine effects, not pictures in its UI
+files (searched 808 blue UI textures; the ultimate's blue dragon flame isn't among them), so they're redrawn with
+Overwatch's glow textures.
+**Tested how:** Build OK, no warnings; unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game; the blue dragon flame of the ready ultimate is approximated (glow and
+rotating rings), not reproduced.
+**Next:** Your screenshots.
+
 ## 2026-10-08 HUD with Overwatch's own UI art
 
 **Changed:**

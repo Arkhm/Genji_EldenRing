@@ -47,6 +47,13 @@ pub fn percent() -> u32 {
     (s.charge / COST * 100.0) as u32
 }
 
+/// **Testing only (2026-10-08, HUD animations): F7 fills the charge. Remove once the HUD is approved.**
+pub fn fill_for_testing() {
+    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    s.charge = COST;
+    report(&mut s, "F7 (testing)");
+}
+
 /// Spends a full charge; false if not full.
 pub fn spend() -> bool {
     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());

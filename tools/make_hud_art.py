@@ -6,6 +6,7 @@ outputs stay on D:, outside the repository. Needs Pillow; the SVG icon needs res
   portrait_hex.png  Genji's portrait cut to Overwatch's hexagon, with the hexagon outline on top
   ult_disc.png      Overwatch's dark disc with its ring, behind the ultimate number
   plus.png          the health "+" icon
+  glow_ring.png, dash_ring.png, flare.png, glow_dot.png   Overwatch's UI effect pictures for the HUD animations
 """
 import io
 import os
@@ -23,6 +24,13 @@ HEX_FILL = os.path.join(UI, '000000039E89.png')     # 100x120 filled hexagon
 HEX_OUTLINE = os.path.join(UI, '000000027AB5.png')  # 120x144 hexagon outline
 ULT_DISC = os.path.join(UI, '000000021660.png')     # 120x120 dark disc with ring
 PLUS_SVG = os.path.join(VEC, '000000000022.svg')    # "+" icon
+# Effects (found on the "blue" contact sheets, 2026-10-08): glow ring, ring of dashes, light flare, soft glow.
+EFFECTS = {
+    'glow_ring.png': '00000002915D.png',
+    'dash_ring.png': '00000002915E.png',
+    'flare.png': '00000000B666.png',
+    'glow_dot.png': '000000003A2D.png',
+}
 
 
 def main():
@@ -49,6 +57,8 @@ def main():
     canvas.resize((ow * 2, oh * 2), Image.LANCZOS).save(os.path.join(OUT, 'portrait_hex.png'))
 
     Image.open(ULT_DISC).convert('RGBA').save(os.path.join(OUT, 'ult_disc.png'))
+    for name, src in EFFECTS.items():
+        Image.open(os.path.join(UI, src)).convert('RGBA').save(os.path.join(OUT, name))
 
     try:
         sys.path.insert(0, os.environ.get('RESVG_PATH', ''))
