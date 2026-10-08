@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Swift Strike: every hit bleeds; pushes ignored mid-dash; log deaths that aren't ours
+
+**Changed:**
+- `genji/src/swift.rs`: each dash hit gives bleed buildup 9999, a sure bleed proc; immune enemies (bleed resistance
+  999+) get none. This replaces half a bar.
+- `genji/src/movement.rs`: during a dash, movement made by the game's own collision is undone
+  (`DASH ignored a N m push`).
+- `genji/src/kills.rs` (rewritten, same behaviour): a death not counted as ours within 0.6 s is logged
+  (`KILL death NOT counted as ours`, with when we last damaged it).
+- `README.md`, `docs/DESIGN.md`: bleed.
+
+**Why:** Your test of commits `a8b77cf`, `e8de50d`.
+- Strikes on shielded enemies now land.
+- Bleed procced on the big monster after 2 dashes, not on guards: their two 56 buildups (bar 112) were 4+ s
+  apart and buildup fades.
+- You asked for a 100% bleed per dash hit, no meter.
+- In a row of enemies one died in front of you and the dash got redirected: the log shows a 2.07 m push from the
+  game's collision mid-dash.
+- A far-away kill didn't reset the dash: nothing in the log says why (deaths that aren't ours weren't logged).
+
+**Tested how:** Build OK; 26 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** The far-away kill: next time the log says why.
+**Next:** Your test.
+
 ## 2026-10-08 Swift Strike: bleed applied directly, strike from behind the enemy's facing, kill grace, no fizzle
 
 **Changed:**
