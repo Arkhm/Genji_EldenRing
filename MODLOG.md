@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Step 9 plan; reminder for step 10
+
+**Changed:** `docs/DESIGN.md` section 5g with your Overwatch numbers and choices (Corpse Piler hits with bleed,
+Blood Blade crescent as the visible sweep until Genji's model exists; the dash keeps its own damage).
+**Why:** Step 9. Also checked: DataTool is still v2.24.1 (2026-09-15) and can't read your Overwatch build.
+**Tested how:** Nothing to test.
+**Result:** Plan only.
+**Still broken / not tested:** Step 2 (Overwatch assets). **Reminder (your request): if we reach step 10 without a
+DataTool that reads your Overwatch, give you the exact Steam console steps to download an older build
+(`download_depot`).**
+**Next:** Build step 9.
+
 ## 2026-10-08 Deflect validated; cooldown back to 8 s
 
 **Changed:** `genji/src/deflect.rs`: cooldown 8 s (was 1 s for testing). `README.md`, `docs/DESIGN.md`: step 8 done.

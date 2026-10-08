@@ -346,32 +346,27 @@ how enemy melee that starts in front but swings around is judged.
 
 ## 5g. Step 9 in detail: Dragonblade, ultimate charge, quick melee (plan 2026-10-08)
 
-**What Overwatch does:** numbers to be confirmed by you (web sources disagree, several are from the original game
-or fan proposals). Placeholders in the code until then:
+**Overwatch numbers** (Season 5 patch of 2026-10-06, passed on by you; swing interval and cost derived, not
+verified): Dragonblade 6 s; 100 damage per enemy per swing; a swing about every 0.61 s; 5 m forward cone (angle
+unknown, we use 60 degrees each side); ultimate cost about 2000 points; passive charge 5 points/s, paused while
+Dragonblade is active; quick melee 40. Activating it resets Swift Strike; Swift Strike keeps its own damage during
+it; no shuriken, no Deflect during it.
 
-| | Placeholder | Unsure about |
-|---|---|---|
-| Dragonblade duration | 6 s | 6 or 8 s (OW2) |
-| Swing damage | 120 | 110, 120 or 130 |
-| Time between swings | 0.9 s | 0.9 or 1.1 s |
-| Swing reach | 5 m, wide arc in front | exact shape |
-| Ultimate cost | 1680 points | unknown in OW2 |
-| Quick melee (mouse 5) | 40 damage, 2.5 m | |
-
-Other rules, from multiple sources: activating it resets Swift Strike; Swift Strike can be used during it; no
-shuriken during it.
-
-**How in Elden Ring:**
-- **Hits:** the Swift Strike mechanism (invisible point-blank Kukri projectile from behind each target, real game hit
-  with number, sound, reaction; direct damage as fallback) becomes a shared `strike.rs`. A blade swing (left click
-  during Dragonblade) strikes every character in the arc in front; quick melee strikes the nearest one in front.
-  Damage = Overwatch number x dexterity scaling, like everything else. No bleed on swings (unless you want it).
-- **Ultimate charge:** counted in **Overwatch damage**, not Elden Ring damage (the dexterity-scaled numbers and
-  Elden Ring's health would otherwise change how fast it fills): each hit adds its Overwatch base (27 / 54
-  shuriken, 50 dash, 40 melee; swings don't charge, as in Overwatch). Plus Overwatch's passive charge over time if
-  you confirm it.
-- **Q** starts it when full; the overlay shows the charge in % and "DRAGONBLADE" while active (the real HUD is step
-  12, the sword itself step 10).
+**How in Elden Ring** (your choices, 2026-10-08):
+- **Hits:** a swing (hold left click) hits every character within 5 m in the cone, with the same mechanism as Swift
+  Strike: an invisible point-blank projectile from behind each target, here carrying **Corpse Piler's damage row**
+  (Rivers of Blood's Ash of War, AtkParam_Pc 303400300) so it lands as a Corpse Piler hit; attack power 100 x
+  dexterity. Carrier: the Ruin Fragment's Bullet row (10176000), changed in memory while Genji mode is on (the dash
+  keeps the Kukri's). Direct damage as fallback.
+- **Bleed:** each swing hit fills a third of the target's bleed bar (a bleed every third swing), applied directly
+  like the dash's.
+- **Visible sweep** (until Genji's own model and animations exist, then removed): each swing fires the **Blood Blade**
+  crescent (Ash of War, Bullet 2635) along the view, 5 m, with its damage row removed in memory, so it's only a look.
+- **Quick melee (mouse 5):** 40 x dexterity to the nearest character within 2.5 m in front, same mechanism (Kukri
+  carrier), outside Dragonblade; about 0.8 s between uses (not verified).
+- **Ultimate charge** (`ult.rs`): counted in Overwatch damage (27/54 per shuriken hit, 50 per dash hit, 40 per melee
+  hit; swings don't charge, as in Overwatch) plus 5 per second, paused while Dragonblade is active; Q when full.
+- **Overlay:** "ULT n%" under the crosshair, "DRAGONBLADE n s" while active.
 
 ## 6. Risks and unknowns (honest list)
 
