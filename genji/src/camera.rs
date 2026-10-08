@@ -220,13 +220,17 @@ fn camera_step_inner(dt: f32) -> bool {
         glog!("CAMERA", "game follow camera was {angle:.1} deg away from our view (before this frame's sync)");
     }
     look.write_camera(&mut camera.pers_cam_2.matrix, eye);
-    if let Some(mut chr_cam) = chr_cam {
-        look.write_camera(&mut unsafe { chr_cam.as_mut() }.pers_cam.matrix, eye);
-    }
-    // 3c. Overwatch field of view, on the drawn camera and the follow camera (health bars are placed with it).
+    // 3c. Overwatch field of view on every camera that follows us. F8 marks of 2026-10-08: chr_cam still had the
+    // game's 48 degrees while the screen showed 70.5, which puts anything placed with it about 1.6 times further
+    // from the centre (health bars at the side).
     let fov = vertical_fov(OVERWATCH_FOV);
     camera.pers_cam_1.fov = fov;
     camera.pers_cam_2.fov = fov;
+    if let Some(mut chr_cam) = chr_cam {
+        let cam = &mut unsafe { chr_cam.as_mut() }.pers_cam;
+        look.write_camera(&mut cam.matrix, eye);
+        cam.fov = fov;
+    }
 
     // F8: diagnostic snapshot of every camera, for health bars drawn in the wrong place (test of 2026-10-08).
     let f8 = dinput::key_down(&dinput::raw_keys(), dik::F8);
