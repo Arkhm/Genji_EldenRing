@@ -14,7 +14,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use eldenring::cs::{CSCam, CSCamera, ChrCam, LadderState, PlayerIns, WorldChrMan};
+use eldenring::cs::{CSCam, CSCamera, ChrCam, LadderState, LockCamParam, PlayerIns, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
@@ -65,6 +65,8 @@ struct View {
     /// Seconds until the next CAMERA sync report.
     sync_report: f32,
     f8_was_down: bool,
+    /// LockCamParam field of view of every row, saved while ours is applied (STATUS.md option B).
+    lock_cam_fov: Option<Vec<(u32, f32)>>,
 }
 
 pub fn camera_step(dt: f32) {
@@ -113,6 +115,10 @@ fn camera_step_inner(dt: f32) -> bool {
 
     // Shuriken flight and damage values on the projectile's rows: on in Genji mode, vanilla otherwise.
     view.thrower.set_shuriken_values(reason.is_none());
+
+    // STATUS.md option B: the Overwatch field of view through the game's own setting (LockCamParam), while first
+    // person is on; restored otherwise.
+    set_lock_cam_fov(&mut view.lock_cam_fov, reason.is_none());
 
     if reason.is_some() {
         view.firing.tick(dt, false, false, false);
@@ -217,7 +223,12 @@ fn camera_step_inner(dt: f32) -> bool {
         let ours = Vec3::new(camera.pers_cam_1.matrix.2.0, camera.pers_cam_1.matrix.2.1, camera.pers_cam_1.matrix.2.2);
         let game = Vec3::new(camera.pers_cam_2.matrix.2.0, camera.pers_cam_2.matrix.2.1, camera.pers_cam_2.matrix.2.2);
         let angle = ours.normalize_or_zero().dot(game.normalize_or_zero()).clamp(-1.0, 1.0).acos().to_degrees();
-        glog!("CAMERA", "game follow camera was {angle:.1} deg away from our view (before this frame's sync)");
+        let chr_fov = chr_cam.map(|c| unsafe { c.as_ref() }.pers_cam.fov.to_degrees()).unwrap_or(f32::NAN);
+        glog!(
+            "CAMERA",
+            "game follow camera was {angle:.1} deg away from our view; the game's own fov this frame: follow {:.1}, chr_cam {chr_fov:.1} (before our overwrite)",
+            camera.pers_cam_2.fov.to_degrees()
+        );
     }
     look.write_camera(&mut camera.pers_cam_2.matrix, eye);
     // 3c. Overwatch field of view on every camera that follows us. F8 marks of 2026-10-08: chr_cam still had the
@@ -295,6 +306,39 @@ fn snapshot(camera: &CSCamera, chr_cam: Option<std::ptr::NonNull<ChrCam>>, playe
             cam.aspect_ratio,
             screen.join(" | ")
         );
+    }
+}
+
+/// Applies (on) or restores (off) the Overwatch field of view on every LockCamParam row, in memory.
+fn set_lock_cam_fov(saved: &mut Option<Vec<(u32, f32)>>, on: bool) {
+    if on == saved.is_some() {
+        return;
+    }
+    let Ok(params) = (unsafe { SoloParamRepository::instance_mut() }) else {
+        return;
+    };
+    match saved.take() {
+        None => {
+            let fov = vertical_fov(OVERWATCH_FOV).to_degrees();
+            let mut old = Vec::new();
+            for (id, row) in params.rows_mut::<LockCamParam>() {
+                old.push((id, row.cam_fov_y()));
+                row.set_cam_fov_y(fov);
+            }
+            let mut values: Vec<f32> = old.iter().map(|(_, f)| *f).collect();
+            values.sort_by(f32::total_cmp);
+            values.dedup();
+            glog!("CAMERA", "LockCamParam fov -> {fov:.1} on {} rows (were {:?})", old.len(), values);
+            *saved = Some(old);
+        }
+        Some(old) => {
+            for (id, row) in params.rows_mut::<LockCamParam>() {
+                if let Some((_, fov)) = old.iter().find(|(i, _)| *i == id) {
+                    row.set_cam_fov_y(*fov);
+                }
+            }
+            glog!("CAMERA", "LockCamParam fov restored on {} rows", old.len());
+        }
     }
 }
 

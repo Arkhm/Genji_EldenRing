@@ -3,6 +3,19 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Health bars, STATUS option B: Overwatch FOV through LockCamParam
+
+**Changed:** `genji/src/camera.rs`: while first person is on, every LockCamParam row's `camFovY` (the game's own
+field-of-view setting) is set to 70.5 in memory; restored whenever first person ends (`CAMERA LockCamParam fov`
+lines). The direct camera writes stay. The 2-second `CAMERA` line now also shows the field of view the game itself
+produced that frame (before our overwrite): 70.5 there means the game took it from the param.
+**Why:** Your choice (STATUS.md option B): if the game places health bars with its own FOV setting, picture and bars
+agree.
+**Tested how:** Build OK; 25 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** Health bars.
+**Next:** Damage option 2 (the game deals the damage).
+
 ## 2026-10-08 Test of dexterity scaling and chr_cam FOV; STATUS.md for health bars
 
 **Changed:** `STATUS.md` (new: health bars, two failed attempts, options); the old one (shuriken limit, resolved)
