@@ -1,7 +1,9 @@
 //! Living characters near the player as targets for Genji's attacks (shuriken, Swift Strike): collision cylinder
 //! and a pointer to change their HP. Moved out of `shuriken.rs` (step 7) so every attack uses the same list.
 
+use std::collections::HashMap;
 use std::ptr::NonNull;
+use std::sync::Mutex;
 
 use eldenring::cs::{ChrIns, PlayerIns, WorldChrMan};
 use fromsoftware_shared::FromStatic;
@@ -47,6 +49,16 @@ pub fn living(player: &PlayerIns) -> Vec<Target> {
         .collect()
 }
 
+/// Total HP we took from each character ourselves (by address), so HP changes made by the game itself can be told
+/// apart from ours (`shuriken.rs` checks the game's own hit before applying shuriken damage).
+static OWN: Mutex<Option<HashMap<usize, i64>>> = Mutex::new(None);
+
+/// All HP we have taken from this character ourselves so far.
+pub fn own_damage(chr: usize) -> i64 {
+    let guard = OWN.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().and_then(|m| m.get(&chr).copied()).unwrap_or(0)
+}
+
 /// Deals `damage` to a target by lowering its HP (never below 0); registers it for kill credit (`kills.rs`).
 /// Returns (HP before, HP after, max HP), or None if it was already dead.
 pub fn damage(target: &Target, damage: i32) -> Option<(i32, i32, i32)> {
@@ -57,6 +69,9 @@ pub fn damage(target: &Target, damage: i32) -> Option<(i32, i32, i32)> {
     }
     let before = data.hp;
     data.hp = (data.hp - damage).max(0);
+    let id = target.chr.as_ptr() as usize;
+    *OWN.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).entry(id).or_insert(0) +=
+        (before - data.hp) as i64;
     crate::kills::damaged(target.chr.as_ptr() as usize);
     Some((before, data.hp, data.max_hp))
 }

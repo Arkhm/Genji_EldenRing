@@ -88,6 +88,10 @@ const HIT_MARGIN: f32 = 0.4;
 /// Map collision filter for the aim ray (step 5 tests: all filter bits see the same surface).
 const MAP_FILTER: u32 = 0x0200_0058;
 const REPORT_EVERY: f32 = 2.0;
+/// A shuriken that ends next to a character counts only once the game itself registered the hit: the character
+/// loses HP from the engine's own small hit (ENGINE_ATK_PHYS, about 4-5 HP). A shield block takes none (test of
+/// 2026-10-08: blocked shuriken still did 27, so health bars and damage disagreed). We wait this many frames for it.
+const CONFIRM_FRAMES: u32 = 10;
 /// Test of 2026-10-07: a shuriken that hits a wall "flicks" (the dagger's bounce) and, with our zero gravity, hangs
 /// in the air in front of the wall for good, keeping its slot in the bullet manager (screenshot: a wall full of
 /// daggers; throwing stopped after the pool filled; killing an enemy freed the ones stuck in it). Impact is now
@@ -195,6 +199,25 @@ pub struct Thrower {
     candidate: usize,
     impacts: u32,
     peak_extra: u32,
+    /// Last seen (HP, our own damage total) per character, and HP the game itself took from it since we started
+    /// watching (both by address).
+    observed: HashMap<usize, (i32, i64)>,
+    engine_taken: HashMap<usize, i64>,
+    /// Hits waiting for the game's confirmation.
+    pending: Vec<Pending>,
+    blocked: u32,
+}
+
+/// A shuriken ended next to a character; damage waits for the game's own hit (CONFIRM_FRAMES).
+struct Pending {
+    chr: usize,
+    damage: i32,
+    head: bool,
+    /// `engine_taken` for this character before the impact frame.
+    engine_before: i64,
+    frames: u32,
+    age: f32,
+    height_share: f32,
 }
 
 impl Thrower {
@@ -419,9 +442,25 @@ impl Thrower {
                 self.removed_after_life_zero += 1;
             }
         }
-        for (pos, vel, age) in impacts {
-            self.resolve(player, pos, vel, age, dt);
+        // HP the game itself took from each character this frame (anything that isn't our own damage).
+        let living = targets::living(player);
+        let engine_before_frame = self.engine_taken.clone();
+        for t in &living {
+            let id = t.chr.as_ptr() as usize;
+            let hp = unsafe { t.chr.as_ref() }.modules.data.hp;
+            let own = targets::own_damage(id);
+            if let Some(&(last_hp, last_own)) = self.observed.get(&id) {
+                let engine = (last_hp - hp) as i64 - (own - last_own);
+                if engine > 0 {
+                    *self.engine_taken.entry(id).or_insert(0) += engine;
+                }
+            }
+            self.observed.insert(id, (hp, own));
         }
+        for (pos, vel, age) in impacts {
+            self.resolve(player, pos, vel, age, dt, &engine_before_frame);
+        }
+        self.confirm(&living);
 
         self.report_timer += dt;
         if self.report_timer >= REPORT_EVERY && self.throws > 0 {
@@ -439,12 +478,13 @@ impl Thrower {
             );
             glog!(
                 "SHURIKEN",
-                "live {live} (stuck {stuck}){} | thrown {} ended {} hits {} headshots {} | stuck ones removed after life=0: {}, after push down: {}",
+                "live {live} (stuck {stuck}){} | thrown {} ended {} hits {} headshots {} blocked {} | stuck ones removed after life=0: {}, after push down: {}",
                 sample_life.map(|(l, m)| format!(", engine life {l:.2} / max {m:.2}")).unwrap_or_default(),
                 self.throws,
                 self.ended,
                 self.hits,
                 self.headshots,
+                self.blocked,
                 self.removed_after_life_zero,
                 self.removed_after_push
             );
@@ -453,7 +493,15 @@ impl Thrower {
 
     /// A shuriken ended somewhere between its last seen position and where its velocity would have taken it by
     /// the next frame: if that stretch passes next to a character, it hit it (closest character wins).
-    fn resolve(&mut self, player: &PlayerIns, last_pos: Vec3, vel: Vec3, age: f32, dt: f32) {
+    fn resolve(
+        &mut self,
+        player: &PlayerIns,
+        last_pos: Vec3,
+        vel: Vec3,
+        age: f32,
+        dt: f32,
+        engine_before: &HashMap<usize, i64>,
+    ) {
         const SAMPLES: usize = 8;
         let reach = vel * (dt.max(1.0 / 60.0) * 1.5);
         let mut best: Option<(f32, Target, Vec3)> = None;
@@ -475,23 +523,60 @@ impl Thrower {
         };
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
         let damage = ((if head { HEAD_DAMAGE } else { BODY_DAMAGE }) * DAMAGE_MULTIPLIER).round() as i32;
-        let Some((before, after, max)) = targets::damage(&target, damage) else {
-            return;
-        };
-        self.hits += 1;
-        if head {
-            self.headshots += 1;
-        }
-        glog!(
-            "HIT",
-            "{} {damage} on character {:#x}: hp {before} -> {} / {} (shuriken flew {:.2} s, hit at {:.0}% of its height)",
-            if head { "HEADSHOT" } else { "body" },
-            target.chr.as_ptr() as usize,
-            after,
-            max,
+        let chr = target.chr.as_ptr() as usize;
+        crate::kills::damaged(chr); // kill credit even if the game's own hit finishes it
+        self.pending.push(Pending {
+            chr,
+            damage,
+            head,
+            engine_before: engine_before.get(&chr).copied().unwrap_or(0),
+            frames: 0,
             age,
-            100.0 * (pos.y - target.feet.y) / target.height
-        );
+            height_share: (pos.y - target.feet.y) / target.height,
+        });
+    }
+
+    /// Applies pending hits the game confirmed (the character lost HP to the engine's own hit); drops blocked ones.
+    fn confirm(&mut self, living: &[Target]) {
+        let mut still = Vec::new();
+        for mut p in std::mem::take(&mut self.pending) {
+            p.frames += 1;
+            let Some(target) = living.iter().find(|t| t.chr.as_ptr() as usize == p.chr) else {
+                continue; // died (the game's own hit finished it) or unloaded
+            };
+            let engine = self.engine_taken.get(&p.chr).copied().unwrap_or(0) - p.engine_before;
+            if engine > 0 {
+                // Total per shuriken = Overwatch damage: the game's part plus ours.
+                let ours = (p.damage as i64 - engine).max(0) as i32;
+                let Some((before, after, max)) = targets::damage(target, ours) else {
+                    continue;
+                };
+                self.hits += 1;
+                if p.head {
+                    self.headshots += 1;
+                }
+                glog!(
+                    "HIT",
+                    "{} {} on character {:#x}: game {engine} + ours {ours}, hp {before} -> {after} / {max} (confirmed after {} frames; shuriken flew {:.2} s, hit at {:.0}% of its height)",
+                    if p.head { "HEADSHOT" } else { "body" },
+                    p.damage,
+                    p.chr,
+                    p.frames,
+                    p.age,
+                    100.0 * p.height_share
+                );
+            } else if p.frames >= CONFIRM_FRAMES {
+                self.blocked += 1;
+                glog!(
+                    "HIT",
+                    "BLOCKED on character {:#x}: the game registered no hit in {CONFIRM_FRAMES} frames (shield or guard); no damage",
+                    p.chr
+                );
+            } else {
+                still.push(p);
+            }
+        }
+        self.pending = still;
     }
 }
 
