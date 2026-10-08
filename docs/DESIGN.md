@@ -380,9 +380,17 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
   Dragonblade icon and "Q"; during Dragonblade, the ring drains with the seconds left.
 - **Bottom right:** Swift Strike (LSHIFT) and Deflect (E) icons with their cooldown seconds (darkened while cooling,
   highlighted while Deflect is up), the shuriken icon with ammo "n | 30", "RELOADING" while reloading.
-- Icons and the portrait are read at startup from `D:\GenjiBridgeAssets\raw` (Overwatch's own images, outside the
-  repository); if a file is missing that element is drawn without it and the log says so. Font: Windows'
-  Bahnschrift (closest to Overwatch's HUD lettering among the fonts every Windows has), read from `C:\Windows\Fonts`.
+- Art (2026-10-08, your request: Overwatch's own HUD designs). DataTool's `dump-ui-textures` (20,623 textures,
+  3.6 GB) and `extract-vector-images` (1,502 SVGs) went to `D:\GenjiBridgeAssets`. Contact sheets were used to find
+  the pieces. `tools\make_hud_art.py` builds `D:\GenjiBridgeAssets\hud`:
+  - the portrait cut to Overwatch's hexagon with its outline (UI textures 39E89, 27AB5);
+  - the ultimate's dark disc (21660);
+  - the "+" health icon (vector 0022).
+- Shapes drawn with the proportions of your Overwatch 2 screenshot: slanted health segments, slanted ability frames
+  (white when ready, dark with seconds while cooling), key boxes, cyan ammo lines.
+- Numbers in Segoe UI Black Italic (Overwatch's heavy oblique digits aren't a font file DataTool extracts); labels
+  in Bahnschrift.
+- Overwatch stores its HUD layout as UI data, not pictures, so positions follow the screenshot.
 - The temporary "ULT n%" and "DEFLECT" texts go. Elden Ring's own HUD stays (hiding it would break the "HUD visible
   = gameplay" rule our controls rely on).
 

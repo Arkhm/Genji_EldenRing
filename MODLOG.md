@@ -3,6 +3,34 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD with Overwatch's own UI art
+
+**Changed:**
+- DataTool `dump-ui-textures` and `extract-vector-images` to `D:\GenjiBridgeAssets\ui-textures`, `ui-vectors`
+  (20,623 + 1,502 files, outside the repository).
+- Contact sheets in `D:\GenjiBridgeAssets\sheets` to find the HUD pieces.
+- New `tools/make_hud_art.py`: builds `D:\GenjiBridgeAssets\hud` (hexagon portrait with outline, the ultimate's
+  dark disc, the "+" icon).
+- `genji/src/hud.rs` rewritten in Overwatch 2's style from your screenshot:
+  - hexagon portrait, "+" box, italic health numbers, 10 slanted white segments;
+  - the dark disc with a filling ring, the number, and a Q key box;
+  - slanted ability frames: white with dark icon when ready, dark with seconds while cooling, cyan edge while
+    Deflect is up;
+  - LSHIFT/E key boxes;
+  - shuriken with italic ammo between cyan lines;
+  - Segoe UI Black Italic numbers.
+- `docs/DESIGN.md` 5h.
+
+**Why:** Your test of commit `285d212`: every HUD element works, but it should use Overwatch's own designs.
+**Tested how:** Build OK, no warnings; unit tests pass. I looked at the generated portrait picture (hexagon with cyan
+outline).
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game.
+- Overwatch's exact HUD layout and font aren't extractable as files; positions follow your screenshot.
+
+**Next:** Your screenshot.
+
 ## 2026-10-08 Dragonblade: 1 s unsheathing
 
 **Changed:** `genji/src/blade.rs`: after Q, 1 s of unsheathing during which you can't swing and the 6 s don't drain
