@@ -16,10 +16,16 @@
 //! together with 0x17); choosing a tab replaces 0x1c with the tab's own state (0x1d, 0x25, 0x34 seen) and hides
 //! the HUD. So "gameplay" = 0x07 visible and 0x1c not visible.
 //! Rules that failed: "any UI state beyond a baseline" (pop-ups counted as menus) and "gameplay input reader
-//! enabled" (it stays enabled in menus). If you set Elden Ring's HUD to "Auto" or "Off", this rule breaks.
+//! enabled" (it stays enabled in menus).
+//!
+//! 2026-10-08: Elden Ring's HUD is switched off while Genji input is captured (your request: the game's HUD
+//! clutters the Overwatch one), with the game's own HUD option (`GameSettings.hud_type`), and restored when capture
+//! ends. So the rule no longer needs 0x07: "gameplay" = 0x08 visible, 0x07 visible or the HUD switched off by us,
+//! and no UI state outside GAMEPLAY_UI_STATES (the states seen during play in your logs; the Esc menu's 0x1c and
+//! every menu tab are outside it). An unknown state counts as a menu (the safe side) and is logged.
 //! UI-state changes are still logged, to map them later.
 
-use eldenring::cs::CSMenuManImp;
+use eldenring::cs::{CSMenuManImp, GameDataMan, HudType};
 use fromsoftware_shared::FromStatic;
 
 use crate::camera;
@@ -66,8 +72,10 @@ const BINDINGS: [(Action, Input); 8] = [
 const TOGGLE_KEY: usize = dik::F9;
 /// UI state that is visible exactly while the in-game HUD is on screen.
 const HUD_UI_STATE: u32 = 0x07;
-/// UI state of the Esc menu's tab bar (the HUD stays visible behind it).
-const ESC_MENU_UI_STATE: u32 = 0x1c;
+/// Present in every gameplay set of UI states in your logs (and in menus); absent on loading screens.
+const WORLD_UI_STATE: u32 = 0x08;
+/// UI states seen during play (pop-ups, item pickups, prompts included), from your logs of 2026-10-07/08.
+const GAMEPLAY_UI_STATES: [u32; 11] = [0x04, 0x05, 0x07, 0x08, 0x09, 0x0f, 0x11, 0x12, 0x13, 0x17, 0x1a];
 /// Gameplay must hold this long before capture switches on (release is instant). Going back from a menu tab
 /// to the Esc menu shows the HUD one frame before the Esc menu's own state, which flicked capture on for a frame.
 const CAPTURE_DELAY: f32 = 0.1;
@@ -82,6 +90,10 @@ pub struct Controls {
     clock: f32,
     report_timer: f32,
     gameplay_for: f32,
+    /// Elden Ring's own HUD setting, saved while we switch its HUD off (Genji input captured).
+    hud_saved: Option<HudType>,
+    /// UI states outside GAMEPLAY_UI_STATES already logged.
+    unknown_logged: u128,
 }
 
 impl Default for Controls {
@@ -96,6 +108,8 @@ impl Default for Controls {
             clock: 0.0,
             report_timer: 0.0,
             gameplay_for: 0.0,
+            hud_saved: None,
+            unknown_logged: 0,
         }
     }
 }
@@ -120,7 +134,18 @@ impl Controls {
             log_ui_change(self.last_ui, ui);
             self.last_ui = ui;
         }
-        let hud = ui.is_some_and(|bits| bits & (1 << HUD_UI_STATE) != 0 && bits & (1 << ESC_MENU_UI_STATE) == 0);
+        let allowed: u128 = GAMEPLAY_UI_STATES.iter().fold(0, |acc, s| acc | (1 << s));
+        let hud = ui.is_some_and(|bits| {
+            let hud_shown_or_ours = bits & (1 << HUD_UI_STATE) != 0 || self.hud_saved.is_some();
+            bits & (1 << WORLD_UI_STATE) != 0 && hud_shown_or_ours && bits & !allowed == 0
+        });
+        if let Some(bits) = ui {
+            let unknown = bits & !allowed & !self.unknown_logged;
+            if unknown != 0 && bits & (1 << WORLD_UI_STATE) != 0 {
+                glog!("UI", "state(s) {} not known from gameplay: counted as a menu", fmt_set(unknown));
+                self.unknown_logged |= unknown;
+            }
+        }
 
         let gameplay = self.enabled && player_present && hud;
         self.gameplay_for = if gameplay { self.gameplay_for + dt } else { 0.0 };
@@ -130,12 +155,13 @@ impl Controls {
             dinput::set_blocking(capturing);
             gamepad::set_weapons_blocked(capturing);
             camera::set_first_person(capturing);
+            self.set_game_hud_hidden(capturing);
             let why = if !self.enabled {
                 "Genji mode off"
             } else if !player_present {
                 "no player"
             } else if !hud {
-                "menu or loading (HUD hidden or Esc menu)"
+                "menu or loading"
             } else {
                 "gameplay"
             };
@@ -168,6 +194,26 @@ impl Controls {
         self.click_was_down = click_now;
     }
 
+    /// Switches Elden Ring's HUD off (true) or back to your setting (false), with the game's own HUD option.
+    fn set_game_hud_hidden(&mut self, hidden: bool) {
+        let Some(settings) = unsafe { GameDataMan::instance_mut() }.ok().map(|g| &mut *g.game_settings) else {
+            return;
+        };
+        match (hidden, self.hud_saved) {
+            (true, None) => {
+                self.hud_saved = Some(settings.hud_type);
+                settings.hud_type = HudType::Off;
+                glog!("MODE", "Elden Ring HUD off (was {:?})", self.hud_saved.unwrap());
+            }
+            (false, Some(saved)) => {
+                settings.hud_type = saved;
+                self.hud_saved = None;
+                glog!("MODE", "Elden Ring HUD back to {saved:?}");
+            }
+            _ => {}
+        }
+    }
+
     /// Once per second.
     pub fn report(&mut self) {
         let keyboard = dinput::take_read_count();
@@ -175,6 +221,15 @@ impl Controls {
         if self.report_timer >= 10.0 {
             self.report_timer = 0.0;
             glog!("DINPUT", "keyboard reads in the last second: {keyboard}");
+        }
+    }
+}
+
+/// After a crash of our per-frame code: the game's HUD back on, so it's never left switched off.
+pub fn emergency_hud_on() {
+    if let Some(g) = unsafe { GameDataMan::instance_mut() }.ok() {
+        if g.game_settings.hud_type == HudType::Off {
+            g.game_settings.hud_type = HudType::On;
         }
     }
 }

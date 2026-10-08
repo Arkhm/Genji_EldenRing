@@ -101,6 +101,7 @@ fn boot() {
                 dinput::set_blocking(false); // never leave the player's keys captured
                 gamepad::set_weapons_blocked(false);
                 camera::set_first_person(false);
+                controls::emergency_hud_on();
                 disabled = true;
             }
         },
