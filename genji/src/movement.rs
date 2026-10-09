@@ -677,6 +677,11 @@ impl Mover {
     }
 
     /// Gives control back to the game (menus, Torrent, ladders, death, F9).
+    /// Swift Strike's dash is under way (no shuriken then, Overwatch).
+    pub fn dashing(&self) -> bool {
+        self.dash_left > 0.0
+    }
+
     pub fn release(&mut self, player: &mut PlayerIns) {
         self.dash_left = 0.0;
         self.settled_for = 0.0;

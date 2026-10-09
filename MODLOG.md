@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Shuriken: a dash cancels the burst, none during the dash, always 3 per burst or fan
+
+**Changed:**
+- `camera.rs`, `movement.rs`: no shuriken while Swift Strike's dash is under way (`Mover::dashing()`). A burst under
+  way when the dash starts is cut short, so the dash wins whatever the order. The shuriken not thrown aren't spent,
+  so the ammo can end on numbers that aren't multiples of 3.
+- `firing.rs`: a burst or fan always throws 3 once it starts, even with only 1 or 2 left. It spends what's left, then
+  reloads.
+- Log: `[FIRE] burst cut short (n not thrown: dash, ...), ammo a`.
+**Why:** You, about Overwatch: "if you m1, and throw only one shuriken, you dash, canceling the rest", "you also cant
+shoot while in dash", "you can end up with 1 or 2 remaining ammo, but you still shoots 3 shurikens".
+**Tested how:** 34 unit tests pass, two of them new: the last 1 or 2 shuriken still throw 3 (burst and fan); a dash
+cancels the rest of a burst and keeps its ammo. Not tested in game.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game. The recovery after a cancelled burst still runs from the burst's start
+(0.88 s), as before; whether Overwatch shortens it after a dash isn't known.
+**Next:** Your test.
+
 ## 2026-10-09 Boss names under the boss bar, bar raised
 
 **Changed:**

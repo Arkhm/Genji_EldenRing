@@ -2,6 +2,10 @@
 //! the automatic reload. Pure logic, no game access: `tick` says which throws to make this frame, and
 //! `shuriken.rs` makes them.
 //!
+//! Overwatch rules (you, 2026-10-09): Swift Strike stops shooting at once, so a dash cancels the rest of a burst
+//! (the shuriken not thrown aren't spent, so the ammo needn't be a multiple of 3), no shuriken during the dash, and
+//! a burst or fan always throws 3 even with 1 or 2 left (it spends what's left).
+//!
 //! Values (2026-10-07): from a video measurement of Overwatch you passed on (another AI's analysis of 10 consecutive
 //! throws) plus Blizzard's patch notes (0.68 s recovery, 75 m/s): 0.10 s between burst shuriken, 0.687 s between
 //! fans measured, reload about 1.5 s. The burst cycle is inferred (0.2 s burst + 0.68 s recovery), not measured.
@@ -68,7 +72,7 @@ impl Firing {
 
         if self.burst_left > 0 {
             if !can_throw {
-                glog!("FIRE", "burst cut short ({} not thrown, not driving)", self.burst_left);
+                glog!("FIRE", "burst cut short ({} not thrown: dash, Deflect, Dragonblade or the game driving), ammo {}", self.burst_left, self.ammo);
                 self.burst_left = 0;
             } else {
                 self.burst_timer -= dt;
@@ -81,13 +85,13 @@ impl Firing {
         } else if can_throw && self.recovery <= 0.0 && self.ammo > 0 {
             if primary {
                 self.take(&mut shots, 0.0);
-                self.burst_left = (BURST_SHOTS - 1).min(self.ammo);
+                self.burst_left = BURST_SHOTS - 1;
                 self.burst_timer = BURST_SPACING;
                 self.recovery = BURST_CYCLE;
-                glog!("FIRE", "burst, ammo {} after this burst", self.ammo - self.burst_left);
+                glog!("FIRE", "burst, ammo {} after this burst", self.ammo.saturating_sub(self.burst_left));
             } else if secondary {
                 let angle = FAN_ANGLE.to_radians();
-                for i in 0..FAN_SHOTS.min(self.ammo) {
+                for i in 0..FAN_SHOTS {
                     let side = i as f32 - (FAN_SHOTS - 1) as f32 / 2.0;
                     self.take(&mut shots, side * angle);
                 }
@@ -103,11 +107,10 @@ impl Firing {
         shots
     }
 
+    /// One shuriken: always thrown once its burst or fan has started; spends one if any are left.
     fn take(&mut self, shots: &mut Vec<f32>, angle: f32) {
-        if self.ammo > 0 {
-            self.ammo -= 1;
-            shots.push(angle);
-        }
+        self.ammo = self.ammo.saturating_sub(1);
+        shots.push(angle);
     }
 }
 
@@ -179,6 +182,30 @@ mod tests {
         assert!(f.reload.is_some());
         assert!(run(&mut f, RELOAD_TIME - 0.1, true, false).is_empty());
         assert!(!run(&mut f, 0.2, true, false).is_empty());
+    }
+
+    #[test]
+    fn last_one_or_two_still_throw_three() {
+        for left in [1, 2] {
+            let mut f = Firing { ammo: left, ..Firing::default() };
+            assert_eq!(run(&mut f, 0.5, true, false).len(), 3, "burst with {left} left");
+            assert_eq!(f.ammo, 0);
+            assert!(f.reload.is_some());
+            let mut f = Firing { ammo: left, ..Firing::default() };
+            assert_eq!(run(&mut f, 0.1, false, true).len(), 3, "fan with {left} left");
+            assert!(f.reload.is_some());
+        }
+    }
+
+    #[test]
+    fn dash_cancels_the_rest_of_a_burst_and_keeps_its_ammo() {
+        let mut f = Firing::default();
+        assert_eq!(f.tick(DT, true, false, true).len(), 1);
+        // The dash: no throwing allowed for 12 frames.
+        let during: usize = (0..12).map(|_| f.tick(DT, true, false, false).len()).sum();
+        assert_eq!(during, 0);
+        assert_eq!(f.ammo, AMMO - 1);
+        assert_eq!(f.burst_left, 0);
     }
 
     #[test]
