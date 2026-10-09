@@ -397,8 +397,12 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
   `D:\Videos\edits_hyper\Overwatch_HUD_reference_20261008\Overwatch_HUD_Agent_Pack`, with its written spec
   (`HUD_ANIMATION_SPEC.txt`). Its frames are at 1080 lines, so sizes, colours and timings were measured on them
   directly. Frames and comparison sheets are in `D:\GenjiBridgeAssets\hud_ref`, extracted with CapCut's ffmpeg.
-  - **Ultimate ready:** halo, fine arcs, pale ring, thick cyan ring, white disc with the emblem, side markers, short
-    electric ribbons at changing places, filled Q.
+  - **Ultimate ready:** halo, a blue fire band, fine arcs, pale ring, thick cyan ring, white disc with the emblem,
+    side markers and a filled Q.
+    - The fire band flickers in tongues around the ring.
+    - Quick flame-tongue flashes appear at changing places: two bright cyan edges with a faint fill between them.
+    - Both are drawn as continuous soft strips, made of textured quads that share their corners, so there are no
+      seams or visible rectangles.
   - **Ultimate pressed (0.4 s):** the ring expands and fades, and the emblem gives way to the empty meter with its
     "0". Q becomes outlined.
   - **During Dragonblade:** the meter shows the charge, as in the clip. The draining ring with seconds is gone.

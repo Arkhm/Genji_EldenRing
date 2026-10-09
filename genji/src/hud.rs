@@ -48,9 +48,10 @@ const COOLDOWN_ENTRY: f32 = 0.17;
 /// 64 px), within PRESS_IN seconds.
 const PRESS_DEPTH: f32 = 0.16;
 const PRESS_IN: f32 = 0.12;
-/// Electric ribbons around the ready ultimate (slots; each shows a ribbon for part of its cycle), and blue flames.
+/// Electric flame tongues around the ready ultimate (slots; each shows one for part of its cycle).
 const ULT_WISPS: u32 = 3;
-const ULT_FLAMES: u32 = 30;
+/// Pieces of the blue fire band around the ready ultimate.
+const AURA_PIECES: usize = 120;
 
 /// Everything the HUD shows, written by the game thread each frame.
 #[derive(Clone, Copy, Default)]
@@ -122,6 +123,9 @@ pub struct Resources {
     white: Picture,
     tile_grad: Picture,
     bar: Picture,
+    /// Soft across (strips: bright in the middle, clear at both edges), and fading from top to bottom (fire band).
+    ribbon: Picture,
+    fade: Picture,
     italic_ult: Option<FontId>,
     italic_cd: Option<FontId>,
     bold_big: Option<FontId>,
@@ -202,6 +206,11 @@ impl Resources {
             let g = (255.0 - 38.0 * v) as u8;
             [g, g, g, 255]
         });
+        r.ribbon = make(64, 4, &|u, _| {
+            let t = smooth(1.0 - (2.0 * u - 1.0).abs());
+            [255, 255, 255, (255.0 * t) as u8]
+        });
+        r.fade = make(4, 64, &|_, v| [255, 255, 255, (255.0 * (1.0 - v).powf(1.6)) as u8]);
         r.bar = make(32, 128, &|u, v| {
             let across = (1.0 - (2.0 * u - 1.0).abs()).powf(0.3);
             let up = smooth((v / 0.3).min(1.0));
@@ -231,10 +240,10 @@ impl Resources {
         r.label = add(LABEL_FONT, 15.0);
         glog!(
             "HUD",
-            "resources: pictures {}/13, fonts {}/5",
+            "resources: pictures {}/15, fonts {}/5",
             [
                 r.portrait, r.plus, r.glow_ring, r.dash_ring, r.flare, r.glow_dot, r.swift, r.deflect, r.blade, r.shuriken,
-                r.white, r.tile_grad, r.bar,
+                r.white, r.tile_grad, r.bar, r.ribbon, r.fade,
             ]
                 .iter()
                 .filter(|p| p.is_some())
@@ -460,7 +469,7 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         let flicker = 0.85 + 0.15 * (now * 13.0).sin() * (now * 7.3).cos();
         picture(&draw, r.glow_dot, [cx, cy], 205.0 * k * (1.0 + 0.06 * breathe), 0.0, alpha([60, 140, 255, 255], (0.6 + 0.25 * breathe) * flicker));
         picture(&draw, r.glow_dot, [cx, cy], 150.0 * k, 0.0, alpha([90, 190, 255, 255], 0.75 + 0.25 * breathe));
-        ult_flames(&draw, r.glow_dot, [cx, cy], 41.0 * k, now);
+        ult_aura(&draw, r.fade, [cx, cy], now, k);
         for i in 0..4 {
             let f = i as f32;
             let start = now * (0.35 + 0.1 * f) * if i % 2 == 0 { 1.0 } else { -1.0 } + f * 1.7;
@@ -473,7 +482,7 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         draw.add_circle([cx, cy], 41.5 * k, col([40, 100, 165, 255])).thickness(3.0 * k).num_segments(96).build();
         draw.add_circle([cx, cy], 39.5 * k, col([233, 233, 242, 255])).filled(true).num_segments(96).build();
         picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, ICON_DARK);
-        ult_wisps(&draw, [cx, cy], now, k);
+        ult_wisps(&draw, r.ribbon, r.white, [cx, cy], now, k);
         for side in [-1.0f32, 1.0] {
             let x = cx + side * 60.0 * k;
             draw.add_triangle([x, cy - 4.5 * k], [x, cy + 4.5 * k], [x - side * 6.0 * k, cy], col(WHITE)).filled(true).build();
@@ -665,68 +674,119 @@ fn hash(n: u32) -> f32 {
     (x & 0xFFFF) as f32 / 65536.0
 }
 
-/// Blue flames licking out of the ultimate's ring: soft glow particles that rise outward, swirl a little and fade.
-fn ult_flames(draw: &DrawListMut, glow: Picture, center: [f32; 2], radius: f32, now: f32) {
-    for i in 0..ULT_FLAMES {
-        let period = 0.9 + 0.6 * hash(i * 7 + 1);
-        let t = now / period + hash(i * 7 + 2);
-        let (cycle, u) = (t.floor() as u32, t.fract());
-        let seed = i * 977 + cycle * 131;
-        let a = TAU * hash(seed) + (hash(seed + 1) - 0.5) * 0.8 * u;
-        let rr = radius * (1.2 + 0.6 * u * (0.6 + 0.4 * hash(seed + 2)));
-        let fade = (u * 6.0).min(1.0) * (1.0 - u).powf(1.3);
-        let size = radius * (0.55 + 0.5 * u) * (0.7 + 0.5 * hash(seed + 3));
-        let c = [center[0] + rr * a.cos(), center[1] + rr * a.sin()];
-        picture(draw, glow, c, size, 0.0, alpha([60, 150, 255, 255], 0.8 * fade));
-        picture(draw, glow, c, size * 0.45, 0.0, alpha([150, 225, 255, 255], 0.7 * fade));
+/// Blue fire around the ready ultimate (clip part 1): a band from the ring outward whose outer edge flickers in
+/// tongues, fading outward; a deep blue wide band and a brighter, closer one. Made of quads sharing their corners,
+/// so there are no seams.
+fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, k: f32) {
+    let Some((id, _)) = fade else {
+        return;
+    };
+    for (inner, reach, amp, color, strength, speed) in [
+        (50.0, 40.0, 16.0, [35, 105, 255, 255], 0.85, 1.0),
+        (52.0, 18.0, 10.0, [80, 200, 255, 255], 0.8, 1.5),
+    ] {
+        let swirl = now * 0.35 * speed;
+        let outer = |th: f32| -> f32 {
+            let a = th + swirl;
+            let n = 0.5 * (3.0 * a + 1.3 * now * speed).sin()
+                + 0.3 * (7.0 * a - 2.1 * now * speed + 1.0).sin()
+                + 0.2 * (13.0 * a + 3.7 * now * speed + 2.0).sin();
+            (inner + reach + amp * n.max(-0.4)) * k
+        };
+        let at = |th: f32, r: f32| [c[0] + r * th.cos(), c[1] + r * th.sin()];
+        for i in 0..AURA_PIECES {
+            let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
+            draw.add_image_quad(id, at(t0, inner * k), at(t1, inner * k), at(t1, outer(t1)), at(t0, outer(t0)))
+                .col(col(alpha(color, strength)))
+                .build();
+        }
     }
 }
 
-/// Electric ribbons (clip part 1): short, irregular cyan ribbons appear at changing points on the rim, some curling
-/// around the circle, others stretching outward; they brighten, change shape and vanish quickly. Each slot shows one
+/// A soft strip along `pts`, `width(i)` wide and `strength(i)` strong at each point (the texture is bright in the
+/// middle and clear at both edges). Neighbouring quads share their corners, so it is one smooth ribbon.
+fn strip(draw: &DrawListMut, tex: Picture, pts: &[[f32; 2]], width: &dyn Fn(usize) -> f32, strength: &dyn Fn(usize) -> f32, color: [u8; 4]) {
+    let Some((id, _)) = tex else {
+        return;
+    };
+    let n = pts.len();
+    if n < 2 {
+        return;
+    }
+    let sides = |i: usize| -> ([f32; 2], [f32; 2]) {
+        let (a, b) = (pts[i.saturating_sub(1)], pts[(i + 1).min(n - 1)]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+        let (nx, ny) = (-dy / len * width(i) / 2.0, dx / len * width(i) / 2.0);
+        ([pts[i][0] + nx, pts[i][1] + ny], [pts[i][0] - nx, pts[i][1] - ny])
+    };
+    let mut prev = sides(0);
+    for i in 1..n {
+        let cur = sides(i);
+        let a = 0.5 * (strength(i - 1) + strength(i));
+        if a > 0.003 {
+            draw.add_image_quad(id, prev.0, prev.1, cur.1, cur.0).col(col(alpha(color, a))).build();
+        }
+        prev = cur;
+    }
+}
+
+/// Electric flame tongues (clip part 1): quick flashes shaped like a flame tongue: two bright glowing edges meeting at
+/// both ends with a faint fill between, growing along the ring and curling outward, then fading; each slot shows one
 /// for part of its cycle, at a new place each time.
-fn ult_wisps(draw: &DrawListMut, center: [f32; 2], now: f32, k: f32) {
-    const POINTS: usize = 22;
+fn ult_wisps(draw: &DrawListMut, ribbon: Picture, white: Picture, c: [f32; 2], now: f32, k: f32) {
+    const POINTS: usize = 32;
     for i in 0..ULT_WISPS {
-        let period = 0.8 + 0.6 * hash(i * 13 + 1);
+        let period = 0.9 + 0.7 * hash(i * 13 + 1);
         let t = now / period + hash(i * 13 + 2);
         let (cycle, u) = (t.floor() as u32, t.fract());
         let seed = i * 7919 + cycle * 271;
-        let window = 0.3 + 0.25 * hash(seed + 5);
+        let window = 0.3 + 0.15 * hash(seed + 5);
         if u > window {
             continue;
         }
         let v = u / window;
-        let life = (PI * v).sin().powf(0.5);
+        let life = (PI * v).sin().powf(0.6) * (0.85 + 0.15 * (now * 37.0 + i as f32).sin());
+        let grow = smooth((v / 0.4).min(1.0));
         let dir = if hash(seed + 1) < 0.5 { -1.0 } else { 1.0 };
         let start = TAU * hash(seed);
+        let sweep = 0.9 + 0.8 * hash(seed + 2);
         let outward = hash(seed + 6);
-        let length = (50.0 + 60.0 * hash(seed + 2)) * k;
-        let sweep = length / (58.0 * k);
-        let phase = hash(seed + 4) * 50.0;
-        let path = |f: f32, extra: f32| -> [f32; 2] {
-            let a = start + dir * sweep * f;
-            let jag = ((f * 9.0 + now * 12.0 + phase).sin() * 3.0 + (f * 31.0 - now * 40.0 + phase).sin() * 1.0) * k * (0.3 + f);
-            let rr = (54.0 + (6.0 + 50.0 * outward) * f * f + extra) * k + jag;
-            [center[0] + rr * a.cos(), center[1] + rr * a.sin()]
-        };
-        let points: Vec<[f32; 2]> = (0..POINTS).map(|j| path(j as f32 / (POINTS - 1) as f32, 0.0)).collect();
-        // Sometimes a short branch stretching outward from the middle.
-        let branch: Vec<[f32; 2]> = if hash(seed + 7) > 0.55 {
-            (0..8).map(|j| path(0.5 + 0.05 * j as f32, 3.0 * j as f32)).collect()
-        } else {
-            Vec::new()
-        };
-        for (width, color, strength) in [(30.0, [40, 140, 255, 255], 0.35), (14.0, [60, 220, 255, 255], 0.8), (4.0, [220, 250, 255, 255], 0.95)] {
-            for line in [&points, &branch] {
-                for j in 0..line.len().saturating_sub(1) {
-                    let f = j as f32 / (line.len() - 1) as f32;
-                    let taper = 0.25 + 0.75 * (PI * f).sin().powf(0.6);
-                    draw.add_line(line[j], line[j + 1], col(alpha(color, life * strength)))
-                        .thickness(width * k * taper)
-                        .build();
-                }
+        let bulge = (12.0 + 14.0 * hash(seed + 3)) * k;
+        let phase = hash(seed + 4) * 20.0;
+        let f_at = |j: usize| j as f32 / (POINTS - 1) as f32;
+        // The edge nearer the ring, then the outer edge bulging away from it (they meet at both ends).
+        let inner: Vec<[f32; 2]> = (0..POINTS)
+            .map(|j| {
+                let f = f_at(j);
+                let a = start + dir * sweep * f * grow;
+                let rr = 55.0 * k + (10.0 + 40.0 * outward) * k * f.powf(1.6) * grow + 3.0 * k * (f * 5.0 + now * 4.0 + phase).sin() * f;
+                [c[0] + rr * a.cos(), c[1] + rr * a.sin()]
+            })
+            .collect();
+        let outer: Vec<[f32; 2]> = inner
+            .iter()
+            .enumerate()
+            .map(|(j, p)| {
+                let (dx, dy) = (p[0] - c[0], p[1] - c[1]);
+                let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+                let f = f_at(j);
+                // Ragged: the outer edge waves quickly.
+                let b = bulge * (PI * f).sin().powf(0.8) * grow * (1.0 + 0.35 * (f * 13.0 + now * 20.0 + phase).sin());
+                [p[0] + dx / len * b, p[1] + dy / len * b]
+            })
+            .collect();
+        if let Some((id, _)) = white {
+            for j in 0..POINTS - 1 {
+                draw.add_image_quad(id, inner[j], outer[j], outer[j + 1], inner[j + 1])
+                    .col(col(alpha([60, 190, 255, 255], 0.35 * life)))
+                    .build();
             }
+        }
+        let taper = |j: usize| (PI * f_at(j)).sin().powf(0.5).max(0.15);
+        for edge in [&inner, &outer] {
+            strip(draw, ribbon, edge, &|j| 14.0 * k * taper(j), &|_| 0.6 * life, [50, 140, 255, 255]);
+            strip(draw, ribbon, edge, &|j| 4.5 * k * taper(j), &|_| life, [120, 240, 255, 255]);
         }
     }
 }

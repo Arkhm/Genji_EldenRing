@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: ultimate flames redone as smooth blue fire and flame-tongue flashes
+
+**Changed (`genji/src/hud.rs`):**
+- **What was wrong:** the ready ultimate's "electric ribbons" were separate thick line pieces. They overlapped and
+  showed as rectangles, the "yanky, not glued" look you saw. The blob particles are also gone.
+- **Blue fire band:** a band from the ring out to about 90 px. Its outer edge flickers in tongues that drift around,
+  and it fades outward. There are two layers: deep blue, and a brighter cyan one closer in.
+- **Flame tongues** (clip part 1):
+  - Quick flashes shaped like a flame tongue: two glowing cyan edges meeting at both ends, a faint fill between
+    them, and a ragged outer edge.
+  - Each one grows along the ring, curls outward, then fades.
+  - Up to 3 at a time, at a new place each time.
+- **How they're drawn:** both are continuous strips of textured quads that share their corners, so there are no
+  seams. New generated textures: `ribbon` (soft across) and `fade` (fading outward).
+**Why:** You: the flames "look so bad... yanky and not even glued. I can see the rectangles".
+**Tested how:**
+- A mock-up drawn the way ImGui draws (textured triangles, alpha blending), from the same formulas, compared with
+  60 fps frames of your clip: `D:\GenjiBridgeAssets\hud_ref\mock10_ult.png`. It was tuned twice: a wider, brighter
+  band; bigger, ragged, more saturated tongues.
+- The build and the 29 unit tests pass.
+- numpy for the mock-up was installed to `D:\GenjiBridgeAssets\pylib`, outside the repo.
+**Result:** In the mock-up, smooth and close to the clip's look. Not tested in game.
+**Still broken / not tested:** In game.
+**Next:** Your test.
+
 ## 2026-10-08 HUD: new portrait with the helmet standing out of the hexagon; bright pieces back on the ammo lines
 
 **Changed:**
