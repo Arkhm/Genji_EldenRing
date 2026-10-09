@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Boss names under the boss bar, bar raised
+
+**Changed:**
+- **Name** (`enemy_bars.rs`, `hud.rs`): the boss's name is drawn under its bar, in the bar's red, in capitals.
+  - **Where it comes from** (your idea: "just grab the name when it enters the boss fight"): the game prepares each
+    boss bar's name in its own display data (`boss_list_tag_data[..].chr_name`), and we copy it from there.
+  - **Fallback:** if the game leaves it empty while its HUD is off, Elden Ring's HUD is switched on for 0.4 s, once per
+    boss (`controls.rs`), so the game fills it in. You may see Elden Ring's HUD flash once at the start of a fight.
+- **Shortened** (`short_name`, unit-tested): only the part before a comma, " of " or " the ", without leading titles
+  (Starscourge, Lichdragon, Dragonlord, Promised Consort). For example "Margit, the Fell Omen" -> MARGIT,
+  "Godrick the Grafted" -> GODRICK, "Rennala, Queen of the Full Moon" -> RENNALA, "Starscourge Radahn" -> RADAHN.
+  Names without a title stay whole ("Tree Sentinel" -> TREE SENTINEL).
+- **Bar raised:** the boss bar sits 22 px higher.
+- **Log:** `[BARS] boss … is "full name": shown as "SHORT"`. If the game has no name, the log says so and when the
+  HUD peek runs.
+**Why:** You: "raise the bar a little, and put the name of the boss under it... only their names, no grand titles".
+**Tested how:** The build and the 32 unit tests pass (a new one covers the name shortening). Not tested in game.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game: whether the game fills the name with its HUD off, or only during the peek.
+- Non-English game text: the comma rule works, the " of " / " the " rules are English only.
+**Next:** Your test.
+
 ## 2026-10-08 Boss bars above the boss with a skull badge; boss fights no longer leave Genji mode
 
 **Changed:**

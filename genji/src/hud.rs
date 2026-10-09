@@ -60,8 +60,11 @@ const AURA_PIECES: usize = 120;
 /// Enemy health bars drawn at most (DESIGN.md 5i).
 pub const ENEMY_BARS: usize = 8;
 
+/// Longest boss name kept, in bytes (UTF-8).
+pub const NAME_BYTES: usize = 32;
+
 /// One enemy's health bar: where (screen, -1 to 1 from the centre, y up), how full (health, and health just lost
-/// still lit lighter), and whether it's a boss (the long bar with the skull badge).
+/// still lit lighter), whether it's a boss (the long bar with the skull badge) and its name (bosses; may be empty).
 #[derive(Clone, Copy, Default)]
 pub struct EnemyBar {
     pub x: f32,
@@ -69,6 +72,14 @@ pub struct EnemyBar {
     pub hp: f32,
     pub trail: f32,
     pub boss: bool,
+    pub name: [u8; NAME_BYTES],
+    pub name_len: u8,
+}
+
+impl EnemyBar {
+    pub fn name(&self) -> &str {
+        std::str::from_utf8(&self.name[..self.name_len as usize]).unwrap_or("")
+    }
 }
 
 /// Everything the HUD shows, written by the game thread each frame.
@@ -113,7 +124,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     ult_percent: 0,
     blade_left: None,
     blade_duration: 0.0,
-    enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false }; ENEMY_BARS],
+    enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false, name: [0; NAME_BYTES], name_len: 0 }; ENEMY_BARS],
     enemy_count: 0,
 });
 
@@ -477,8 +488,15 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
             segments(sx, sy, 10, 8.6 * k, 10.0 * k, 2.0 * k, bar.hp, bar.trail);
             continue;
         }
+        // Raised above the head (you, 2026-10-09), the name under it in the bar's red, as Overwatch writes it.
+        let sy = sy - 22.0 * k;
         let (n, seg_w, seg_h, gap) = (20, 7.0 * k, 11.0 * k, 1.5 * k);
         let total = n as f32 * seg_w + (n - 1) as f32 * gap;
+        let name = bar.name();
+        if !name.is_empty() {
+            let t = measure(r.bold_small, name);
+            text([sx + 10.0 * k - t[0] / 2.0, sy + 4.0 * k], r.bold_small, [240, 72, 78, 255], name);
+        }
         segments(sx + 10.0 * k, sy, n, seg_w, seg_h, gap, bar.hp, bar.trail);
         // The badge, centred on the bar's left end: Overwatch's diamond with the skull cut out, tinted red, over a
         // smaller light yellow diamond that shows through the skull.

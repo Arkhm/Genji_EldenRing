@@ -490,6 +490,12 @@ You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's sty
   - **Bar:** above the boss's head, not at the top of the screen: 20 thin segments, shown the whole fight within
     80 m.
   - **Badge:** Overwatch's skull-in-a-diamond (vector `00082C`, your pick) on its left, red with a yellow skull.
+  - **Name** (2026-10-09): under the bar, in its red, capitals, only the important part: the text before a comma,
+    " of " or " the ", without titles like "Starscourge". So "Margit, the Fell Omen" shows as MARGIT.
+    - **Source:** the game writes each boss bar's name into its display data (`boss_list_tag_data[..].chr_name`).
+    - **Fallback:** if that is empty with the HUD off, Elden Ring's HUD is switched on for 0.4 s once per boss so the
+      game fills it in.
+  - **Raised:** 22 px higher than the other bars, so the name fits above the head.
 - **Diagnostics:** every 2 s, the game's own enemy-tag and boss tables are logged (filled or not, visible, screen
   position). If they turn out to be filled with the HUD off, the game's own visibility could be used later.
 - **Code:** `enemy_bars.rs` (game thread: tracking, projection, which bars) feeds `hud::State`; `hud.rs` draws.

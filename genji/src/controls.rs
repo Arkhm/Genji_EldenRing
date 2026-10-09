@@ -171,6 +171,23 @@ impl Controls {
             glog!("MODE", "Genji input {} ({why})", if capturing { "CAPTURED" } else { "released to the game" });
         }
 
+        // A short HUD peek so the game fills in a boss's name (`enemy_bars.rs` asks; it happens once per boss).
+        if self.capturing {
+            if let Some(saved) = self.hud_saved {
+                if let Some(settings) = unsafe { GameDataMan::instance_mut() }.ok().map(|g| &mut *g.game_settings) {
+                    let want = if crate::enemy_bars::hud_peek_wanted() {
+                        if saved == HudType::Off { HudType::On } else { saved }
+                    } else {
+                        HudType::Off
+                    };
+                    if settings.hud_type != want {
+                        glog!("MODE", "Elden Ring HUD {:?} (boss name peek)", want);
+                        settings.hud_type = want;
+                    }
+                }
+            }
+        }
+
         let click_now = buttons & (1 << mouse::LEFT) != 0;
         // Actions: only while capturing, so menus and plain Elden Ring never trigger Genji.
         for (i, (action, input)) in BINDINGS.iter().enumerate() {

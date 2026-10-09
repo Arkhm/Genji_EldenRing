@@ -3,13 +3,14 @@
 //! we draw from), and `hud.rs` draws them. Runs on the game thread, once per frame, from the camera task.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eldenring::cs::{CSFeManImp, PlayerIns};
 use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::glog;
-use crate::hud::{EnemyBar, ENEMY_BARS};
+use crate::hud::{EnemyBar, ENEMY_BARS, NAME_BYTES};
 use crate::look::Look;
 
 /// Bars only for characters this close, metres (the game's line-of-sight check isn't available to us); bosses
@@ -25,6 +26,38 @@ const TRAIL_DRAIN: f32 = 1.5;
 const ABOVE_HEAD: f32 = 0.35;
 /// The game's tables are logged this often, seconds.
 const LOG_EVERY: f32 = 2.0;
+/// If the game leaves a boss's name empty while its HUD is off, its HUD is switched on this long once, so it fills
+/// the name in (seconds).
+const NAME_PEEK: f32 = 0.4;
+
+/// Asks `controls.rs` to switch Elden Ring's HUD on for a moment (to get a boss's name).
+static HUD_PEEK: AtomicBool = AtomicBool::new(false);
+
+pub fn hud_peek_wanted() -> bool {
+    HUD_PEEK.load(Ordering::Relaxed)
+}
+
+/// The important part of a boss's name, in capitals (you, 2026-10-09: "only their names, no grand titles"): the part
+/// before a comma, " of " or " the ", without a leading title. "Margit, the Fell Omen" -> "MARGIT", "Godrick the
+/// Grafted" -> "GODRICK", "Radagon of the Golden Order" -> "RADAGON", "Starscourge Radahn" -> "RADAHN".
+pub fn short_name(full: &str) -> String {
+    let mut name = full.trim();
+    if let Some(i) = name.find(',') {
+        name = &name[..i];
+    }
+    for separator in [" of ", " the "] {
+        if let Some(i) = name.find(separator) {
+            name = &name[..i];
+            break;
+        }
+    }
+    for title in ["Starscourge ", "Lichdragon ", "Dragonlord ", "Promised Consort "] {
+        if let Some(rest) = name.strip_prefix(title) {
+            name = rest;
+        }
+    }
+    name.trim().to_uppercase()
+}
 
 struct Track {
     last_hp: i32,
@@ -39,6 +72,11 @@ pub struct EnemyBars {
     tracks: HashMap<usize, Track>,
     log_timer: f32,
     logged_boss: Option<usize>,
+    /// Bosses' short names, by character.
+    names: HashMap<usize, String>,
+    /// The boss a HUD peek ran for (once per boss), and the seconds of it left.
+    peeked: Option<usize>,
+    peek_left: f32,
 }
 
 impl EnemyBars {
@@ -113,6 +151,49 @@ impl EnemyBars {
             }
             self.logged_boss = bosses.first().copied();
         }
+        // Names: the game writes each boss bar's name into its own display data (`boss_list_tag_data`).
+        if let Some(fe) = fe {
+            for &id in &bosses {
+                if self.names.contains_key(&id) {
+                    continue;
+                }
+                let Some(t) = targets.iter().find(|t| t.chr.as_ptr() as usize == id) else {
+                    continue;
+                };
+                let handle = unsafe { t.chr.as_ref() }.field_ins_handle;
+                let tags = &fe.frontend_values.boss_list_tag_data;
+                let full = tags
+                    .iter()
+                    .find(|tag| tag.field_ins_handle == handle)
+                    .map(|tag| tag.chr_name.to_string())
+                    .filter(|n| !n.trim().is_empty())
+                    // One boss and one name: take it even if the game hasn't filled in the handle.
+                    .or_else(|| {
+                        let named: Vec<String> = tags.iter().map(|tag| tag.chr_name.to_string()).filter(|n| !n.trim().is_empty()).collect();
+                        (bosses.len() == 1 && named.len() == 1).then(|| named[0].clone())
+                    });
+                if let Some(full) = full {
+                    let short = short_name(&full);
+                    glog!("BARS", "boss {id:#x} is \"{full}\": shown as \"{short}\"{}", if self.peek_left > 0.0 { " (during the HUD peek)" } else { "" });
+                    self.names.insert(id, short);
+                    if self.peeked == Some(id) {
+                        self.peek_left = 0.0;
+                    }
+                } else if self.peeked != Some(id) {
+                    glog!("BARS", "boss {id:#x}: the game has no name for it with its HUD off; switching its HUD on for {NAME_PEEK} s");
+                    self.peeked = Some(id);
+                    self.peek_left = NAME_PEEK;
+                }
+            }
+        }
+        if self.peek_left > 0.0 {
+            self.peek_left -= dt;
+            if self.peek_left <= 0.0 && self.peeked.is_some_and(|id| !self.names.contains_key(&id)) {
+                glog!("BARS", "boss {:#x}: still no name after the HUD peek", self.peeked.unwrap_or(0));
+            }
+        }
+        HUD_PEEK.store(self.peek_left > 0.0, Ordering::Relaxed);
+        self.names.retain(|id, _| self.tracks.contains_key(id));
 
         let mut shown: Vec<(bool, f32, EnemyBar)> = Vec::new();
         for t in &targets {
@@ -129,7 +210,17 @@ impl EnemyBars {
             }
             if let Some((x, y)) = project(t.feet + Vec3::Y * (t.height + ABOVE_HEAD)) {
                 let (hp_share, trail_share) = share(id, hp, max);
-                shown.push((boss, dist, EnemyBar { x, y, hp: hp_share, trail: trail_share, boss }));
+                let mut bar = EnemyBar { x, y, hp: hp_share, trail: trail_share, boss, ..EnemyBar::default() };
+                if let Some(name) = self.names.get(&id) {
+                    // Cut on a character boundary.
+                    let mut end = name.len().min(NAME_BYTES);
+                    while !name.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    bar.name[..end].copy_from_slice(&name.as_bytes()[..end]);
+                    bar.name_len = end as u8;
+                }
+                shown.push((boss, dist, bar));
             }
         }
         shown.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.total_cmp(&b.1)));
@@ -157,5 +248,22 @@ impl EnemyBars {
             }
         }
         (bars, count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::short_name;
+
+    #[test]
+    fn boss_names_lose_their_titles() {
+        assert_eq!(short_name("Margit, the Fell Omen"), "MARGIT");
+        assert_eq!(short_name("Godrick the Grafted"), "GODRICK");
+        assert_eq!(short_name("Radagon of the Golden Order"), "RADAGON");
+        assert_eq!(short_name("Starscourge Radahn"), "RADAHN");
+        assert_eq!(short_name("Rennala, Queen of the Full Moon"), "RENNALA");
+        assert_eq!(short_name("Tree Sentinel"), "TREE SENTINEL");
+        assert_eq!(short_name("Elemer of the Briar"), "ELEMER");
+        assert_eq!(short_name("Lichdragon Fortissax"), "FORTISSAX");
     }
 }
