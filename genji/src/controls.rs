@@ -78,7 +78,10 @@ const WORLD_UI_STATE: u32 = 0x08;
 /// 0x03 (2026-10-08): shown for 8 s in the middle of your Margit fight while you moved, fought and took hits (and
 /// gone when you died); counted as a menu, it handed the camera back mid-fight ("cutscenes take me out of Genji
 /// mode"). What the game uses it for is not known; your log shows it only during that boss fight.
-const GAMEPLAY_UI_STATES: [u32; 12] = [0x03, 0x04, 0x05, 0x07, 0x08, 0x09, 0x0f, 0x11, 0x12, 0x13, 0x17, 0x1a];
+/// 0x0b (2026-10-09): after you moved "use item" from R to Z in the game's key settings, 0x0b stayed on next to the
+/// HUD (0x07) all the time in play, and hid together with it when a menu tab opened. Counted as a menu, Genji mode
+/// never took over again ("the genji mode broke"). What it is exactly is not known; it behaves like a HUD part.
+const GAMEPLAY_UI_STATES: [u32; 13] = [0x03, 0x04, 0x05, 0x07, 0x08, 0x09, 0x0b, 0x0f, 0x11, 0x12, 0x13, 0x17, 0x1a];
 /// Gameplay must hold this long before capture switches on (release is instant). Going back from a menu tab
 /// to the Esc menu shows the HUD one frame before the Esc menu's own state, which flicked capture on for a frame.
 const CAPTURE_DELAY: f32 = 0.1;

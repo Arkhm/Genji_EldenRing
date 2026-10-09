@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Genji mode works again after the key change (UI state 0x0b)
+
+**Changed:** `genji/src/controls.rs`: UI state 0x0b added to the states seen during play (`GAMEPLAY_UI_STATES`).
+**Why:** You moved Elden Ring's "use item" from R to Z, and Genji mode stopped working. Your log (`logs/genji.log`):
+- From the moment the Esc menu opened (99.99 s), state 0x0b was on in plain play too, next to the HUD (0x07):
+  `[0x05 0x07 0x08 0x0b 0x1a]`.
+- It hid together with the HUD when a menu tab opened (105.2 s and 138.6 s).
+- The mod counts any state it doesn't know as a menu (the safe side), so it never took control again. F9 at 132.1 s
+  and 135.7 s turned Genji mode on, but "input CAPTURED" never followed.
+**Tested how:** Read from your log. `cargo build --release` and `cargo test --release` pass (35 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- What 0x0b really is isn't known. It behaves like a part of the HUD, and it was seen only in this session.
+- If it ever shows up in a real menu, the mod would stay in control there. The Esc menu (0x1c) and its tabs still
+  release control.
+- R does nothing in Genji mode yet: the reload is still automatic only. That's the next step.
+**Next:** R to reload.
+
 ## 2026-10-09 Kill skull in red
 
 **Changed:** `genji/src/hud.rs`: the kill skull is red (232, 48, 56), the same red as the enemy health bars. It was pink,
