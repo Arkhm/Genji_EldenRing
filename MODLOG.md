@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: new portrait with the helmet standing out of the hexagon; bright pieces back on the ammo lines
+
+**Changed:**
+- **Portrait** (`tools/make_hud_art.py`):
+  - It now uses the bust picture you sent, copied to `D:\GenjiBridgeAssets\hud\portrait_source.png`. It isn't in your
+    extracted files: I compared it with all 397 of Genji's and the UI's tall pictures and found no match.
+  - Layout measured on your Overwatch screenshot:
+    - the helmet's top is level with the hexagon's top corner, the visor 39% of the way down, the face's front at 88%
+      of the width;
+    - the helmet is drawn over the top edges of the outline;
+    - the body is inside the outline;
+    - a soft blue glow rises behind the head.
+  - The previous picture is kept as `portrait_hex_previous.png`.
+- **Ammo panel lines** (`genji/src/hud.rs`): the brighter, thicker piece is back. It sits on the same stretch of both
+  lines (52% to 92% of the width, measured on your Overwatch screenshot: the same on top and bottom), bulging outward.
+**Why:** You: "use this image instead... his head needs to stand out of the hex cyan cover"; "add back the bright
+pieces, but this time, make them symmetrical".
+**Tested how:** Rebuilt the portrait picture and compared it side by side with your Overwatch screenshot
+(`D:\GenjiBridgeAssets\hud_ref\portrait_cmp.png`): same framing. The DLL builds. Not seen in game.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game.
+- Your picture is 180x310, so the portrait is slightly soft (it's shown about 140 px tall at 1440p).
+**Next:** Your test.
+
 ## 2026-10-08 HUD: Dragonblade countdown ring, ammo panel lined up with the tiles
 
 **Changed (`genji/src/hud.rs`):**

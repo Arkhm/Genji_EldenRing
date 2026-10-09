@@ -416,7 +416,13 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
   - **Ammo panel lined up with the tiles** (your screenshot, with Overwatch's 4° tilt taken out):
     - its bottom line is on the tiles' underlines, and its top line 8 px below the tile tops;
     - it starts 16 px right of the E tile;
-    - both lines are straight and evenly thick.
+    - both lines are straight, with the same brighter, thicker piece (52% to 92% of the width) on each.
+  - **Portrait** (your picture and Overwatch screenshot, 2026-10-08):
+    - Genji's bust, the picture you sent, in the dark hexagon with its cyan outline.
+    - The helmet stands out over the hexagon's top edges, in front of the outline: its top is level with the top corner,
+      the visor 39% of the way down, the face at 88% of the width. The body fills the inside.
+    - A soft blue glow rises behind the head.
+    - Built by `tools\make_hud_art.py` from `D:\GenjiBridgeAssets\hud\portrait_source.png`.
   - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
     cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 

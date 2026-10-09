@@ -610,8 +610,8 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         x += size + 14.0 * k;
     }
     // Ammo panel (your screenshot of 2026-10-08, its 4 degree tilt taken out): 16 px right of the E tile; its top line
-    // 8 px below the tile tops, its bottom line on the tiles' underlines; two straight cyan lines of even thickness
-    // with short angled ends; see-through inside.
+    // 8 px below the tile tops, its bottom line on the tiles' underlines; two straight cyan lines with short angled
+    // ends, each with the same brighter piece; see-through inside.
     let ax = x + 2.0 * k;
     let aw = width - ax - 50.0 * k;
     let (pt, pb) = (box_top + 8.0 * k, box_top + size + 5.25 * k);
@@ -620,6 +620,13 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         let inward = if y == pt { 4.0 * k } else { -4.0 * k };
         for (th, a) in [(9.0, 0.15), (5.0, 0.35), (3.0, 1.0)] {
             draw.add_line([ax + 4.0 * k, y], [ax + aw - 4.0 * k, y], col(alpha(CYAN, a))).thickness(th * k).build();
+        }
+        // The brighter, thicker piece: the same stretch on both lines (52% to 92% of the width, measured on your
+        // Overwatch screenshot), bulging outward.
+        let (sx0, sx1) = (ax + aw * 0.52, ax + aw * 0.92);
+        let out = -inward * 0.25;
+        for (th, a) in [(11.0, 0.25), (5.5, 1.0)] {
+            draw.add_line([sx0, y + out], [sx1, y + out], col(alpha([130, 248, 255, 255], a))).thickness(th * k).build();
         }
         draw.add_line([ax, y + inward], [ax + 4.0 * k, y], col(CYAN)).thickness(2.5 * k).build();
         draw.add_line([ax + aw - 4.0 * k, y], [ax + aw, y + inward], col(CYAN)).thickness(2.5 * k).build();
