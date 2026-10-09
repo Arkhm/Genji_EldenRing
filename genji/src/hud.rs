@@ -30,10 +30,10 @@ const ITALIC_FONT: &str = r"C:\Windows\Fonts\seguibli.ttf";
 const BOLD_FONT: &str = r"C:\Windows\Fonts\segoeuib.ttf";
 const LABEL_FONT: &str = r"C:\Windows\Fonts\bahnschrift.ttf";
 const REFERENCE_HEIGHT: f32 = 1080.0;
-/// Ticks of the ultimate's charge, between its inner and outer rings.
-const ULT_TICKS: usize = 48;
-/// Length of the burst when the ultimate becomes full (not in your clip: kept short), seconds.
-const FLASH: f32 = 0.6;
+/// Bars of the ultimate's charge (ULT GAINED spec, section 2: 67).
+const ULT_TICKS: usize = 67;
+/// The ultimate becoming ready, from the hard cut to the ready state (ULT GAINED spec: 72 frames), seconds.
+const ULT_GAIN: f32 = 1.2;
 /// Ultimate pressed: the ring expands and fades, the emblem gives way to the empty meter (clip part 2), seconds.
 const ULT_PRESS: f32 = 0.4;
 /// Cooldown finished: light bars, star, glow column, square particles, tile back to white (clip part 5), seconds.
@@ -431,57 +431,79 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         }
     }
 
-    // ---- Bottom centre: the ultimate. Sizes from your clip (1080-line pixels): centre 150 above the bottom; white
-    // disc 39.5; dark line 41; bright cyan band 43-50; blue 51-53; pale ring 56; side markers 54-60; Q badge 22 px,
-    // its top 66 below the centre.
+    // ---- Bottom centre: the ultimate. Your clip and its analyses (2026-10-08), at 1080 lines: centre 150 px above
+    // the bottom; U = the white disc's radius, 40 px; Q cap centred 1.93 U below the centre.
     let (cx, cy) = (width / 2.0, height - 150.0 * k);
-    let q_top = cy + 66.0 * k;
+    let u = 40.0 * k;
     let since_press = r.anim.ult_pressed_at.map_or(f32::MAX, |t| now - t);
-    // The empty/charging meter (clip part 2, end): see-through dark centre, thin pale outer ring, thin teal inner ring
-    // with gaps at top and bottom, the charge as ticks between them, the big italic number.
+    let since_gain = r.anim.ult_ready_at.map_or(f32::MAX, |t| now - t);
+    // The Q cap: `fill` 0 = the charging style (dark see-through square, thin white outline at half strength, white
+    // letter), 1 = the ready style (solid white square, `letter` colour); `a` = overall strength.
+    let qcap = |fill: f32, letter: [u8; 4], a: f32| {
+        let s = 22.0 * k;
+        let (x0, y0) = (cx - s / 2.0, cy + 1.93 * u - s / 2.0);
+        let (x1, y1) = (x0 + s, y0 + s);
+        draw.add_rect([x0, y0], [x1, y1], col(alpha([20, 24, 34, 255], 0.45 * a * (1.0 - fill)))).filled(true).rounding(3.0 * k).build();
+        draw.add_rect([x0, y0], [x1, y1], col(alpha(WHITE, 0.5 * a * (1.0 - fill)))).thickness(1.4 * k).rounding(3.0 * k).build();
+        draw.add_rect([x0, y0], [x1, y1], col(alpha(PANEL_WHITE, a * fill))).filled(true).rounding(3.0 * k).build();
+        let t = measure(r.label, "Q");
+        let _f = r.label.map(|f| ui.push_font(f));
+        let c = mix(WHITE, letter, fill);
+        draw.add_text([cx - t[0] / 2.0, y0 + (s - t[1]) / 2.0], col(alpha(c, a)), "Q");
+    };
+    // The charging meter (ULT GAINED spec, part 2 section 2), back to front: dotted outer ring (90 dots, 1.875 U), thin
+    // grey ring (1.40 U), the charge as 67 teal bars (0.95-1.20 U) filling clockwise from 12 o'clock and breathing
+    // slightly, a thin teal circle (0.80-0.85 U) with 4 small breaks, a dark see-through disc (0.78 U), the big
+    // italic number.
     let meter = |a: f32, percent: u32| {
-        picture(&draw, r.glow_dot, [cx, cy], 130.0 * k, 0.0, alpha([6, 10, 24, 255], 0.55 * a));
-        draw.add_circle([cx, cy], 55.0 * k, col(alpha([22, 28, 52, 255], 0.5 * a))).filled(true).num_segments(96).build();
-        draw.add_circle([cx, cy], 56.0 * k, col(alpha([225, 230, 245, 255], 0.55 * a))).thickness(2.0 * k).num_segments(96).build();
-        let gap = 0.14;
-        for start in [-FRAC_PI_2 + gap, FRAC_PI_2 + gap] {
-            arc_at(&draw, [cx, cy], 34.0 * k, start, PI - 2.0 * gap, col(alpha([45, 200, 195, 255], 0.9 * a)), 2.0 * k);
+        for i in 0..90 {
+            let ang = TAU * i as f32 / 90.0;
+            draw.add_circle([cx + 1.875 * u * ang.cos(), cy + 1.875 * u * ang.sin()], 0.9 * k, col(alpha([59, 58, 68, 255], a))).filled(true).build();
+        }
+        draw.add_circle([cx, cy], 1.4 * u, col(alpha([66, 64, 72, 255], a))).thickness(2.0 * k).num_segments(96).build();
+        draw.add_circle([cx, cy], 0.78 * u, col(alpha([29, 27, 35, 255], 0.85 * a))).filled(true).num_segments(96).build();
+        let brk = 4f32.to_radians();
+        for q in 0..4 {
+            let start = (30.0 + 90.0 * q as f32).to_radians() + brk;
+            arc_at(&draw, [cx, cy], 0.825 * u, start, FRAC_PI_2 - 2.0 * brk, col(alpha([50, 158, 148, 255], a)), 2.0 * k);
         }
         let lit = (percent as f32 / 100.0 * ULT_TICKS as f32).floor() as usize;
-        for i in 0..ULT_TICKS {
-            let ang = -FRAC_PI_2 + TAU * i as f32 / ULT_TICKS as f32;
-            let (r0, r1) = (40.0 * k, 48.0 * k);
-            if i >= lit {
-                continue;
-            }
-            let c = alpha(CYAN, a);
-            draw.add_line([cx + r0 * ang.cos(), cy + r0 * ang.sin()], [cx + r1 * ang.cos(), cy + r1 * ang.sin()], col(c)).thickness(2.2 * k).build();
+        let breathe = 1.0 + 0.035 * (now * TAU / 1.55).sin();
+        let bar = TAU * 1.075 * u * 3.0 / 360.0;
+        for i in 0..lit.min(ULT_TICKS) {
+            let ang = -FRAC_PI_2 + TAU * (i as f32 + 0.5) / ULT_TICKS as f32;
+            let (p0, p1) = ([cx + 0.95 * u * ang.cos(), cy + 0.95 * u * ang.sin()], [cx + 1.2 * u * ang.cos(), cy + 1.2 * u * ang.sin()]);
+            draw.add_line(p0, p1, col(alpha([28, 217, 196, 255], 0.25 * a * breathe))).thickness(bar * 2.2).build();
+            draw.add_line(p0, p1, col(alpha([28, 217, 196, 255], a * breathe))).thickness(bar).build();
+            draw.add_line(p0, p1, col(alpha([89, 255, 255, 255], 0.8 * a * breathe))).thickness(bar * 0.4).build();
         }
-        digits([cx, cy], r.italic_ult, a, &percent.to_string());
+        let t = percent.to_string();
+        let size = measure(r.italic_ult, &t);
+        let pos = [cx - size[0] / 2.0, cy - size[1] / 2.0];
+        let _f = r.italic_ult.map(|f| ui.push_font(f));
+        draw.add_text([pos[0] + 1.5 * k, pos[1] + 1.5 * k], col(alpha(OUTLINE, 0.6 * a)), &t);
+        draw.add_text(pos, col(alpha([213, 213, 213, 255], a)), &t);
     };
-    if ult_ready {
+    if ult_ready && since_gain < ULT_GAIN {
+        // Becoming ready (ULT GAINED spec): collapse, pop, charge-up, flash and shockwave, flame eruption, afterglow,
+        // then a snap to the ready state, 1.2 s in all.
+        let t = since_gain * 60.0;
+        ult_gain(&draw, r, [cx, cy], u, k, t, now);
+        let ready = key(t, &[(3.0, 0.0), (17.0, 0.85), (19.0, 0.85), (71.0, 1.0)]);
+        let letter = if t >= 19.0 { [44, 230, 251, 255] } else { [40, 40, 48, 255] };
+        qcap(0.0, WHITE, if t < 3.0 { 0.15 } else { 0.15 * (1.0 - ready / 0.85) });
+        qcap(1.0, letter, ready);
+    } else if ult_ready {
         // Ready (your second analysis of the clip, ULT FULL spec, 2026-10-08). Back to front: a static glow halo with
         // a slight irregular flicker; a soft blue flame aura boiling in place; the static badge (faint hairline ring,
         // thin bright ring with gaps at 3 and 9 o'clock, blue glow, thick cyan ring, navy outline, white disc, glyph,
         // inward triangles); every ~1.37 s a burst of stepped, flipbook-style flares (BUILD, PEAK, blank, SECOND,
         // TENDRIL), with the disc's half on the peak side tinted during PEAK; the Q cap on top.
-        let u = 40.0 * k;
         let flicker = 1.0 + 0.04 * (0.6 * (now * 7.1).sin() + 0.4 * (now * 12.7 + 1.0).sin() * (now * 3.3).cos());
-        picture(&draw, r.glow_dot, [cx, cy], 5.0 * u, 0.0, alpha([45, 104, 186, 255], 0.85 * flicker));
-        picture(&draw, r.glow_dot, [cx, cy], 3.8 * u, 0.0, alpha([45, 127, 225, 255], 0.85 * flicker));
-        picture(&draw, r.glow_dot, [cx, cy], 2.9 * u, 0.0, alpha([55, 160, 247, 255], 0.9 * flicker));
-        ult_aura(&draw, r.fade, [cx, cy], now, u);
-        draw.add_circle([cx, cy], 1.91 * u, col([168, 234, 255, 70])).thickness(1.0 * k).num_segments(128).build();
-        let gap = 11f32.to_radians();
-        for start in [gap, PI + gap] {
-            arc_at(&draw, [cx, cy], 1.4 * u, start, PI - 2.0 * gap, col([168, 234, 255, 255]), 2.0 * k);
-        }
-        draw.add_circle([cx, cy], 1.31 * u, col([64, 182, 245, 255])).thickness(0.13 * u).num_segments(96).build();
-        draw.add_circle([cx, cy], 1.1625 * u, col([52, 214, 247, 255])).thickness(0.175 * u).num_segments(96).build();
-        draw.add_circle([cx, cy], 1.1625 * u, col([50, 255, 252, 255])).thickness(0.09 * u).num_segments(96).build();
-        draw.add_circle([cx, cy], 1.025 * u, col([48, 85, 150, 255])).thickness(0.05 * u).num_segments(96).build();
-        draw.add_circle([cx, cy], 1.0 * u, col([233, 234, 244, 255])).filled(true).num_segments(96).build();
-        picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, [29, 29, 48, 255]);
+        idle_halo(&draw, r, [cx, cy], u, flicker);
+        ult_aura(&draw, r.fade, [cx, cy], now, u, 1.0);
+        let look = Look::ready();
+        look.rings(&draw, r, [cx, cy], u, k);
         let burst = Burst::at(now);
         // PEAK flash: the disc's half on the big flare's side goes pale cyan and the glyph teal there.
         if let Some(b) = burst.filter(|b| b.step() == Step::Peak) {
@@ -496,23 +518,14 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
             };
             draw.with_clip_rect_intersect(min, max, || {
                 draw.add_circle([cx, cy], 1.0 * u, col([232, 241, 249, 255])).filled(true).num_segments(96).build();
-                picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, [37, 90, 114, 255]);
+                picture(&draw, r.blade, [cx, cy], 1.3 * u, 0.0, [37, 90, 114, 255]);
             });
         }
         if let Some(b) = burst {
             b.draw(&draw, r, [cx, cy], u, k);
         }
-        for side in [-1.0f32, 1.0] {
-            let (tip, base) = (cx + side * 1.40 * u, cx + side * 1.52 * u);
-            draw.add_triangle([base, cy - 3.0 * k], [base, cy + 3.0 * k], [tip, cy], col(WHITE)).filled(true).build();
-        }
-        if let Some(t0) = r.anim.ult_ready_at {
-            let p = (now - t0) / FLASH;
-            if p < 1.0 {
-                picture(&draw, r.flare, [cx, cy], 80.0 * k * (1.0 + 2.0 * p), 0.0, alpha(WHITE, 1.0 - p));
-            }
-        }
-        badge(cx, q_top, "Q", 1.0, 0.0);
+        look.triangles(&draw, [cx, cy], u, k);
+        qcap(1.0, [40, 40, 48, 255], 1.0);
     } else if since_press < ULT_PRESS {
         // Clip part 2: the halo and ribbons drop away; the turquoise ring expands from 69 to about 135 px, thinning
         // and fading; the white disc flares then fades; the empty meter with its "0" fades in; Q goes from filled to
@@ -527,10 +540,11 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         draw.add_circle([cx, cy], 55.0 * k, col(alpha([200, 200, 215, 255], 0.7 * disc_a))).thickness(1.5 * k).num_segments(96).build();
         draw.add_circle([cx, cy], 39.5 * k, col(alpha(disc, disc_a))).filled(true).num_segments(96).build();
         picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, alpha(ICON_DARK, disc_a));
-        badge(cx, q_top, "Q", 1.0 - ((t - 0.15) / 0.2).clamp(0.0, 1.0), 0.0);
+        let fill = 1.0 - ((t - 0.15) / 0.2).clamp(0.0, 1.0);
+        qcap(fill, [40, 40, 48, 255], 1.0);
     } else {
         meter(1.0, s.ult_percent);
-        badge(cx, q_top, "Q", 0.0, 0.0);
+        qcap(0.0, WHITE, 1.0);
     }
 
     // ---- Dragonblade time left, around the crosshair (your Overwatch screenshots, 2026-10-08): a white ring of
@@ -724,7 +738,7 @@ fn strip(draw: &DrawListMut, tex: Picture, pts: &[[f32; 2]], width: &dyn Fn(usiz
 /// Soft blue flame aura of the ready ultimate (ULT FULL spec 3.3): wispy tongues licking outward from the thick
 /// ring, densest against it and gone by about 2.2 U, churning in place (standing waves that rise and fall, plus a
 /// drift of 2 degrees a second clockwise; it does not spin). Quads sharing their corners, fading outward.
-fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, u: f32) {
+fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, u: f32, scale: f32) {
     let Some((id, _)) = fade else {
         return;
     };
@@ -742,9 +756,294 @@ fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, u: f32) {
         for i in 0..AURA_PIECES {
             let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
             draw.add_image_quad(id, at(t0, 1.25 * u), at(t1, 1.25 * u), at(t1, outer(t1)), at(t0, outer(t0)))
-                .col(col(alpha(color, strength)))
+                .col(col(alpha(color, strength * scale)))
                 .build();
         }
+    }
+}
+
+/// A value at `t` along keyframes (t, value), straight lines between them, held before the first and after the last.
+fn key(t: f32, keys: &[(f32, f32)]) -> f32 {
+    let (first, last) = (keys[0], keys[keys.len() - 1]);
+    if t <= first.0 {
+        return first.1;
+    }
+    if t >= last.0 {
+        return last.1;
+    }
+    let i = keys.windows(2).position(|w| t < w[1].0).unwrap_or(0);
+    let ((t0, v0), (t1, v1)) = (keys[i], keys[i + 1]);
+    v0 + (v1 - v0) * (t - t0) / (t1 - t0)
+}
+
+/// A colour at `t` along keyframes (t, 0xRRGGBB), blended between them.
+fn key_col(t: f32, keys: &[(f32, u32)]) -> [u8; 4] {
+    let ch = |shift: u32| -> f32 {
+        let v: Vec<(f32, f32)> = keys.iter().map(|(t, c)| (*t, ((c >> shift) & 0xFF) as f32)).collect();
+        key(t, &v)
+    };
+    [ch(16) as u8, ch(8) as u8, ch(0) as u8, 255]
+}
+
+/// The ultimate's badge, as the ready state shows it or as the "becoming ready" animation changes it.
+struct Look {
+    disc_r: f32,
+    disc: [u8; 4],
+    glyph: [u8; 4],
+    /// Thick ring: its base and its brighter core.
+    thick: [u8; 4],
+    thick_core: [u8; 4],
+    /// Blue glow between the thick ring and the thin one.
+    glow: [u8; 4],
+    navy: f32,
+    thin_r: f32,
+    thin: [u8; 4],
+    /// The thin ring's gaps at 3 and 9 o'clock.
+    gaps: bool,
+    hairline: f32,
+    /// Where the triangles' tips are (their base is 0.12 U further out).
+    tri_tip: f32,
+}
+
+impl Look {
+    /// The ready state (ULT FULL spec, section 1-2), in U.
+    fn ready() -> Look {
+        Look {
+            disc_r: 1.0,
+            disc: [233, 234, 244, 255],
+            glyph: [29, 29, 48, 255],
+            thick: [52, 214, 247, 255],
+            thick_core: [50, 255, 252, 255],
+            glow: [64, 182, 245, 255],
+            navy: 1.0,
+            thin_r: 1.4,
+            thin: [168, 234, 255, 255],
+            gaps: true,
+            hairline: 70.0 / 255.0,
+            tri_tip: 1.4,
+        }
+    }
+
+    /// Hairline, thin ring, glow, thick ring, navy outline, disc and glyph (the triangles go on top separately).
+    fn rings(&self, draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32) {
+        draw.add_circle(c, 1.91 * u, col(alpha([168, 234, 255, 255], self.hairline))).thickness(1.0 * k).num_segments(128).build();
+        if self.gaps {
+            let gap = 11f32.to_radians();
+            for start in [gap, PI + gap] {
+                arc_at(draw, c, self.thin_r * u, start, PI - 2.0 * gap, col(self.thin), 2.0 * k);
+            }
+        } else {
+            draw.add_circle(c, self.thin_r * u, col(self.thin)).thickness(2.0 * k).num_segments(128).build();
+        }
+        draw.add_circle(c, 1.31 * u, col(self.glow)).thickness(0.13 * u).num_segments(96).build();
+        draw.add_circle(c, 1.1625 * u, col(self.thick)).thickness(0.175 * u).num_segments(96).build();
+        draw.add_circle(c, 1.1625 * u, col(self.thick_core)).thickness(0.09 * u).num_segments(96).build();
+        draw.add_circle(c, (self.disc_r + 0.025) * u, col(alpha([48, 85, 150, 255], self.navy))).thickness(0.05 * u).num_segments(96).build();
+        draw.add_circle(c, self.disc_r * u, col(self.disc)).filled(true).num_segments(96).build();
+        picture(draw, r.blade, c, 1.3 * u * self.disc_r, 0.0, self.glyph);
+    }
+
+    fn triangles(&self, draw: &DrawListMut, c: [f32; 2], u: f32, k: f32) {
+        for side in [-1.0f32, 1.0] {
+            let (tip, base) = (c[0] + side * self.tri_tip * u, c[0] + side * (self.tri_tip + 0.12) * u);
+            draw.add_triangle([base, c[1] - 3.0 * k], [base, c[1] + 3.0 * k], [tip, c[1]], col(WHITE)).filled(true).build();
+        }
+    }
+}
+
+/// The ready state's glow halo (ULT FULL spec 2, 3.2): just outside, middle and far colours, `flicker` about 1.
+fn idle_halo(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, flicker: f32) {
+    picture(draw, r.glow_dot, c, 5.0 * u, 0.0, alpha([45, 104, 186, 255], 0.85 * flicker));
+    picture(draw, r.glow_dot, c, 3.8 * u, 0.0, alpha([45, 127, 225, 255], 0.85 * flicker));
+    picture(draw, r.glow_dot, c, 2.9 * u, 0.0, alpha([55, 160, 247, 255], 0.9 * flicker));
+}
+
+/// Shockwave band, inner and outer radius in U, by 60 fps frame from 20 to 33 after reaching 100 % (spec D2).
+const SHOCKWAVE: [(f32, f32, f32); 14] = [
+    (20.0, 2.55, 3.73), (21.0, 2.88, 4.23), (22.0, 3.40, 4.65), (23.0, 3.85, 5.25), (24.0, 4.48, 5.55),
+    (25.0, 5.00, 6.18), (26.0, 5.60, 6.40), (27.0, 5.98, 6.83), (28.0, 6.70, 7.28), (29.0, 7.23, 7.83),
+    (30.0, 7.55, 7.98), (31.0, 7.75, 8.18), (32.0, 8.10, 8.33), (33.0, 8.28, 8.48),
+];
+
+/// The ultimate becoming ready (ULT GAINED spec), `t` in 60 fps frames since it reached 100 % (0-72), everything but
+/// the Q cap. Phases: A collapse (0-8), B pop (9-12), C charge-up (12-18), D flash and shockwave (19-33), E flame
+/// eruption (28-50, a new drawing every 2 frames), F afterglow (51-71), then the ready state takes over.
+fn ult_gain(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, t: f32, now: f32) {
+    let f = t.floor();
+    // A4: a dark backing inside the thin ring, so the shrinking disc floats in a "black hole" (until the flash).
+    if f < 19.0 {
+        let thin_r = key(t, &[(0.0, 1.43), (2.0, 1.53), (5.0, 1.65), (8.0, 1.55), (12.0, 1.50), (15.0, 1.45), (17.0, 1.43)]);
+        draw.add_circle(c, thin_r * u, col(alpha([32, 35, 47, 255], 0.7))).filled(true).num_segments(96).build();
+        // A5: a faint outer halo growing.
+        picture(draw, r.glow_dot, c, 4.0 * u, 0.0, alpha(key_col(t, &[(0.0, 0x2A3248), (8.0, 0x20304A)]), 0.6 * (t / 8.0).min(1.0)));
+    }
+    // D4 then F: the cyan bloom grows to 3.3 U while the flames erupt, then shrinks, cools and fades.
+    if f >= 19.0 {
+        let radius = key(t, &[(19.0, 1.8), (31.0, 3.3), (50.0, 3.0), (71.0, 2.2)]);
+        let color = key_col(t, &[(19.0, 0x2CFFFC), (50.0, 0x2CFFFC), (55.0, 0x27D6FA), (65.0, 0x24A0F7), (71.0, 0x2070C5)]);
+        picture(draw, r.glow_dot, c, 2.6 * radius * u, 0.0, alpha(color, key(t, &[(19.0, 0.9), (50.0, 0.85), (71.0, 0.6)])));
+        // The ready state's aura and halo come up during the afterglow.
+        if f >= 51.0 {
+            let up = ((t - 51.0) / 20.0).clamp(0.0, 1.0);
+            idle_halo(draw, r, c, u, up);
+            ult_aura(draw, r.fade, c, now, u, up);
+        }
+    }
+    // A5-C: the thick ring forms from swirling blue smoke and charges from dark blue to cyan.
+    let thick = key_col(t, &[
+        (1.0, 0x242D3F), (3.0, 0x24425E), (5.0, 0x245A81), (7.0, 0x2570A3), (8.0, 0x2579B3), (9.0, 0x2682C0), (10.0, 0x2792D6),
+        (11.0, 0x279EE6), (12.0, 0x28A9EF), (13.0, 0x29B8F5), (15.0, 0x2BCFF8), (17.0, 0x2CE1FA), (18.0, 0x2CE6FB),
+    ]);
+    // C: a blue glow grows around the charging ring.
+    if (8.0..19.0).contains(&f) {
+        picture(draw, r.glow_dot, c, 4.2 * u, 0.0, alpha(thick, 0.45 * ((t - 8.0) / 10.0).min(1.0)));
+    }
+    if (1.0..19.0).contains(&f) {
+        if let Some((id, _)) = r.fade {
+            let swirl = now * 1.5;
+            let outer = |th: f32| {
+                let a = th + swirl;
+                (1.2 + 0.18 + 0.12 * ((5.0 * a).sin() * 0.6 + (11.0 * a + 1.0).sin() * 0.4)) * u
+            };
+            let at = |th: f32, rr: f32| [c[0] + rr * th.cos(), c[1] + rr * th.sin()];
+            for i in 0..AURA_PIECES {
+                let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
+                draw.add_image_quad(id, at(t0, 1.05 * u), at(t1, 1.05 * u), at(t1, outer(t1)), at(t0, outer(t0)))
+                    .col(col(alpha(thick, 0.7 * (1.0 - (t - 1.0) / 18.0))))
+                    .build();
+            }
+        }
+    }
+    // D2-D3: the shockwave: a thick soft cyan band expanding to 8.5 U and thinning, broken into arcs from frame 28;
+    // a thin teal ring trailing inside it from frame 23 to 26.
+    if (20.0..34.0).contains(&t) {
+        let i = SHOCKWAVE.iter().position(|s| s.0 > t).unwrap_or(SHOCKWAVE.len()).max(1) - 1;
+        let (a, b) = (SHOCKWAVE[i], SHOCKWAVE[(i + 1).min(SHOCKWAVE.len() - 1)]);
+        let s = if b.0 > a.0 { ((t - a.0) / (b.0 - a.0)).clamp(0.0, 1.0) } else { 0.0 };
+        let (inner, outer) = ((a.1 + (b.1 - a.1) * s) * u, (a.2 + (b.2 - a.2) * s) * u);
+        let strength = if t < 31.0 { 0.95 } else { 0.95 - 0.35 * (t - 31.0) / 3.0 };
+        if let Some((id, _)) = r.ribbon {
+            const PIECES: usize = 180;
+            for p in 0..PIECES {
+                let (t0, t1) = (TAU * p as f32 / PIECES as f32, TAU * (p + 1) as f32 / PIECES as f32);
+                // From frame 28, 5 small gaps (about 4 degrees each) break the band into arcs.
+                if t >= 28.0 && (0..5).any(|g| {
+                    let mid = TAU * (g as f32 + 0.3 * hash(g + 7)) / 5.0;
+                    let d = (0.5 * (t0 + t1) - mid).rem_euclid(TAU);
+                    d.min(TAU - d) < 2f32.to_radians()
+                }) {
+                    continue;
+                }
+                let at = |th: f32, rr: f32| [c[0] + rr * th.cos(), c[1] + rr * th.sin()];
+                draw.add_image_quad(id, at(t0, inner), at(t0, outer), at(t1, outer), at(t1, inner))
+                    .col(col(alpha([48, 228, 250, 255], strength)))
+                    .build();
+            }
+        }
+        if (23.0..27.0).contains(&t) {
+            let rr = key(t, &[(23.0, 3.6), (26.0, 4.8)]) * u;
+            draw.add_circle(c, rr, col(alpha([47, 185, 198, 255], 1.0 - (t - 23.0) / 4.0))).thickness(1.5 * k).num_segments(160).build();
+        }
+    }
+    // E: the flame eruption, a new drawing every 2 frames (30 a second), held in between.
+    if (28.0..51.0).contains(&t) {
+        eruption(draw, r, c, u, k, ((t - 28.0) / 2.0).floor() as u32);
+    }
+    // The badge, as each phase has it.
+    let mut look = Look::ready();
+    if f < 19.0 {
+        look.disc_r = key(t, &[(0.0, 0.85), (1.0, 0.80), (2.0, 0.78), (3.0, 0.73), (4.0, 0.68), (5.0, 0.63), (6.0, 0.60), (7.0, 0.55), (8.0, 0.50), (9.0, 0.58), (10.0, 0.80), (11.0, 0.93), (12.0, 1.0)]);
+        look.disc = if f < 12.0 { [232, 232, 232, 230] } else { [231, 231, 231, 255] };
+        look.glyph = if f < 1.0 {
+            [0, 0, 0, 0]
+        } else if f < 9.0 {
+            alpha(key_col(t, &[(1.0, 0xE0E0E0), (8.0, 0xB0B0B0)]), 0.4 * (t - 1.0) / 7.0)
+        } else {
+            key_col(t, &[(11.0, 0xA7A7A7), (18.0, 0x7D7D7D)])
+        };
+        look.thick = if f < 1.0 { [0, 0, 0, 0] } else { thick };
+        look.thick_core = look.thick;
+        look.glow = if f < 12.0 { [0, 0, 0, 0] } else { key_col(t, &[(12.0, 0x20426E), (18.0, 0x1F5794)]) };
+        look.navy = if f < 12.0 { 0.0 } else { 1.0 };
+        look.thin_r = key(t, &[(0.0, 1.43), (2.0, 1.53), (5.0, 1.65), (8.0, 1.55), (12.0, 1.50), (15.0, 1.45), (17.0, 1.43)]);
+        look.thin = key_col(t, &[(0.0, 0xC8C8D0), (8.0, 0xDADADF), (12.0, 0xDADADF), (18.0, 0xA8EAFF)]);
+        look.gaps = f >= 15.0;
+        look.hairline = key(t, &[(12.0, 0.0), (18.0, 70.0 / 255.0)]);
+        look.tri_tip = key(t, &[(0.0, 1.63), (11.0, 1.73), (12.0, 1.70), (13.0, 1.63), (14.0, 1.53), (15.0, 1.45), (16.0, 1.40)]);
+    } else {
+        look.thin_r = key(t, &[(19.0, 1.43), (25.0, 1.40)]);
+        look.disc = if f == 19.0 { [235, 254, 254, 255] } else { [232, 254, 253, 255] };
+        look.glyph = key_col(t, &[
+            (19.0, 0x88FEFB), (25.0, 0x63FEF9), (30.0, 0x36FDF7), (35.0, 0x36FDF7), (40.0, 0x2BCBF2), (45.0, 0x2079D5),
+            (55.0, 0x1F6FC0), (60.0, 0x18436F), (65.0, 0x183D6B), (68.0, 0x152D4C), (71.0, 0x15243A),
+        ]);
+    }
+    look.rings(draw, r, c, u, k);
+    // F: the first ready-state flares start near the end.
+    if f >= 61.0 {
+        if let Some(b) = Burst::at(now) {
+            b.draw(draw, r, c, u, k);
+        }
+    }
+    look.triangles(draw, c, u, k);
+    // D1: the one-frame flash: a filled cyan disc out to 3.2 U with a white-hot centre, over everything.
+    if f == 19.0 {
+        draw.add_circle(c, 3.2 * u, col(alpha([48, 228, 250, 255], 0.92))).filled(true).num_segments(128).build();
+        picture(draw, r.glow_dot, c, 3.0 * u, 0.0, WHITE);
+        picture(draw, r.glow_dot, c, 1.6 * u, 0.0, WHITE);
+    }
+}
+
+/// One drawing of the flame eruption (spec E), `index` 0-10 (each held 2 frames): a solid ragged mass with a spike
+/// and a streak (0-1), the mass swelling and thinning with hooked curls separating (2-3), only the curls' outlines
+/// (4-5), the curls flying out to 6 U, thinning and breaking into dashes (6-8), fragments (9-10).
+fn eruption(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, index: u32) {
+    // The curls: mostly upward and to the sides (angles in degrees, 0 = 3 o'clock, clockwise).
+    const CURLS: [(f32, f32); 6] = [(-170.0, 1.0), (-125.0, -1.0), (-85.0, 1.0), (-45.0, -1.0), (-5.0, 1.0), (150.0, -1.0)];
+    let curls = |reach: f32, fill: f32, line: f32, broken: f32| {
+        for (n, (deg, side)) in CURLS.iter().enumerate() {
+            let vary = 1.0 + 0.12 * (hash(n as u32 + 40) - 0.5);
+            flare(draw, r, c, u, k, deg.to_radians(), *side, Shape::Loop, reach * vary, 1.0, fill, line, broken);
+        }
+    };
+    let mass = |reach: f32, strength: f32| {
+        let Some((id, _)) = r.white else {
+            return;
+        };
+        let seed = index as f32 * 1.7;
+        let edge = |th: f32| {
+            // Lopsided: bigger upward (screen y grows downward), torn edges, a few tongues.
+            let torn = 0.22 * (5.0 * th + seed).sin() + 0.15 * (11.0 * th + 2.0 * seed).sin() + 0.08 * (23.0 * th + 3.0 * seed).sin();
+            let up = 0.7 * (-th.sin()).max(0.0).powf(1.5);
+            let tongues = 0.35 * (3.0 * th + seed).sin().max(0.0).powi(10);
+            ((reach - 0.3 + torn + up + tongues).max(1.3)) * u
+        };
+        let at = |th: f32, rr: f32| [c[0] + rr * th.cos(), c[1] + rr * th.sin()];
+        for i in 0..AURA_PIECES {
+            let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
+            draw.add_image_quad(id, at(t0, 1.0 * u), at(t1, 1.0 * u), at(t1, edge(t1)), at(t0, edge(t0)))
+                .col(col(alpha([60, 232, 255, 255], strength)))
+                .build();
+        }
+        picture(draw, r.glow_dot, c, 6.4 * u, 0.0, alpha([60, 232, 255, 255], 0.5 * strength));
+        picture(draw, r.glow_dot, c, 2.6 * u, 0.0, alpha(WHITE, strength));
+    };
+    match index {
+        0 | 1 => {
+            mass(2.5 + 0.25 * index as f32, 0.85);
+            flare(draw, r, c, u, k, (-50f32).to_radians(), 1.0, Shape::Spike, 1.05, 1.0, 0.6, 1.4, 0.0);
+            flare(draw, r, c, u, k, PI, -1.0, Shape::Spike, 0.8, 0.9, 0.5, 0.9, 0.0);
+        }
+        2 | 3 => {
+            mass(3.1 + 0.2 * (index - 2) as f32, 0.45);
+            curls(1.3 + 0.2 * (index - 2) as f32, 0.25, 1.5, 0.0);
+        }
+        4 | 5 => curls(1.7 + 0.3 * (index - 4) as f32, 0.0, 1.6, 0.0),
+        6..=8 => {
+            let s = (index - 6) as f32;
+            curls(2.4 + 0.3 * s, 0.0, 1.2 - 0.3 * s, 0.15 + 0.17 * s);
+        }
+        _ => curls(3.2 + 0.2 * (index - 9) as f32, 0.0, 0.5, 0.8 + 0.12 * (index - 9) as f32),
     }
 }
 
@@ -824,20 +1123,20 @@ impl Burst {
         match self.step() {
             // Small and thin: hollow outlines, medium brightness.
             Step::Build => {
-                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, 0.62 * loop_len, 0.65, 0.12, 0.7);
-                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, 0.62 * spike_len, 0.65, 0.12, 0.7);
+                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, 0.62 * loop_len, 0.65, 0.12, 0.7, 0.0);
+                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, 0.62 * spike_len, 0.65, 0.12, 0.7, 0.0);
             }
             // The same pair redrawn about 40 % bigger, thicker and brighter, with the translucent fill.
             Step::Peak => {
-                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, loop_len, 1.0, 0.45, 1.3);
-                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, spike_len, 1.0, 0.45, 1.3);
+                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, loop_len, 1.0, 0.45, 1.3, 0.0);
+                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, spike_len, 1.0, 0.45, 1.3, 0.0);
             }
             Step::Blank => {}
             // One smaller, dimmer flare at a new angle; sometimes a small one opposite.
             Step::Second => {
-                flare(draw, r, c, u, k, second_dir, self.side, Shape::Loop, 0.5, 0.6, 0.15, 0.8);
+                flare(draw, r, c, u, k, second_dir, self.side, Shape::Loop, 0.5, 0.6, 0.15, 0.8, 0.0);
                 if h(8) > 0.6 {
-                    flare(draw, r, c, u, k, second_dir + PI, -self.side, Shape::Loop, 0.35, 0.5, 0.1, 0.7);
+                    flare(draw, r, c, u, k, second_dir + PI, -self.side, Shape::Loop, 0.35, 0.5, 0.1, 0.7, 0.0);
                 }
             }
             // A thin jagged electric thread, fading out and breaking into pieces (the only fade).
@@ -865,9 +1164,10 @@ fn catmull(ctrl: &[(f32, f32)], f: f32) -> (f32, f32) {
 
 /// One flare drawing (spec 4.4), rooted on the outer edge of the thick ring at angle `dir`, mirrored by `side`.
 /// `reach`: 1 = PEAK size (the part beyond the ring scales); `bright`: outline strength; `fill`: strength of the
-/// translucent body; `line`: outline thickness factor. Body and outline are strips of quads sharing their corners.
+/// translucent body; `line`: outline thickness factor; `broken`: share of the outline missing (dashes). Body and
+/// outline are strips of quads sharing their corners.
 #[allow(clippy::too_many_arguments)]
-fn flare(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, dir: f32, side: f32, shape: Shape, reach: f32, bright: f32, fill: f32, line: f32) {
+fn flare(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, dir: f32, side: f32, shape: Shape, reach: f32, bright: f32, fill: f32, line: f32, broken: f32) {
     // Centreline (radius in U, angle from `dir` in radians) and half-widths in U on each side.
     const LOOP: [(f32, f32); 10] = [
         (1.25, -0.6), (1.35, -0.35), (1.6, -0.12), (1.95, 0.05), (2.3, 0.25),
@@ -918,9 +1218,18 @@ fn flare(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, dir: f3
             draw.add_image_quad(id, left[j], right[j], right[j + 1], left[j + 1]).col(col(alpha([47, 184, 255, 255], fill))).build();
         }
     }
+    let seed = (dir.rem_euclid(TAU) * 1000.0) as u32;
+    let on = |j: usize| if broken > 0.0 && hash(seed + (j as u32 / 3)) < broken { 0.0 } else { 1.0 };
+    // No body (the eruption's curls): one tapered stroke along the centre line instead of two edges.
+    if fill <= 0.0 {
+        let taper = |j: usize| (PI * j as f32 / (N - 1) as f32).sin().powf(0.6).max(0.2);
+        strip(draw, r.ribbon, &center, &|j| 6.0 * k * line * taper(j), &|j| 0.55 * bright * on(j), [56, 255, 255, 255]);
+        strip(draw, r.ribbon, &center, &|j| 2.2 * k * line * taper(j), &|j| bright * on(j), [224, 255, 255, 255]);
+        return;
+    }
     for edge in [&left, &right] {
-        strip(draw, r.ribbon, edge, &|_| 7.0 * k * line, &|_| 0.5 * bright, [56, 255, 255, 255]);
-        strip(draw, r.ribbon, edge, &|_| 1.8 * k * line, &|_| 0.95 * bright, [224, 255, 255, 255]);
+        strip(draw, r.ribbon, edge, &|_| 7.0 * k * line, &|j| 0.5 * bright * on(j), [56, 255, 255, 255]);
+        strip(draw, r.ribbon, edge, &|_| 1.8 * k * line, &|j| 0.95 * bright * on(j), [224, 255, 255, 255]);
     }
 }
 
@@ -1049,6 +1358,17 @@ fn smooth(x: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Keyframes: held before and after, straight lines between (the "becoming ready" tables rely on it).
+    #[test]
+    fn keyframes() {
+        let k = [(0.0, 0.85), (8.0, 0.5), (12.0, 1.0)];
+        assert_eq!(key(-1.0, &k), 0.85);
+        assert!((key(4.0, &k) - 0.675).abs() < 1e-5);
+        assert!((key(10.0, &k) - 0.75).abs() < 1e-5);
+        assert_eq!(key(20.0, &k), 1.0);
+        assert_eq!(key_col(5.0, &[(0.0, 0x000000), (10.0, 0x204060)]), [16, 32, 48, 255]);
+    }
 
     /// Spec 4.1-4.2: a burst every 1.25-1.49 s, its poses in order BUILD, PEAK, blank, SECOND, TENDRIL, 25 frames.
     #[test]

@@ -3,6 +3,51 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: the ultimate becoming ready (99% to 100%), and the charging meter redone to match
+
+**Changed (`genji/src/hud.rs`)**, following your "ULT GAINED" spec:
+- **Charging meter (spec section 2)**, needed so the hard cut starts from the right picture:
+  - 67 teal bars from 0.95 to 1.20 U with bright cores and a glow, filling clockwise from 12 o'clock and breathing
+    ±3.5% every 1.55 s;
+  - a thin teal circle at 0.825 U with 4 breaks;
+  - a dark centre (#1D1B23, 85%);
+  - a thin grey ring at 1.40 U and a dotted ring of 90 dots at 1.875 U;
+  - the italic number in light grey;
+  - the Q cap dark and see-through, with a thin outline at half strength.
+- **Becoming ready** (`ult_gain`, 1.2 s, played when the charge reaches 100%), every phase from the spec's tables in
+  60 fps frames:
+  - **A, collapse:** a dark backing; the white disc shrinking from 0.85 to 0.50 U while the grey glyph fades in; the
+    thin ring growing to 1.65 U and back; the triangles outside; the thick ring forming from swirling smoke,
+    dark blue to bright.
+  - **B, pop:** the disc back to 1.0 U in 3 frames, no overshoot.
+  - **C, charge-up:** the ring to cyan, a blue glow growing, the triangles snapping in, the thin ring's gaps opening
+    at frame 15, the hairline fading in.
+  - **D, flash and shockwave:** a one-frame cyan flash over 3.2 U; the measured shockwave band expanding to 8.5 U
+    and breaking into arcs; the trailing teal hairline; a cyan bloom.
+  - **E, eruption** (a new drawing every 2 frames): a lopsided solid mass with a spike and a streak; it swells and
+    hooked curls separate; then only the curls, flying out, thinning and breaking into dashes; then fragments.
+  - **F, afterglow:** the bloom cools and fades; the glyph cools from cyan to navy; the disc stays pale cyan; the
+    ready-state halo and aura come up; the first idle flares from frame 61.
+  - **G:** a snap to the ready state at 1.2 s.
+  - **Q cap:** a ghost at first, then solid white with a dark Q, which turns cyan from the flash on.
+- **Code:**
+  - The badge is now one shared drawing, `Look`, used by both the ready state and this animation.
+  - `ult_aura` takes a strength; `flare` can break into dashes and, with no body, draws one tapered stroke.
+  - The old 0.6 s burst at 100% is gone.
+  - A unit test covers the keyframe helper.
+**Why:** You: "do the animation when the ult hits 100%", with the spec and the frame sheets.
+**Tested how:**
+- A mock-up of every frame, drawn the way ImGui draws from the same formulas (`D:\GenjiBridgeAssets\hud_ref\
+  mock12_A.png`, `mock12_B.png`), compared with your frame sheets.
+- Tuned once: the eruption mass made lopsided and glowing, and the curls drawn as single tapered strokes.
+- The build and the 31 unit tests pass.
+**Result:** The mock-up's phases line up with the spec and your sheets. Not tested in game.
+**Still broken / not tested:**
+- In game. F7 fills the charge at once, which shows this animation.
+- The new charging meter, in game.
+- Additive light is approximated with normal blending.
+**Next:** Your test.
+
 ## 2026-10-08 HUD: ready ultimate rebuilt from the "ULT FULL" spec (flipbook flare bursts)
 
 **Changed:**

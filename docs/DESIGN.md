@@ -412,6 +412,24 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
       - TENDRIL: a jagged thread that fades and breaks up.
     - A new direction each burst, at least 60° from the last.
     - **Roll back:** the earlier smooth version is saved as the git tag `hud-ult-flames-v1`.
+  - **Charging meter** (the "ULT GAINED" spec, section 2):
+    - a dotted outer ring of 90 dots and a thin grey ring;
+    - 67 teal bars filling clockwise from 12 o'clock, breathing ±3.5%;
+    - a thin teal circle with 4 breaks;
+    - a dark see-through centre;
+    - the italic grey number;
+    - the Q cap: dark with a thin outline.
+  - **Becoming ready** (same spec, 1.2 s, in 60 fps frames from the moment it reaches 100%):
+    - The meter hard-cuts to a white disc that shrinks while a dark-blue smoke ring forms (0-8).
+    - The disc pops back to full size with a grey glyph (9-12).
+    - The ring charges to cyan, the triangles snap in and the thin ring's gaps open (12-18).
+    - A one-frame cyan flash (19), then a shockwave ring expanding to 8.5 U and breaking into arcs (20-33).
+    - A stepped flame eruption at 30 drawings a second: a lopsided solid mass with a spike, then hooked curls
+      flying out and breaking up (28-50).
+    - An afterglow that cools the cyan glyph back to navy (51-71), with the first ready-state flares from 61.
+    - A snap to the ready state (72).
+    - Built from shared parts: `Look` (the badge with adjustable sizes and colours), keyframe tables (`key`,
+      `key_col`), `ult_gain` and `eruption`.
   - **Ultimate pressed (0.4 s):** the ring expands and fades, and the emblem gives way to the empty meter with its
     "0". Q becomes outlined.
   - **During Dragonblade:** the meter shows the charge, as in the clip. The draining ring with seconds is gone.
