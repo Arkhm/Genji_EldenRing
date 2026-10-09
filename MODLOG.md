@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Your sound picks copied into place (tools/make_sounds.py)
+
+**Changed:**
+- **New `tools/make_sounds.py`:** reads your export (copied from your Downloads to `D:\GenjiBridgeAssets\sound_picks.json`)
+  and the picker's own take numbering. It copies the chosen takes into `D:\GenjiBridgeAssets\sound\<event>\01.ogg`
+  and so on, plus an `index.json` (outside the repository).
+- **How your notes were read** (by hand, into the tool's table):
+  - **Numbers only** ("1 3 4 5 7 8", "3-7", "from 1 to 13") are the right takes; the others belong to other skins.
+  - **Descriptions** split a group: melee hit 1-3, 8, 9 and swing 4-7, 10; the Dragonblade group into swings 2 6 7,
+    roars 1 3 5 8 9 and heartbeat 4; blade ending and sheathing; the ult roar (take 2).
+  - **Voice lines:** your tags, without the 14 eliminations you marked "dont use", plus the folders you named
+    (melee kill, kill streak, multikill, fall death, stagger, knockdown, jump end).
+  - **Extras you found:** kill sound, "not ready" sound, low health, healing, health pack, body/head/critical hit
+    sounds.
+- **Result:** 50 events, 340 files.
+**Why:** You exported your picks.
+**Tested how:** The tool ran; every chosen take was found and copied (counts above in the run, e.g. shuriken throw 6,
+fan 5, eliminations 76).
+**Result:** Done.
+**Still broken / not tested:**
+- **Not found yet:** Swift Strike dash, dash hit, dash reset, Deflect block, Dragonblade hit, jump, ult ready, footstep.
+- The reload's 4 sounds play one after another; their exact timing within the 1.5 s isn't in the files, so it will
+  be estimated.
+**Next:** You look for the missing ones (candidates sent); step 11b, playback in the mod.
+
 ## 2026-10-09 Animation previews in the sound picker (Blender)
 
 **Changed:**
