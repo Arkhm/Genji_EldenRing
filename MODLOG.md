@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Status effects on the Overwatch HUD
+
+**Changed:**
+- New `status.rs`: reads your buildup of the seven statuses from the character's resistance data.
+- `hud.rs`: above the health number, one row per status that's building up: its name in its colour over 10 thin
+  segments like the health bar, filling in that colour, pulsing when full.
+**Why:** You: "the status effect on the player doesn't show up. you can make a custom like overwatch hp bar, on the
+left side for each status."
+**Tested how:**
+- The layout of that data isn't described by fromsoftware-rs, and I found no description online to check against. The
+  one used (buildup then maximums, 4-byte numbers, from 0x10) is from memory of modders' tables.
+- Guards: nothing is drawn if a maximum is outside 1..10000. Each status's direction (up to its maximum or down from
+  it) is learned from its value at rest.
+- The log (`STATUS`) shows:
+  - the readings when they change, at most twice a second;
+  - whether the maximums pair up the way the resistances do (poison and rot, blood loss and frostbite, sleep and
+    madness);
+  - special effects starting and ending on you.
+- New test `direction_comes_from_the_value_at_rest`; `cargo test --release` passes (54 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Whether the readings are right at all, and whether each name sits on the right status.
+- What shows while a status is active (poisoned, frozen): the bars show the readings as they are.
+**Next:** Your test: walk into poison (or get hit by bleed) and look at the bars and the log.
+
 ## 2026-10-09 Interaction prompts back (items, fog walls)
 
 **Changed:** `controls.rs`: while an interaction prompt is up (UI state 0x13), Elden Ring's HUD is switched on

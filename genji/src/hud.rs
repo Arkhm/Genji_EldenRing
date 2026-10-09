@@ -107,6 +107,8 @@ pub struct State {
     pub enemy_count: usize,
     /// Eliminations so far, to play the kill skull when it goes up.
     pub kills: u32,
+    /// Your status effects building up (status.rs), in its order.
+    pub statuses: [crate::status::Bar; crate::status::COUNT],
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -129,6 +131,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false, name: [0; NAME_BYTES], name_len: 0 }; ENEMY_BARS],
     enemy_count: 0,
     kills: 0,
+    statuses: [crate::status::Bar { fill: 0.0 }; crate::status::COUNT],
 });
 
 pub fn update(state: State) {
@@ -327,6 +330,17 @@ pub(crate) fn decode_png(path: &Path) -> Result<(Vec<u8>, u32, u32), String> {
 const WHITE: [u8; 4] = [255, 255, 255, 255];
 const PANEL_WHITE: [u8; 4] = [232, 235, 240, 235];
 const DIM: [u8; 4] = [215, 220, 230, 200];
+/// The status bars' colours, in status.rs's order (poison, scarlet rot, blood loss, death blight, frostbite, sleep,
+/// madness), close to Elden Ring's own gauges.
+const STATUS_COLOURS: [[u8; 4]; crate::status::COUNT] = [
+    [168, 204, 64, 255],
+    [232, 96, 44, 255],
+    [222, 40, 52, 255],
+    [176, 160, 120, 255],
+    [150, 208, 245, 255],
+    [160, 130, 225, 255],
+    [245, 176, 40, 255],
+];
 const SHADOW: [u8; 4] = [0, 0, 0, 110];
 const CYAN: [u8; 4] = [90, 235, 255, 255];
 /// Clip parts 3-4: the active tile and the cooldown fill are a saturated cyan; the waiting tile a see-through grey.
@@ -606,6 +620,33 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         if part > 0.0 {
             draw.add_rect([x0, seg_top], [x0 + seg_w * part, seg_top + seg_h], col(PANEL_WHITE)).filled(true).build();
         }
+    }
+
+    // ---- Above the health: your status effects building up (DESIGN.md 5l; you, 2026-10-09: "a custom like
+    // overwatch hp bar, on the left side for each status"). One row each, only while building up: its name in its
+    // colour over 10 thin segments like the health bar's, filling in that colour; full, it pulses.
+    let mut row_bottom = num_mid - 24.0 * k;
+    for (i, bar) in s.statuses.iter().enumerate() {
+        if bar.fill < 0.01 {
+            continue;
+        }
+        let c = STATUS_COLOURS[i];
+        let thin = 7.0 * k;
+        let y0 = row_bottom - thin;
+        let pulse = if bar.fill >= 0.999 { 0.75 + 0.25 * (now * 9.0).sin() } else { 1.0 };
+        let fill = bar.fill * 10.0;
+        for j in 0..10 {
+            let x0 = hx + j as f32 * (seg_w + gap);
+            draw.add_rect([x0, y0], [x0 + seg_w, row_bottom], col(alpha(c, 0.22))).filled(true).build();
+            let part = (fill - j as f32).clamp(0.0, 1.0);
+            if part > 0.0 {
+                draw.add_rect([x0, y0], [x0 + seg_w * part, row_bottom], col(alpha(c, pulse))).filled(true).build();
+            }
+        }
+        let name = crate::status::NAMES[i];
+        let t = measure(r.label, name);
+        text([hx, y0 - 3.0 * k - t[1]], r.label, c, name);
+        row_bottom = y0 - t[1] - 9.0 * k;
     }
 
     // ---- Bottom centre: the ultimate. Your clip and its analyses (2026-10-08), at 1080 lines: centre 150 px above

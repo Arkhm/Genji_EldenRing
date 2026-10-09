@@ -79,6 +79,8 @@ struct View {
     lock_cam_fov: Option<Vec<(u32, f32)>>,
     /// Enemy health bars (DESIGN.md 5i).
     enemy_bars: crate::enemy_bars::EnemyBars,
+    /// Your status effects, for the HUD's status bars (DESIGN.md 5l).
+    status: crate::status::Watch,
     /// Sound (step 11b): what was true last frame, to play sounds when it changes.
     sound: SoundWatch,
     /// Movement, health and kill sounds (step 11b-2).
@@ -582,6 +584,7 @@ fn camera_step_inner(dt: f32) -> bool {
         view.enemy_bars.update(player, &look, eye, camera.pers_cam_1.fov, camera.pers_cam_1.aspect_ratio, dt);
     let (ammo, ammo_max, reloading) = view.firing.hud();
     let (deflect_left, deflect_cooldown) = view.deflect.hud();
+    let statuses = view.status.update(player, dt).unwrap_or_default();
     crate::hud::update(crate::hud::State {
         visible: true,
         hp: player.chr_ins.modules.data.hp,
@@ -602,6 +605,7 @@ fn camera_step_inner(dt: f32) -> bool {
         enemies,
         enemy_count,
         kills: view.sound.kills,
+        statuses,
     });
     true
 }
