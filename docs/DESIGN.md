@@ -702,6 +702,10 @@ and the field of view are right.
   - They're exported as parts of the model, fixed to those bones.
   - The arms show the katana in Dragonblade, the wakizashi for Swift Strike, the quick melee and Deflect, and the
     shuriken otherwise.
+  - The shuriken are on their own bones, in their own resting pose (240D, the partner of the arms' 240E: fanned
+    between the fingers), relative to the hand. They're hidden during the throw, fans and the reload.
+  - Overwatch's weapon animations place the weapon in the arms' own space, made as a pair with an arm animation. Only
+    the resting pair is certain so far.
 - **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.
 
 ## 6. Risks and unknowns (honest list)

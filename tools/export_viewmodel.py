@@ -43,10 +43,21 @@ MODELS = r'D:\GenjiBridgeAssets\raw\Heroes\Genji\Skin\Overwatch\Overwatch\Models
 # (part, model, attachment point, the bone it follows): the shuriken stack, the Dragonblade katana, the wakizashi
 # (short blade). Found 2026-10-09 in Entities\Gameplay1P.owentity; the two sheaths on the back aren't in view.
 WEAPONS = [
-    (1, '00000000DA9E', 'hardpoint_000A', 'Weapon_R'),
     (2, '00000000DA9D', 'hardpoint_000B', 'Weapon_L'),
     (3, '00000000DAA1', 'hardpoint_000B', 'Weapon_L'),
 ]
+# The shuriken stack (part 1) moves with animations of its own (your test of 2026-10-09: fixed to the hand they sat
+# closed in the palm; Overwatch fans them between the fingers and shrinks each one away as it's thrown). Those
+# animations place it in the arms' own space, made as a pair with an arm animation. Exported as its 13 bones relative
+# to the hand bone Weapon_R, frame by frame for each pair below, so in the mod they follow the hand in any animation
+# (the resting pair for every arm animation without one).
+SHURIKEN = (1, '00000000DA9E', 'Weapon_R')
+SHURIKEN_PAIRS = [
+    ('240E', '240D'),  # resting pose, fanned (the default): matches your clip2 at 1.0 s
+]
+# Tried and dropped (2026-10-09): throw 2478 with 2498, fans 243B/244F with 2451/2450, reload 2436 with 33BA (same
+# lengths). In the throw one shuriken stayed hanging in the air in front of the hand, so the pairs aren't certain.
+# Your clip2 shows the hand empty during throws, fans and the reload: the mod hides the stack then (arms_anim.rs).
 
 
 def clip_path(anim_id):
@@ -62,14 +73,15 @@ def clip_fps(path):
     return struct.unpack('<f', head[8:12])[0]
 
 
-def export_mesh(obj, arm, part=0, rigid_bone=None):
+def export_mesh(obj, arm, part=0, rigid_bone=None, bone_offset=0):
     """Unique (vertex, texture coordinate, normal) triangle corners with their 4 strongest bone weights (or, for a
-    weapon, all on `rigid_bone`). Also returns, per original vertex, one exported copy (for the check)."""
+    weapon, all on `rigid_bone`). `arm`'s bones are numbered from `bone_offset`. Also returns, per original vertex, one
+    exported copy (for the check)."""
     me = obj.data
     me.calc_loop_triangles()
     uv = me.uv_layers.active.data
     normals = [n.vector for n in me.corner_normals]
-    bone_index = {b.name: i for i, b in enumerate(arm.data.bones)}
+    bone_index = {b.name: i + bone_offset for i, b in enumerate(arm.data.bones)}
     group_bone = {g.index: bone_index.get(g.name) for g in obj.vertex_groups}
     world = obj.matrix_world
     rot = world.to_3x3()
@@ -163,8 +175,36 @@ def main():
                 files.append('-')
         parts.append(f'{part} {files[0]} {files[1]}')
 
+    # The shuriken: at the model's origin, on its own bones (numbered after the arms').
+    part, model, hand_bone = SHURIKEN
+    before = set(bpy.data.objects)
+    bpy.ops.import_mesh.overtools2_model(directory=os.path.join(MODELS, model + '.00C') + os.sep, files=[{'name': model + '.owmdl'}])
+    new = [o for o in bpy.data.objects if o not in before]
+    shuriken_arm = next(o for o in new if o.type == 'ARMATURE')
+    n_arm_bones = len(arm.data.bones)
+    names = {}
+    for obj in (o for o in new if o.type == 'MESH'):
+        mat = obj.data.materials[0] if obj.data.materials else None
+        imgs = {n.label: n.image.filepath for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image} if mat else {}
+        if 'Albedo' not in imgs:
+            continue
+        wv, wi, _ = export_mesh(obj, shuriken_arm, part, None, n_arm_bones)
+        indices += [i + len(verts) for i in wi]
+        verts += wv
+        names = imgs
+        print(f'SHURIKEN part {part} {model}: {len(wv)} vertices on its {len(shuriken_arm.data.bones)} bones')
+    files = []
+    for label in ('Albedo', 'Emission'):
+        if label in names:
+            files.append(f'part{part}_{label.lower()}.png')
+            save_texture(names[label], files[-1], 1024)
+        else:
+            files.append('-')
+    parts.insert(1, f'{part} {files[0]} {files[1]}')
+
     with open(os.path.join(OUT, 'model.bin'), 'wb') as fh:
-        fh.write(b'GVM2' + struct.pack('<III', len(verts), len(indices), len(arm.data.bones)))
+        # GVM3: also the number of extra bones (the shuriken's), after the arms'.
+        fh.write(b'GVM3' + struct.pack('<IIII', len(verts), len(indices), n_arm_bones, len(shuriken_arm.data.bones)))
         for (px, py, pz, nx, ny, nz, u, v, bones, weights, part) in verts:
             fh.write(struct.pack('<8f4B4fB3x', px, py, pz, nx, ny, nz, u, v, *bones, *weights, part))
         fh.write(struct.pack(f'<{len(indices)}I', *indices))
@@ -215,6 +255,44 @@ def main():
     with open(os.path.join(OUT, 'export_check.txt'), 'w', encoding='utf-8') as fh:
         fh.write(f'worst {worst * 1000:.3f} mm\n' + '\n'.join(check) + '\n')
     print(f'EXPORT DONE {len(index)} animations, worst difference {worst * 1000:.3f} mm')
+
+    # The shuriken's bones relative to the hand, frame by frame, for each pair (shuriken.bin, shuriken.txt).
+    hand = bone_index[hand_bone]
+    lines = [f'hand {hand} bones {len(shuriken_arm.data.bones)}']
+    with open(os.path.join(OUT, 'shuriken.bin'), 'wb') as fh:
+        offset = 0
+        for arm_id, shuriken_id in SHURIKEN_PAIRS:
+            arm_path = clip_path(full_id(arm_id))
+            sh_path = None
+            for dp, _, fs in os.walk(os.path.join(MODELS, model + '.00C', 'Animations')):
+                if full_id(shuriken_id) + '.owanimclip' in fs:
+                    sh_path = os.path.join(dp, full_id(shuriken_id) + '.owanimclip')
+            if arm_path is None or sh_path is None:
+                print('MISSING shuriken pair', arm_id, shuriken_id)
+                continue
+            for target, path in ((arm, arm_path), (shuriken_arm, sh_path)):
+                for o in bpy.data.objects:
+                    o.select_set(o is target)
+                bpy.context.view_layer.objects.active = target
+                bpy.ops.import_mesh.overtools2_animmclip(directory=os.path.dirname(path) + os.sep, files=[{'name': os.path.basename(path)}])
+            act = arm.animation_data.action
+            frames = list(range(int(act.frame_range[0]), int(act.frame_range[1]) + 1))
+            for fr in frames:
+                scene.frame_set(fr)
+                hb = arm.data.bones[hand]
+                hand_skin = arm.matrix_world @ arm.pose.bones[hb.name].matrix @ hb.matrix_local.inverted() @ arm.matrix_world.inverted()
+                inv = hand_skin.inverted()
+                out = []
+                for b in shuriken_arm.data.bones:
+                    w = shuriken_arm.matrix_world @ shuriken_arm.pose.bones[b.name].matrix @ b.matrix_local.inverted() @ shuriken_arm.matrix_world.inverted()
+                    rel = inv @ w
+                    out.extend(rel[r][c] for r in range(3) for c in range(4))
+                fh.write(struct.pack(f'<{len(out)}f', *out))
+            lines.append(f'{arm_id} {shuriken_id} {len(frames)} {offset}')
+            offset += len(frames)
+            print('SHURIKEN PAIR', arm_id, shuriken_id, len(frames), 'frames')
+    with open(os.path.join(OUT, 'shuriken.txt'), 'w', encoding='utf-8') as fh:
+        fh.writelines(line + '\n' for line in lines)
 
 
 main()

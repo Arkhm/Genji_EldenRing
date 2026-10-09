@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Shuriken held like in Overwatch: fanned between the fingers
+
+**Changed:**
+- `tools/export_viewmodel.py`: the shuriken stack is exported on its own 13 bones, not fixed to the hand. The model
+  file is now version 3 (`GVM3`: the number of extra bones).
+  - Its resting pose comes from its own animation 240D, the partner of the arms' resting pose 240E.
+  - It's stored relative to the hand bone `Weapon_R` (`shuriken.bin`, `shuriken.txt`).
+  - The katana and the wakizashi stay fixed to `Weapon_L` as before.
+- `viewmodel.rs`: reads GVM3 and puts the shuriken's bones on the hand in every animation (`pose()`: the hand bone, then
+  the resting relative pose).
+- `arms_anim.rs`: the shuriken are hidden during the throw, Fan of Blades and the reload, as in your clip2.
+**Why:** You: "the resting pose of the shurikens is wrong. is not correctly in the middle of his fingers".
+**Tested how:**
+- The weapons have animations of their own: 23 for the shuriken, 20 for the katana, 9 for the wakizashi.
+- Their numbers and lengths pair them with the arms' (arms 240E with shuriken 240D, 124B with katana 124C, and so on).
+- Measured in Blender: a weapon animation doesn't move the weapon relative to the hand; it places it in the arms' own
+  space. With the arms 240E and the shuriken 240D, the stack is fanned in the hand, pointing left, as in your clip2 at
+  1.0 s. Overwatch also shrinks each shuriken to 1% of its size as it's thrown.
+- Tried for the throw, fans and reload (pairs with the same lengths): one shuriken stayed hanging in the air in front
+  of the hand, so those pairs were dropped.
+- Pictures checked: resting pose next to your clip2 at 1.0 s (matches); walking, jumps and the arms coming up
+  (the stack stays fanned in the hand).
+- The export check is still exact; `cargo test --release` passes (51 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The stack doesn't spin or fan open and closed as in Overwatch's own throws: it pops back into the hand when the arm
+  returns to rest.
+- The katana's and wakizashi's own animations aren't used (on their attachment points they already looked right).
+**Next:** Your test.
+
 ## 2026-10-09 Arms: no more finger twists between frames; melee sound back; first swing on time; no shuriken on the wall
 
 **Changed:**

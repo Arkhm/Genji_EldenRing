@@ -72,6 +72,8 @@ pub fn parts_for(role: &str) -> u8 {
         PART_ARMS | PART_KATANA
     } else if role.contains("wall_climb") {
         PART_ARMS // open hands on the wall (your Overwatch clip 3 at 14.1 s); the shuriken floated otherwise
+    } else if matches!(role, "throw" | "fan" | "reload") {
+        PART_ARMS // the hand is empty while throwing and reloading (your clip 2, 13.2-15.9 s, 16.5 s, 24-25.5 s)
     } else if role.starts_with("deflect_") || role == "dash" || role == "melee" {
         PART_ARMS | PART_WAKIZASHI
     } else {

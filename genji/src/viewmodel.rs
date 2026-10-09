@@ -35,7 +35,20 @@ pub struct Model {
     /// The part each vertex belongs to: 0 the arms, then the weapons (PART_* below).
     part: Vec<u8>,
     indices: Vec<u32>,
+    /// The arms' bones (those in anims.bin), then the shuriken's own bones.
     bone_count: usize,
+    extra_bones: usize,
+}
+
+/// The shuriken stack's bones relative to the hand bone, frame by frame, for arm animations that have a shuriken
+/// animation of their own (tools\export_viewmodel.py, SHURIKEN_PAIRS); the first pair is the resting pose, used for
+/// every other animation.
+struct Shuriken {
+    hand: usize,
+    bones: usize,
+    /// (arm animation id, frames, first frame in `mats`).
+    pairs: Vec<(String, usize, usize)>,
+    mats: Vec<f32>,
 }
 
 /// Parts of the model (tools\export_viewmodel.py, WEAPONS), as bits of a mask of what to show.
@@ -71,6 +84,7 @@ pub struct Viewmodel {
     mats: Vec<f32>,
     /// Per part: its colour texture and, if it has one, its glow texture.
     textures: Vec<(Texture, Option<Texture>)>,
+    shuriken: Option<Shuriken>,
 }
 
 /// A 3x4 skinning matrix (rows).
@@ -93,15 +107,17 @@ impl Viewmodel {
     pub fn load(dir: &Path) -> Result<Self, String> {
         let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| format!("{name}: {e}"));
         let b = read("model.bin")?;
-        // GVM1: the arms only; GVM2: a part number per vertex (the weapons).
-        let with_parts = match &b[0..4] {
-            b"GVM1" => false,
-            b"GVM2" => true,
-            _ => return Err("model.bin: not a GVM1 or GVM2 file".into()),
+        // GVM1: the arms only; GVM2: a part number per vertex (the weapons); GVM3: also extra bones (the shuriken's).
+        let (with_parts, head) = match &b[0..4] {
+            b"GVM1" => (false, 16),
+            b"GVM2" => (true, 16),
+            b"GVM3" => (true, 20),
+            _ => return Err("model.bin: not a GVM1, GVM2 or GVM3 file".into()),
         };
         let (nv, ni, nb) = (read_u32(&b, 4) as usize, read_u32(&b, 8) as usize, read_u32(&b, 12) as usize);
+        let extra = if head == 20 { read_u32(&b, 16) as usize } else { 0 };
         let stride: usize = 8 * 4 + 4 + 4 * 4 + if with_parts { 4 } else { 0 };
-        if b.len() != 16 + nv * stride + ni * 4 {
+        if b.len() != head + nv * stride + ni * 4 {
             return Err(format!("model.bin: size {} doesn't match {nv} vertices and {ni} indices", b.len()));
         }
         let mut model = Model {
@@ -113,22 +129,23 @@ impl Viewmodel {
             part: Vec::with_capacity(nv),
             indices: Vec::with_capacity(ni),
             bone_count: nb,
+            extra_bones: extra,
         };
         for i in 0..nv {
-            let at = 16 + i * stride;
+            let at = head + i * stride;
             let f = |k: usize| read_f32(&b, at + 4 * k);
             model.pos.push(Vec3::new(f(0), f(1), f(2)));
             model.nrm.push(Vec3::new(f(3), f(4), f(5)));
             model.uv.push(Vec2::new(f(6), f(7)));
             let bones = [b[at + 32], b[at + 33], b[at + 34], b[at + 35]];
-            if bones.iter().any(|&x| x as usize >= nb) {
-                return Err(format!("model.bin: vertex {i} uses bone {bones:?} of {nb}"));
+            if bones.iter().any(|&x| x as usize >= nb + extra) {
+                return Err(format!("model.bin: vertex {i} uses bone {bones:?} of {}", nb + extra));
             }
             model.bones.push(bones);
             model.weights.push(std::array::from_fn(|k| read_f32(&b, at + 36 + 4 * k)));
             model.part.push(if with_parts { b[at + 52] } else { 0 });
         }
-        let at = 16 + nv * stride;
+        let at = head + nv * stride;
         model.indices = (0..ni).map(|k| read_u32(&b, at + 4 * k)).collect();
         if model.indices.iter().any(|&i| i as usize >= nv) {
             return Err("model.bin: an index past the vertices".into());
@@ -171,7 +188,39 @@ impl Viewmodel {
         if let Some(&p) = model.part.iter().find(|&&p| p as usize >= textures.len()) {
             return Err(format!("model.bin: part {p} has no textures in parts.txt"));
         }
-        Ok(Self { model, anims, mats, textures })
+        // shuriken.txt: "hand <bone> bones <n>", then "arm_id shuriken_id frames offset" per pair.
+        let shuriken = match std::fs::read_to_string(dir.join("shuriken.txt")) {
+            Ok(list) if extra > 0 => {
+                let mut lines = list.lines().filter(|l| !l.trim().is_empty());
+                let head: Vec<&str> = lines.next().unwrap_or("").split_whitespace().collect();
+                let bad = |what: &str| format!("shuriken.txt: bad {what}");
+                if head.len() != 4 || head[0] != "hand" || head[2] != "bones" {
+                    return Err(bad("first line"));
+                }
+                let hand: usize = head[1].parse().map_err(|_| bad("hand"))?;
+                let bones: usize = head[3].parse().map_err(|_| bad("bones"))?;
+                if hand >= nb || bones != extra {
+                    return Err(bad("bone numbers"));
+                }
+                let mut pairs = Vec::new();
+                for line in lines {
+                    let p: Vec<&str> = line.split_whitespace().collect();
+                    if p.len() != 4 {
+                        return Err(bad("line"));
+                    }
+                    pairs.push((p[0].to_string(), p[2].parse().map_err(|_| bad("frames"))?, p[3].parse().map_err(|_| bad("offset"))?));
+                }
+                let raw = read("shuriken.bin")?;
+                let mats: Vec<f32> = raw.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+                let total: usize = pairs.iter().map(|p| p.1).sum();
+                if pairs.is_empty() || mats.len() != total * bones * 12 {
+                    return Err(bad("shuriken.bin size"));
+                }
+                Some(Shuriken { hand, bones, pairs, mats })
+            }
+            _ => None,
+        };
+        Ok(Self { model, anims, mats, textures, shuriken })
     }
 
     /// The first animation for `role`, if exported.
@@ -198,9 +247,40 @@ impl Viewmodel {
             .collect()
     }
 
-    /// The skinning matrices of animation `anim` at `t` seconds (held at the last frame, or wrapped if `looping`),
-    /// blended linearly between the two nearest frames.
+    /// The skinning matrices of animation `anim` at `t` seconds (held at the last frame, or wrapped if `looping`):
+    /// the arms' bones, then the shuriken's (on the hand, from the shuriken animation paired with `anim`, or the
+    /// resting one).
     pub fn pose(&self, anim: usize, t: f32, looping: bool) -> Vec<Mat> {
+        let mut m = self.pose_arms(anim, t, looping);
+        if self.model.extra_bones > 0 {
+            let hand = self.shuriken.as_ref().map_or(0, |s| s.hand);
+            let hand_m = m[hand];
+            match &self.shuriken {
+                Some(sh) => {
+                    let a = &self.anims[anim];
+                    let (pair, frames, offset) = sh.pairs.iter().find(|p| p.0 == a.id).map_or((false, sh.pairs[0].1, sh.pairs[0].2), |p| (true, p.1, p.2));
+                    let last = frames.saturating_sub(1);
+                    let mut f = if pair { t.max(0.0) * a.fps } else { 0.0 };
+                    if looping && last > 0 {
+                        f %= last as f32;
+                    }
+                    let f = f.min(last as f32);
+                    let (i0, frac) = (f.floor() as usize, f.fract());
+                    let i1 = (i0 + 1).min(last);
+                    let rel = |i: usize| -> Vec<Mat> {
+                        (0..sh.bones).map(|b| sh.mats[((offset + i) * sh.bones + b) * 12..][..12].try_into().unwrap()).collect()
+                    };
+                    let r = if frac > 0.0 && i1 != i0 { Self::blend(&rel(i0), &rel(i1), frac) } else { rel(i0) };
+                    m.extend(r.iter().map(|r| compose(&hand_m, r)));
+                }
+                None => m.extend(std::iter::repeat_n(hand_m, self.model.extra_bones)),
+            }
+        }
+        m
+    }
+
+    /// The arms' bones only.
+    fn pose_arms(&self, anim: usize, t: f32, looping: bool) -> Vec<Mat> {
         let a = &self.anims[anim];
         let nb = self.model.bone_count;
         let last = a.frames.saturating_sub(1);
@@ -287,6 +367,21 @@ fn from_parts(q: glam::Quat, stretch: glam::Mat3, t: Vec3) -> Mat {
     let a = glam::Mat3::from_quat(q) * stretch;
     let (c0, c1, c2) = (a.x_axis, a.y_axis, a.z_axis);
     [c0.x, c1.x, c2.x, t.x, c0.y, c1.y, c2.y, t.y, c0.z, c1.z, c2.z, t.z]
+}
+
+/// a then b: the matrix that applies `b` first, then `a` (both 3x4, by rows).
+fn compose(a: &Mat, b: &Mat) -> Mat {
+    let mut out = [0.0; 12];
+    for r in 0..3 {
+        for c in 0..4 {
+            let mut v = if c == 3 { a[r * 4 + 3] } else { 0.0 };
+            for k in 0..3 {
+                v += a[r * 4 + k] * b[k * 4 + c];
+            }
+            out[r * 4 + c] = v;
+        }
+    }
+    out
 }
 
 fn apply(m: &Mat, p: Vec3) -> Vec3 {
