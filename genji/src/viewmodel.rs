@@ -141,6 +141,42 @@ pub struct Viewmodel {
 /// A 3x4 skinning matrix (rows).
 pub type Mat = [f32; 12];
 
+/// Share of a weapon's length, from its grip end, where its blade is taken to start (the hilt is about a quarter).
+const BLADE_START: f32 = 0.28;
+
+/// A weapon's blade in the rest pose (Viewmodel::blade_line).
+pub struct BladeLine {
+    pub bone: usize,
+    pub base: Vec3,
+    pub tip: Vec3,
+}
+
+impl BladeLine {
+    /// Base and tip on a canvas as shares of it (0..1 across and down), posed; None if either is behind the eye or
+    /// far off screen (passing right by the eye, where the picture of it blows up).
+    pub fn on_screen(&self, pose: &[Mat], canvas: &Canvas) -> Option<([f32; 2], [f32; 2])> {
+        let m = &pose[self.bone];
+        let aspect = canvas.w as f32 / canvas.h as f32;
+        let near = |p: [f32; 2]| p.iter().all(|v| (-1.0..=2.0).contains(v));
+        let base = project(apply(m, self.base), canvas.eye, canvas.vfov, canvas.tilt, aspect).filter(|p| near(*p))?;
+        let tip = project(apply(m, self.tip), canvas.eye, canvas.vfov, canvas.tilt, aspect).filter(|p| near(*p))?;
+        Some((base, tip))
+    }
+}
+
+/// Where a model-space point lands on the screen, as in `prepare` (same view, tilt and perspective), as shares of
+/// the canvas; None behind the eye.
+pub fn project(p: Vec3, eye: Vec3, vfov: f32, tilt: f32, aspect: f32) -> Option<[f32; 2]> {
+    let v = to_view(p, eye);
+    let (st, ct) = tilt.sin_cos();
+    let v = Vec3::new(v.x, v.y * ct - v.z * st, v.y * st + v.z * ct);
+    if v.z < NEAR {
+        return None;
+    }
+    let focal = 1.0 / (vfov / 2.0).tan();
+    Some([v.x / v.z * focal / aspect * 0.5 + 0.5, 0.5 - v.y / v.z * focal * 0.5])
+}
+
 fn read_u32(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
@@ -276,6 +312,25 @@ impl Viewmodel {
             Err(_) => None,
         };
         Ok(Self { model, anims, mats, textures, shuriken, skeleton })
+    }
+
+    /// A weapon part's blade, for its trail (trail.rs): the bone it's fixed to, and in the rest pose where the blade
+    /// starts and its tip. Its two vertices farthest apart are taken as its ends; the one nearer the hand bone's joint
+    /// is the grip end, and the blade is taken to start BLADE_START of the way from there. None without the skeleton.
+    pub fn blade_line(&self, part: u8) -> Option<BladeLine> {
+        let sk = self.skeleton.as_ref()?;
+        let m = &self.model;
+        let verts: Vec<usize> = (0..m.pos.len()).filter(|&i| m.part[i] == part).collect();
+        let first = *verts.first()?;
+        let bone = m.bones[first][0] as usize;
+        let centre = verts.iter().map(|&i| m.pos[i]).sum::<Vec3>() / verts.len() as f32;
+        let far = |from: Vec3| verts.iter().map(|&i| m.pos[i]).max_by(|a, b| a.distance(from).total_cmp(&b.distance(from)));
+        let a = far(centre)?;
+        let b = far(a)?;
+        let r = &sk.rest[bone];
+        let joint = Vec3::new(r[3], r[7], r[11]);
+        let (grip, tip) = if a.distance(joint) < b.distance(joint) { (a, b) } else { (b, a) };
+        Some(BladeLine { bone, base: grip.lerp(tip, BLADE_START), tip })
     }
 
     /// The first animation for `role`, if exported.
@@ -998,6 +1053,50 @@ mod tests {
         }
         println!("worst point off its path between frames: old way {:.1} cm ({}), now {:.1} cm ({})", worst_old.0 * 100.0, worst_old.1, worst_new.0 * 100.0, worst_new.1);
         assert!(worst_new.0 < 0.03, "a point flies {:.1} cm off between frames ({})", worst_new.0 * 100.0, worst_new.1);
+    }
+
+    /// The blades for the green trails (trail.rs) are found, about the right lengths, and in each Dragonblade swing
+    /// and dash the tip moves on screen fast enough for the trail to show (above trail.rs's SLOW, 1.2 screen heights
+    /// a second), but not all the time. Prints each one's fastest speed and share of time above that.
+    #[test]
+    fn blades_move_fast_enough_for_trails() {
+        let dir = Path::new(DIR);
+        if !dir.join("bones.txt").is_file() {
+            return;
+        }
+        let vm = Viewmodel::load(dir).unwrap();
+        let (katana, wakizashi) = (vm.blade_line(2).unwrap(), vm.blade_line(3).unwrap());
+        let (kl, wl) = (katana.base.distance(katana.tip), wakizashi.base.distance(wakizashi.tip));
+        println!("katana blade {kl:.2} m, wakizashi blade {wl:.2} m");
+        assert!((0.5..1.4).contains(&kl) && (0.25..0.9).contains(&wl), "blade lengths {kl} {wl}");
+        let mut canvas = Canvas::new(1290, 540);
+        for (i, a) in vm.anims.iter().enumerate() {
+            let line = match a.role.as_str() {
+                r if r.starts_with("blade_swing") || r == "blade_dash" => &katana,
+                "dash" => &wakizashi,
+                _ => continue,
+            };
+            canvas.eye = if a.role.starts_with("blade_") { EYE + Vec3::Z * crate::arms::BLADE_DROP } else { EYE };
+            let step = 1.0 / 60.0;
+            let (mut last, mut fastest, mut fast_time, mut t) = (None, 0.0f32, 0.0f32, 0.0f32);
+            while t <= a.seconds() {
+                let tip = line.on_screen(&vm.pose(i, t, false), &canvas).map(|(_, tip)| tip);
+                if let (Some(p), Some(q)) = (last, tip) {
+                    let [p, q]: [[f32; 2]; 2] = [p, q];
+                    let speed = (((q[0] - p[0]) * 1290.0 / 540.0).powi(2) + (q[1] - p[1]).powi(2)).sqrt() / step;
+                    fastest = fastest.max(speed);
+                    if speed > 1.2 {
+                        fast_time += step;
+                    }
+                }
+                last = tip;
+                t += step;
+            }
+            println!("{} {}: fastest {fastest:.1} screen heights/s, {:.0}% of {:.2} s above the trail's threshold", a.role, a.id, 100.0 * fast_time / a.seconds(), a.seconds());
+            if a.role == "blade_swing" || a.role == "dash" {
+                assert!(fastest > 4.0, "{} {}: the blade never moves fast enough for a full trail", a.role, a.id);
+            }
+        }
     }
 
     #[test]

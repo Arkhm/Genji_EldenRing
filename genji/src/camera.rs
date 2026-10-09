@@ -564,6 +564,8 @@ fn camera_step_inner(dt: f32) -> bool {
     if view.mover.dash_started {
         events.push(Event::Dash);
     }
+    // Swift Strike's green streaks on screen for as long as the dash lasts (trail.rs).
+    crate::trail::set_dashing(view.mover.dashing());
     (w.shown, w.reloading, w.meleeing, w.blade, w.deflect, w.climbing, w.swings, w.blocks) =
         (true, reloading_now, meleeing, blade_on, deflect_on, climbing, view.blade.swings(), view.deflect.blocks());
     let ground_speed = if view.mover.grounded() { ev.ground_travel / dt.max(1e-4) } else { 0.0 };

@@ -32,6 +32,7 @@ mod sound;
 mod status;
 mod swift;
 mod targets;
+mod trail;
 mod ult;
 mod viewmodel;
 mod ultrawide;

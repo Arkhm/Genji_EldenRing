@@ -112,6 +112,14 @@ fn run(w: usize, h: usize) {
         lengths.entry(a.role.clone()).or_default().push(a.seconds());
     }
     let _ = LENGTHS.set(lengths);
+    // The blades whose trails the overlay draws (trail.rs): the katana and the wakizashi.
+    let (katana, wakizashi) = (vm.blade_line(2), vm.blade_line(3));
+    for (name, line) in [("katana", &katana), ("wakizashi", &wakizashi)] {
+        match line {
+            Some(l) => glog!("ARMS", "{name} blade for its trail: bone {}, {:.2} m long", l.bone, l.base.distance(l.tip)),
+            None => glog!("ARMS", "{name}: no blade found for its trail (an export without bones.txt?)"),
+        }
+    }
     let mut canvas = Canvas::new(w, h);
     let mut missing: Vec<&'static str> = Vec::new();
     let (mut drawn, mut total, mut longest, mut since) = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
@@ -156,6 +164,20 @@ fn run(w: usize, h: usize) {
         canvas.tilt = req.tilt;
         canvas.parts = req.pose.parts;
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
+        // The blade's green trail (trail.rs): the katana in Dragonblade's swings and its dash, the wakizashi in
+        // Swift Strike's dash.
+        let role = req.pose.main.role;
+        let line = if (role.starts_with("blade_swing") || role == "blade_dash") && req.pose.parts & viewmodel::PART_KATANA != 0 {
+            katana.as_ref()
+        } else if role == "dash" && req.pose.parts & viewmodel::PART_WAKIZASHI != 0 {
+            wakizashi.as_ref()
+        } else {
+            None
+        };
+        match line.and_then(|l| l.on_screen(&pose, &canvas)) {
+            Some((base, tip)) => crate::trail::push(base, tip),
+            None => crate::trail::pause(),
+        }
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();
         last = Some(req);

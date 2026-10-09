@@ -3,8 +3,8 @@
 //! Hits work like Swift Strike's: an invisible point-blank projectile fired at each target from behind its own
 //! facing, so the game registers a real hit (number, sound, reaction); damage applied directly if the game registers
 //! nothing within CONFIRM_FRAMES. Here the carrier is the Ruin Fragment's Bullet row pointed at **Corpse Piler's**
-//! damage row (Rivers of Blood's Ash of War), your choice. Each swing also fires the Blood Blade crescent with its
-//! damage removed, as the visible sweep until Genji's own model and animations exist.
+//! damage row (Rivers of Blood's Ash of War), your choice. The swing's look is the arms' katana and its green trail
+//! (trail.rs); the Blood Blade crescent that stood in for it is gone (2026-10-09).
 //! All rows are changed in memory while Genji mode is on and restored afterwards.
 
 use std::collections::HashMap;
@@ -60,10 +60,6 @@ const MELEE_COMBO_WINDOW: f32 = 5.0;
 const CARRIER: u32 = 10_176_000;
 /// Rivers of Blood [AOW] Corpse Piler, the damage row of each hit.
 const CORPSE_PILER: u32 = 303_400_300;
-/// Blood Blade [AOW] crescent, the visible sweep (damage row removed).
-const SWEEP: u32 = 2635;
-const SWEEP_SPEED: f32 = 20.0;
-const SWEEP_LIFE: f32 = SWING_REACH / SWEEP_SPEED;
 /// Bleed is applied directly with the Kukri's bleed status effect (as Swift Strike's).
 const BLEED_EFFECT: u32 = 3115;
 const BLEED_IMMUNE: u16 = 999;
@@ -82,11 +78,6 @@ struct Saved {
     piler_disable_guard: bool,
     piler_stam: u16,
     piler_poise: f32,
-    sweep_atk: i32,
-    sweep_sp: i32,
-    sweep_life: f32,
-    sweep_dist: f32,
-    sweep_speed: [f32; 3],
 }
 
 struct Pending {
@@ -273,14 +264,8 @@ impl Blade {
             let bleed = bleed_share(target, SWING_BLEED_SHARE);
             self.strike(player, target, feet, damage, attack, bleed, 0.0, "swing", style);
         }
-        // The visible sweep.
-        let forward = look.forward();
-        let from = eye + forward * 0.5 - look.up() * 0.3;
-        let right = Vec3::Y.cross(forward).normalize_or(look.right());
-        let up = forward.cross(right).normalize_or(Vec3::Y);
-        if let Err(code) = crate::shuriken::spawn(player, SWEEP as i32, from, right, up, forward) {
-            glog!("BLADE", "sweep effect not spawned, engine error {code}");
-        }
+        // No Blood Blade crescent any more (you, 2026-10-09: "remove the blood effect on the dragonblade"): the
+        // katana's green trail is drawn by the overlay (trail.rs).
     }
 
     fn melee(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
@@ -443,12 +428,8 @@ impl Blade {
         };
         match self.saved.take() {
             None => {
-                let (Some(c), Some(p), Some(s)) = (
-                    params.get::<BulletParam>(CARRIER),
-                    params.get::<AtkParam_Pc>(CORPSE_PILER),
-                    params.get::<BulletParam>(SWEEP),
-                ) else {
-                    glog!("BLADE", "carrier, Corpse Piler or Blood Blade row not found; Dragonblade hits lower HP directly");
+                let (Some(c), Some(p)) = (params.get::<BulletParam>(CARRIER), params.get::<AtkParam_Pc>(CORPSE_PILER)) else {
+                    glog!("BLADE", "carrier or Corpse Piler row not found; Dragonblade hits lower HP directly");
                     return;
                 };
                 let saved = Saved {
@@ -464,11 +445,6 @@ impl Blade {
                     piler_disable_guard: p.disable_guard(),
                     piler_stam: p.atk_stam(),
                     piler_poise: p.atk_super_armor(),
-                    sweep_atk: s.atk_id_bullet(),
-                    sweep_sp: s.sp_effect_id0(),
-                    sweep_life: s.life(),
-                    sweep_dist: s.dist(),
-                    sweep_speed: [s.init_vellocity(), s.max_vellocity(), s.min_vellocity()],
                 };
                 if let Some(c) = params.get_mut::<BulletParam>(CARRIER) {
                     c.set_atk_id_bullet(CORPSE_PILER as i32);
@@ -493,16 +469,7 @@ impl Blade {
                     p.set_atk_thun(0);
                     p.set_atk_dark(0);
                 }
-                if let Some(s) = params.get_mut::<BulletParam>(SWEEP) {
-                    s.set_atk_id_bullet(-1); // a look only: no hit
-                    s.set_sp_effect_id0(-1);
-                    s.set_life(SWEEP_LIFE);
-                    s.set_dist(SWING_REACH);
-                    s.set_init_vellocity(SWEEP_SPEED);
-                    s.set_max_vellocity(SWEEP_SPEED);
-                    s.set_min_vellocity(SWEEP_SPEED);
-                }
-                glog!("BLADE", "values ON: carrier {CARRIER} -> Corpse Piler {CORPSE_PILER}, sweep {SWEEP} without damage");
+                glog!("BLADE", "values ON: carrier {CARRIER} -> Corpse Piler {CORPSE_PILER}");
                 self.saved = Some(saved);
             }
             Some(v) => {
@@ -532,15 +499,6 @@ impl Blade {
                     p.set_disable_guard(v.piler_disable_guard);
                     p.set_atk_stam(v.piler_stam);
                     p.set_atk_super_armor(v.piler_poise);
-                }
-                if let Some(s) = params.get_mut::<BulletParam>(SWEEP) {
-                    s.set_atk_id_bullet(v.sweep_atk);
-                    s.set_sp_effect_id0(v.sweep_sp);
-                    s.set_life(v.sweep_life);
-                    s.set_dist(v.sweep_dist);
-                    s.set_init_vellocity(v.sweep_speed[0]);
-                    s.set_max_vellocity(v.sweep_speed[1]);
-                    s.set_min_vellocity(v.sweep_speed[2]);
                 }
                 glog!("BLADE", "values OFF: vanilla rows restored");
             }

@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Green trails on Dragonblade and Swift Strike; no blood crescent
+
+**Changed:**
+- New `trail.rs`, drawn by the overlay under the arms:
+  - a green ribbon behind the blade (the katana in Dragonblade swings and its dash, the wakizashi in Swift Strike's
+    dash), from the blade's last 0.16 s, only where it moves fast;
+  - green streaks rushing out near the screen's edges for as long as a dash lasts.
+- `viewmodel.rs`: finds each blade's base and tip (`blade_line`) and where they land on screen (`project`, the same
+  view as the drawing). `arms.rs` records them after each picture.
+- `blade.rs`: the Blood Blade crescent (2635) is no longer spawned, and its row is no longer changed.
+**Why:** You: "add the green effect at least on the dash and the dragon swing. you can also remove the blood effect
+on the dragonblade."
+**Tested how:**
+- New test `blades_move_fast_enough_for_trails`: katana blade 1.23 m, wakizashi 0.68 m. In every swing and dash the
+  tip goes past the full-trail speed, for 10-50% of the animation (a still blade leaves no trail).
+- Some readings were absurd (the tip passing right by the eye, up to 1000 screen heights a second). So points far off
+  screen, and jumps over 0.6 of the screen between two pictures, are left out of the ribbon.
+- `cargo test --release` passes (55 tests). The look itself isn't checked outside the game.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** how it looks; the bleed burst on enemies (Elden Ring's blood loss) still shows: it's
+the bleed itself, not the crescent.
+**Next:** Your test.
+
 ## 2026-10-09 Status effects on the Overwatch HUD
 
 **Changed:**

@@ -62,7 +62,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   (**not tested** yet).
 - Built, **not tested** yet (2026-10-09): Elden Ring's interaction prompts (items, fog walls) show in Genji mode;
   your status effects (poison, rot, blood loss, frostbite, sleep, madness, death blight) as Overwatch-style bars above
-  the health.
+  the health; green blade trails on Dragonblade swings and dashes, green streaks during Swift Strike (no more
+  Blood Blade crescent).
 - Sounds and voice (step 11b): the ability sounds and lines play and you adjusted their levels (tested 2026-10-09).
   - Built, **not tested** yet: footsteps, jumps, wall climb and landing; pain, stagger, knockdown, critical health,
     flask, death and respawn lines; multikill, melee-kill and kill-streak lines.
