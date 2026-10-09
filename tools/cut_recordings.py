@@ -38,6 +38,17 @@ GUESSES = [
     (1, 1.9, 3.7, 'deflect_block'),        # bots shooting into Deflect
     (1, 12.2, 14.4, 'deflect_block'),
 ]
+# Cut by hand (rec number, start, end in seconds, name): your Deflect-block clips of 2026-10-09 (rec7, rec8; "proper
+# deflect blocking sound"). rec7: the bots' shots hit the sword at about 0.2, 0.56, 0.8 and 1.2 s, each a short
+# swish-clang about 13 dB over Deflect's hum (the video shows the sword swinging at each). rec8: only its first block
+# is clean; an explosion covers the rest from 0.5 s.
+MANUAL_CUTS = [
+    (7, 0.12, 0.50, 'rec7_block_0.12'),
+    (7, 0.52, 0.78, 'rec7_block_0.52'),
+    (7, 0.76, 1.06, 'rec7_block_0.76'),
+    (7, 1.18, 1.50, 'rec7_block_1.18'),
+    (8, 0.00, 0.34, 'rec8_block_0.00'),
+]
 
 
 def load(path):
@@ -89,12 +100,28 @@ def main():
                 w.setsampwidth(2)
                 w.setframerate(sr)
                 w.writeframes(seg.astype(np.int16).tobytes())
+            # A frame of the video (kept from earlier runs: older clips may have been moved since; their audio is
+            # kept in rec<k>.wav).
             thumb = os.path.join(CUTS, name + '.jpg')
-            subprocess.run([FFMPEG, '-v', 'error', '-y', '-ss', f'{t + 0.1:.2f}', '-i', clip, '-frames:v', '1',
-                            '-vf', 'scale=344:144', thumb], check=True)
+            if not os.path.isfile(thumb) and os.path.isfile(clip):
+                subprocess.run([FFMPEG, '-v', 'error', '-y', '-ss', f'{t + 0.1:.2f}', '-i', clip, '-frames:v', '1',
+                                '-vf', 'scale=344:144', thumb], check=True)
             guess = next((g[3] for g in GUESSES if g[0] == k and g[1] <= t <= g[2]), '')
             cuts.append({'name': name, 'rec': k, 'at': t, 'secs': round(end - start, 2), 'guess': guess})
         print(f'rec{k}: {len(ons)} sounds')
+    for k, start, end, name in MANUAL_CUTS:
+        audio, sr = load(os.path.join(R, f'rec{k}.wav'))
+        seg = audio[int(start * sr):int(end * sr)].astype(np.float32)
+        fade = min(int(0.005 * sr), len(seg) // 2)
+        ramp = np.linspace(0, 1, fade)[:, None]
+        seg[:fade] *= ramp
+        seg[-fade:] *= ramp[::-1]
+        with wave.open(os.path.join(CUTS, name + '.wav'), 'wb') as w:
+            w.setnchannels(audio.shape[1])
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes(seg.astype(np.int16).tobytes())
+        print('cut by hand:', name)
     with open(os.path.join(R, 'cuts.json'), 'w', encoding='utf-8') as fh:
         json.dump(cuts, fh, indent=1)
     print(len(cuts), 'cuts ->', CUTS)

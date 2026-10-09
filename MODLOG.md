@@ -3,6 +3,33 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Deflect block sound from your new recordings
+
+**Changed:**
+- `tools/cut_recordings.py`:
+  - your two new clips are rec7 and rec8 in `recordings/clips.txt`;
+  - five blocks are cut by hand (`MANUAL_CUTS`), 0.26-0.38 s each: four from rec7 (at 0.12, 0.52, 0.76 and 1.18 s),
+    one from rec8 (at 0 s);
+  - thumbnails are only made when the clip still exists (your older clips are no longer at their paths; their
+    audio is kept).
+- `tools/make_sounds.py`: `deflect_block` is back, with those five recordings (`RECORDED`). Re-run: 55 events, 368
+  files.
+- `genji/src/deflect.rs`: the block sound plays once in each frame that Deflect catches one or more shots.
+**Why:** You: "here are 2 clips with proper deflect blocking sound. separate that for me, and add it."
+**Tested how:**
+- I chose the cuts from the clips' loudness (one value every 20 ms) and a video frame every 0.1 s. In rec7 the
+  bots' shots hit the sword four times. Each hit is a short swish-clang 13 dB over Deflect's hum, and the sword
+  swings in the video at the same moments.
+- rec8: an explosion covers everything after 0.5 s, so only its first block is used.
+- Levels: peaks from -5 to -11 dB, like your other recordings.
+- `cargo test --release` passes (44 tests, every sound file decodes).
+**Result:** Built. **Not tested in game, and I haven't listened:** the choice is from the numbers and the video.
+**Still broken / not tested:**
+- Deflect's hum is under every cut (about 13 dB below the block), so during Deflect the hum is a little louder
+  for a moment at each block.
+- Melee hits blocked by Deflect make no block sound yet; only caught projectiles do.
+**Next:** Your test, together with 10c.
+
 ## 2026-10-09 Step 10c: Genji's arms in game (resting poses)
 
 **Changed:**

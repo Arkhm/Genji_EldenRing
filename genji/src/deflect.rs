@@ -207,6 +207,10 @@ impl Deflect {
             self.reflected.insert(handle);
             caught.push((param_id, vel.length()));
         }
+        if !caught.is_empty() {
+            // Your recorded block (2026-10-09): one swish-clang per frame that catches something.
+            crate::sound::play("deflect_block");
+        }
         for (param_id, speed) in caught {
             self.send_back(player, look, eye, &dart, param_id, speed);
         }

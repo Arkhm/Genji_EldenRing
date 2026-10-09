@@ -89,8 +89,15 @@ VOICE_FOLDERS = {
     'JumpEnd': 'voice_jump_end',
 }
 # Left out on purpose: "lets just not use the deflect actual block sound, it has too much background noise" (you,
-# 2026-10-09).
-DROP = {'deflect_block'}
+# 2026-10-09; that was rec1). Now replaced by RECORDED below.
+DROP = set()
+# Recordings tagged here rather than in the picker: your clean Deflect-block clips (rec7, rec8, 2026-10-09), cut by hand
+# in tools\cut_recordings.py (MANUAL_CUTS). They replace any other sounds for the event.
+RECORDED = {
+    'deflect_block': ['../recordings/cuts/rec7_block_0.12.wav', '../recordings/cuts/rec7_block_0.52.wav',
+                      '../recordings/cuts/rec7_block_0.76.wav', '../recordings/cuts/rec7_block_1.18.wav',
+                      '../recordings/cuts/rec8_block_0.00.wav'],
+}
 # Events the mod plays that you haven't found yet (reported, not an error).
 WANTED = ['melee_swing', 'dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
 
@@ -124,6 +131,7 @@ def main():
         recorded = [f for f in files if '/recordings/cuts/' in f]
         if recorded:
             out[tag] = recorded
+    out.update(RECORDED)
     for tag in DROP:
         out.pop(tag, None)
     # Voice: your tags, minus "dont use"; folders you named in notes.
