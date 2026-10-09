@@ -3,6 +3,26 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Deflect block picker
+
+**Changed:**
+- **New `tools/make_block_picker.py`:** a local page, `D:/GenjiBridgeAssets/block_picker/index.html`, with only your two
+  block recordings (rec7, rec8).
+  - Each whole clip, with a picture of its loudness over time.
+  - Every short sound found in it: each loudness peak at least 6 dB over the 0.15 s before it, cut from 0.06 s before
+    the peak to 0.3 s after, and marked on the picture. That gives 7 candidates in rec7 and 6 in rec8.
+  - Each has a tick box ("block") and a notes box, and the page exports `block_picks.json`.
+- `tools/make_sounds.py`: once `D:/GenjiBridgeAssets/block_picks.json` exists, `deflect_block` uses exactly the ticked
+  sounds.
+**Why:** You: "the sound of deflect was really bad, it was restarting. can you do that html sound picker for me? but
+only with the deflect block sound that I sent?" My guess: two of my five cuts (rec7 at 0.12 s and rec8 at 0 s)
+start at the very beginning of the clips, and probably hold Deflect's own start sound.
+**Tested how:** The script ran and the loudness pictures were checked. The page wasn't opened (it's like the other
+pickers).
+**Result:** Built.
+**Still broken / not tested:** Until you export your choice, the five cuts from before stay in use.
+**Next:** You pick, export, and I run `make_sounds.py`.
+
 ## 2026-10-09 Arms: fix the memory leak that hid them and crashed the game
 
 **Changed:**

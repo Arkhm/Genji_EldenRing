@@ -132,6 +132,13 @@ def main():
         if recorded:
             out[tag] = recorded
     out.update(RECORDED)
+    # Your choice in the Deflect-block picker (tools/make_block_picker.py), once exported: exactly the ticked sounds.
+    block_picks = os.path.join(ASSETS, 'block_picks.json')
+    if os.path.isfile(block_picks):
+        chosen = [p['file'] for p in json.load(open(block_picks, encoding='utf-8')).values() if p.get('use')]
+        if chosen:
+            out['deflect_block'] = ['../block_picker/' + f for f in chosen]
+            print(f'deflect_block: {len(chosen)} sounds from your block picker')
     for tag in DROP:
         out.pop(tag, None)
     # Voice: your tags, minus "dont use"; folders you named in notes.
