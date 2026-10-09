@@ -3,6 +3,25 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Interaction prompts back (items, fog walls)
+
+**Changed:** `controls.rs`: while an interaction prompt is up (UI state 0x13), Elden Ring's HUD is switched on
+again, the same way the boss-name peek does it. During it, the game is asked every frame to keep its health, FP and
+stamina bars hidden (`CSFeMan.hud_state` = HideAll) and its equipment hidden; its own values come back when the
+prompt goes. After a crash of our code, those come back too.
+**Why:** You: "the only interaction icon that appears is the grace. items, fogs of bosses, disappeared."
+**Tested how:**
+- Your log: the mod hides the game's HUD with its own HUD option, which also hides prompts. UI state 0x13 was
+  visible 50 times, each time just before an item pickup (for example 373.6 s shown, 373.9 s F, pickup animation,
+  374.25 s hidden).
+- `cargo test --release` passes (53 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Whether the game keeps its bars hidden when we ask. The log line "prompt peek over" counts the frames where it
+  undid it.
+- What else of the game's HUD shows next to a prompt (the rune count, probably).
+**Next:** Your test; then the status bars (DESIGN.md 5l, part 2).
+
 ## 2026-10-09 Arms: fingers no longer fly off between frames; Dragonblade draw and sheathe fixed
 
 **Changed:**

@@ -25,7 +25,7 @@
 //! every menu tab are outside it). An unknown state counts as a menu (the safe side) and is logged.
 //! UI-state changes are still logged, to map them later.
 
-use eldenring::cs::{CSMenuManImp, GameDataMan, HudType};
+use eldenring::cs::{CSFeManHudState, CSFeManImp, CSMenuManImp, GameDataMan, HudType};
 use fromsoftware_shared::FromStatic;
 
 use crate::camera;
@@ -72,6 +72,9 @@ const BINDINGS: [(Action, Input); 8] = [
 const TOGGLE_KEY: usize = dik::F9;
 /// UI state that is visible exactly while the in-game HUD is on screen.
 const HUD_UI_STATE: u32 = 0x07;
+/// Visible while an interaction prompt is up ("Pick up", "Traverse the mist"): your log of 2026-10-09, 50 times,
+/// each before an item pickup.
+const PROMPT_UI_STATE: u32 = 0x13;
 /// Present in every gameplay set of UI states in your logs (and in menus); absent on loading screens.
 const WORLD_UI_STATE: u32 = 0x08;
 /// UI states seen during play (pop-ups, item pickups, prompts included), from your logs of 2026-10-07/08.
@@ -98,6 +101,9 @@ pub struct Controls {
     gameplay_for: f32,
     /// Elden Ring's own HUD setting, saved while we switch its HUD off (Genji input captured).
     hud_saved: Option<HudType>,
+    /// During a prompt peek: the game's HUD state before we hid its bars, and how often the game undid the hiding.
+    bars_saved: Option<CSFeManHudState>,
+    bars_reset_by_game: u32,
     /// UI states outside GAMEPLAY_UI_STATES already logged.
     unknown_logged: u128,
 }
@@ -115,6 +121,8 @@ impl Default for Controls {
             report_timer: 0.0,
             gameplay_for: 0.0,
             hud_saved: None,
+            bars_saved: None,
+            bars_reset_by_game: 0,
             unknown_logged: 0,
         }
     }
@@ -174,22 +182,29 @@ impl Controls {
             glog!("MODE", "Genji input {} ({why})", if capturing { "CAPTURED" } else { "released to the game" });
         }
 
-        // A short HUD peek so the game fills in a boss's name (`enemy_bars.rs` asks; it happens once per boss).
+        // HUD peeks: a short one so the game fills in a boss's name (`enemy_bars.rs` asks; once per boss), and one
+        // for as long as an interaction prompt is up (UI state 0x13), since the HUD option also hides those (you,
+        // 2026-10-09: "items, fogs of bosses, disappeared"). During a prompt peek the game is asked to keep its bars
+        // and equipment hidden (DESIGN.md 5l).
+        let prompt = self.capturing && ui.is_some_and(|bits| bits & (1 << PROMPT_UI_STATE) != 0);
+        let boss_peek = self.capturing && crate::enemy_bars::hud_peek_wanted();
         if self.capturing {
             if let Some(saved) = self.hud_saved {
                 if let Some(settings) = unsafe { GameDataMan::instance_mut() }.ok().map(|g| &mut *g.game_settings) {
-                    let want = if crate::enemy_bars::hud_peek_wanted() {
+                    let want = if boss_peek || prompt {
                         if saved == HudType::Off { HudType::On } else { saved }
                     } else {
                         HudType::Off
                     };
                     if settings.hud_type != want {
-                        glog!("MODE", "Elden Ring HUD {:?} (boss name peek)", want);
+                        let why = if boss_peek { "boss name peek" } else if prompt { "prompt peek" } else { "peek over" };
+                        glog!("MODE", "Elden Ring HUD {:?} ({why})", want);
                         settings.hud_type = want;
                     }
                 }
             }
         }
+        self.keep_bars_hidden(prompt && !boss_peek);
 
         let click_now = buttons & (1 << mouse::LEFT) != 0;
         // Actions: only while capturing, so menus and plain Elden Ring never trigger Genji.
@@ -237,6 +252,35 @@ impl Controls {
         }
     }
 
+    /// While `on` (a prompt peek): Elden Ring's health, FP and stamina bars hidden (`CSFeMan.hud_state` HideAll) and
+    /// its equipment hidden, set every frame; the game's own value back when it ends. Logs whether the game changes
+    /// them back between our frames (it might rewrite them every frame).
+    fn keep_bars_hidden(&mut self, on: bool) {
+        let Some(fe) = unsafe { CSFeManImp::instance_mut() }.ok() else {
+            return;
+        };
+        match (on, self.bars_saved) {
+            (true, saved) => {
+                if saved.is_none() {
+                    self.bars_saved = Some(fe.hud_state);
+                    self.bars_reset_by_game = 0;
+                    glog!("MODE", "prompt peek: game bars hidden (its HUD state was {:?})", fe.hud_state);
+                } else if fe.hud_state != CSFeManHudState::HideAll || fe.frontend_values.enable_equip_hud {
+                    self.bars_reset_by_game += 1;
+                }
+                fe.hud_state = CSFeManHudState::HideAll;
+                fe.frontend_values.enable_equip_hud = false;
+            }
+            (false, Some(saved)) => {
+                fe.hud_state = saved;
+                fe.frontend_values.enable_equip_hud = true;
+                self.bars_saved = None;
+                glog!("MODE", "prompt peek over: game HUD state back to {saved:?} (the game reset our hiding in {} frames)", self.bars_reset_by_game);
+            }
+            (false, None) => {}
+        }
+    }
+
     /// Once per second.
     pub fn report(&mut self) {
         let keyboard = dinput::take_read_count();
@@ -253,6 +297,13 @@ pub fn emergency_hud_on() {
     if let Some(g) = unsafe { GameDataMan::instance_mut() }.ok() {
         if g.game_settings.hud_type == HudType::Off {
             g.game_settings.hud_type = HudType::On;
+        }
+    }
+    // And its bars, if a prompt peek had hidden them.
+    if let Some(fe) = unsafe { CSFeManImp::instance_mut() }.ok() {
+        if fe.hud_state == CSFeManHudState::HideAll {
+            fe.hud_state = CSFeManHudState::Default;
+            fe.frontend_values.enable_equip_hud = true;
         }
     }
 }

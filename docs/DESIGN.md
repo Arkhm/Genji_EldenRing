@@ -717,6 +717,39 @@ and the field of view are right.
     the resting pair is certain so far.
 - **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.
 
+## 5l. Tweaks after the arms (plan 2026-10-09)
+
+Your requests after testing the arms, done in this order, one commit each.
+
+1. **Interaction prompts back (items, fog walls, doors).**
+   - **What's wrong:** the mod hides Elden Ring's HUD with the game's own HUD option (Off). That also hides the prompts
+     ("Pick up", "Traverse the mist"). Grace prompts don't depend on that option, which is why only they showed.
+   - **What the log shows:** while a prompt is up, UI state 0x13 is visible (50 times in your last session, each
+     time before an item pickup).
+   - **Plan:** while 0x13 is visible, turn the game's HUD on (the same "peek" the boss names use). During the peek,
+     ask the game to keep the health, FP and stamina bars hidden (`CSFeMan.hud_state` = HideAll) and the equipment
+     hidden (`enable_equip_hud` off), every frame.
+   - **Not known yet:** whether the game keeps those two settings, and what else of its HUD shows during a prompt (the
+     rune count, probably). The log records the peeks; you check what shows.
+2. **Status effects, Overwatch style (left side, above the health).**
+   - One row per status that is building up or active: its name in its colour, and a bar of segments like the health
+     bar. The seven Elden Ring statuses: poison, scarlet rot, blood loss, frostbite, sleep, madness, death blight.
+   - **Where the numbers come from:** the character's resistance data, which the fromsoftware-rs library doesn't
+     describe yet (`ChrInsModuleContainer.resist`). The layout used is the one modders publish (current and maximum
+     per status, 4-byte numbers); it isn't verified here.
+   - **Checks against wrong readings:**
+     - Values are used only if every maximum is between 1 and 10000.
+     - The direction (counting up to the maximum, or down from it) is taken from what the values are at rest.
+     - Every change is logged, so a poison swamp in your test tells us whether the readings are right.
+   - The effects active on the character (Elden Ring's "special effects") are logged when they start and end, to find
+     which ones are the statuses' active phase (poisoned, frozen).
+3. **Green effects on Swift Strike and Dragonblade swings, no blood crescent.**
+   - **The swings:** a green trail behind the katana, drawn by the overlay. The arms thread knows where the blade's
+     base and tip are on screen each picture; the trail joins the last 0.15 s of them, fading out, like Overwatch's
+     green arc.
+   - **The dash:** the same trail on the wakizashi, plus green streaks along the screen edges for the dash's length.
+   - The Blood Blade crescent (Elden Ring's red sweep, 2635) is no longer spawned.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.
