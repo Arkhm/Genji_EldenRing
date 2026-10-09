@@ -74,6 +74,8 @@ struct View {
     melee_was_down: bool,
     /// LockCamParam field of view of every row, saved while ours is applied (STATUS.md option B).
     lock_cam_fov: Option<Vec<(u32, f32)>>,
+    /// Enemy health bars (DESIGN.md 5i).
+    enemy_bars: crate::enemy_bars::EnemyBars,
 }
 
 pub fn camera_step(dt: f32) {
@@ -133,6 +135,16 @@ fn camera_step_inner(dt: f32) -> bool {
     view.blade.set_values(reason.is_none());
     view.blade.confirm(player);
     view.swift.confirm(player);
+    // Dragonblade lifesteal (30 % of each swing's damage), while alive.
+    let heal = view.blade.take_heal();
+    if heal > 0 {
+        let data = &mut player.chr_ins.modules.data;
+        if data.hp > 0 {
+            let before = data.hp;
+            data.hp = (data.hp + heal).min(data.max_hp);
+            glog!("BLADE", "lifesteal +{heal}: hp {before} -> {} / {}", data.hp, data.max_hp);
+        }
+    }
 
     // STATUS.md option B: the Overwatch field of view through the game's own setting (LockCamParam), while first
     // person is on; restored otherwise.
@@ -195,7 +207,11 @@ fn camera_step_inner(dt: f32) -> bool {
             if pressed && !view.swift.ready() {
                 glog!("SWIFT", "not ready");
             }
-            pressed && view.swift.ready()
+            // Not while Dragonblade unsheathes (you, 2026-10-08).
+            if pressed && view.blade.unsheathing() {
+                glog!("SWIFT", "not while Dragonblade unsheathes");
+            }
+            pressed && view.swift.ready() && !view.blade.unsheathing()
         },
     };
     let look = *look;
@@ -298,7 +314,11 @@ fn camera_step_inner(dt: f32) -> bool {
     let e_down = dinput::key_down(&keys_now, dik::E);
     let e_pressed = e_down && !view.e_was_down;
     view.e_was_down = e_down;
-    let deflecting = view.deflect.tick(dt, e_pressed, driving);
+    // Not while Dragonblade unsheathes (you, 2026-10-08).
+    if e_pressed && view.blade.unsheathing() {
+        glog!("DEFLECT", "not while Dragonblade unsheathes");
+    }
+    let deflecting = view.deflect.tick(dt, e_pressed && !view.blade.unsheathing(), driving);
     view.deflect.apply(player, feet, look.flat_forward());
     view.deflect.reflect(player, &look, eye);
 
@@ -308,7 +328,9 @@ fn camera_step_inner(dt: f32) -> bool {
         view.thrower.throw(player, &look, eye, angle);
     }
 
-    // 7. HUD (step 12).
+    // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
+    let (enemies, enemy_count, boss) =
+        view.enemy_bars.update(player, &look, eye, camera.pers_cam_1.fov, camera.pers_cam_1.aspect_ratio, dt);
     let (ammo, ammo_max, reloading) = view.firing.hud();
     let (deflect_left, deflect_cooldown) = view.deflect.hud();
     crate::hud::update(crate::hud::State {
@@ -328,6 +350,9 @@ fn camera_step_inner(dt: f32) -> bool {
         ult_percent: crate::ult::percent(),
         blade_left: view.blade.left(),
         blade_duration: view.blade.duration(),
+        enemies,
+        enemy_count,
+        boss,
     });
     true
 }

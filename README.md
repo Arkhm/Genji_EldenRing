@@ -44,7 +44,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   - the ammo panel lined up with the tiles;
   - the ultimate: charging meter, ready flipbook flares, the 100% animation and the press;
   - the Dragonblade countdown ring around the crosshair.
-  The health "+" pill turning yellow while healing and showing a pink arrow on damage is **not tested** yet.
+  The health "+" pill (yellow while healing, pink arrow on damage) works, tested 2026-10-08. The Overwatch-style
+  enemy health bars (Elden Ring's are hidden with its HUD) are **not tested** yet.
 - Crosshair: your Overwatch crosshair (green, length 6, gap 13, 80%, black outline) drawn over the game while
   the first-person view is on (part of step 12). Tested 2026-10-07: it shows up.
 - All Genji damage scales with dexterity (Elden Ring's own scaling curve, grade A). **Not tested** yet.
@@ -52,7 +53,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   shows it. Tested 2026-10-08 (arrows across the screen, melee).
   Projectiles come back as themselves along your aim with their own damage (step 8b, tested 2026-10-08).
 - Dragonblade (Q when the ultimate is full; hold left click to swing; Corpse Piler hits with bleed and a Blood
-  Blade crescent as the visible sweep; swings ignore shields), ultimate charge, and quick melee on mouse 5 (breaks
+  Blade crescent as the visible sweep; swings ignore shields; 30% lifesteal per swing and no dash or Deflect while
+  unsheathing, both **not tested** yet), ultimate charge, and quick melee on mouse 5 (breaks
   guards and stances in two hits) (step 9, tested 2026-10-08). Deflect also works during Dragonblade.
 - Swift Strike (step 7): Left Shift dashes about 15 m where you look, through enemies (50 damage each), stopped by
   walls; 8 s cooldown, reset by a kill (tested 2026-10-08). Each dash hit is a real game hit and makes the enemy bleed

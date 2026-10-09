@@ -57,6 +57,26 @@ const PRESS_IN: f32 = 0.12;
 /// Pieces of the blue fire band around the ready ultimate.
 const AURA_PIECES: usize = 120;
 
+/// Enemy health bars drawn at most (DESIGN.md 5i).
+pub const ENEMY_BARS: usize = 8;
+
+/// One enemy's health bar: where (screen, -1 to 1 from the centre, y up) and how full (health, and health just
+/// lost still lit lighter).
+#[derive(Clone, Copy, Default)]
+pub struct EnemyBar {
+    pub x: f32,
+    pub y: f32,
+    pub hp: f32,
+    pub trail: f32,
+}
+
+/// The boss's health bar (top centre).
+#[derive(Clone, Copy, Default)]
+pub struct BossBar {
+    pub hp: f32,
+    pub trail: f32,
+}
+
 /// Everything the HUD shows, written by the game thread each frame.
 #[derive(Clone, Copy, Default)]
 pub struct State {
@@ -78,6 +98,9 @@ pub struct State {
     pub ult_percent: u32,
     pub blade_left: Option<f32>,
     pub blade_duration: f32,
+    pub enemies: [EnemyBar; ENEMY_BARS],
+    pub enemy_count: usize,
+    pub boss: Option<BossBar>,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -97,6 +120,9 @@ static STATE: Mutex<State> = Mutex::new(State {
     ult_percent: 0,
     blade_left: None,
     blade_duration: 0.0,
+    enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0 }; ENEMY_BARS],
+    enemy_count: 0,
+    boss: None,
 });
 
 pub fn update(state: State) {
@@ -427,6 +453,35 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         draw.add_text(pos, col(alpha(WHITE, a)), t);
     };
     let base = height - 62.0 * k;
+
+    // ---- Enemy health bars (DESIGN.md 5i, your Overwatch screenshots): a row of segments above each damaged enemy,
+    // lit red for the health left (Overwatch's are pink), dark see-through red for what's lost, health just lost
+    // lighter for a moment; the boss's as a long bar at the top centre. Drawn first, under everything else.
+    let segments = |cx: f32, bottom: f32, n: usize, seg_w: f32, seg_h: f32, gap: f32, hp: f32, trail: f32| {
+        let total = n as f32 * seg_w + (n - 1) as f32 * gap;
+        let (x0, y0) = (cx - total / 2.0, bottom - seg_h);
+        draw.add_rect([x0 - 2.0 * k, y0 - 2.0 * k], [x0 + total + 2.0 * k, bottom + 2.0 * k], col([20, 8, 12, 90])).filled(true).rounding(2.5 * k).build();
+        for i in 0..n {
+            let sx = x0 + i as f32 * (seg_w + gap);
+            let lit = (hp * n as f32 - i as f32).clamp(0.0, 1.0);
+            let lost = (trail * n as f32 - i as f32).clamp(0.0, 1.0);
+            draw.add_rect([sx, y0], [sx + seg_w, bottom], col([80, 20, 26, 160])).filled(true).rounding(1.5 * k).build();
+            if lost > lit {
+                draw.add_rect([sx + seg_w * lit, y0], [sx + seg_w * lost, bottom], col([255, 180, 180, 230])).filled(true).build();
+            }
+            if lit > 0.0 {
+                let (top, low) = (col([255, 112, 112, 255]), col([232, 48, 56, 255]));
+                draw.add_rect_filled_multicolor([sx, y0], [sx + seg_w * lit, bottom], top, top, low, low);
+            }
+        }
+    };
+    for bar in &s.enemies[..s.enemy_count.min(ENEMY_BARS)] {
+        let (sx, sy) = ((bar.x + 1.0) / 2.0 * width, (1.0 - bar.y) / 2.0 * height);
+        segments(sx, sy, 10, 8.6 * k, 10.0 * k, 2.0 * k, bar.hp, bar.trail);
+    }
+    if let Some(boss) = s.boss {
+        segments(width / 2.0, 84.0 * k, 20, 32.0 * k, 14.0 * k, 3.0 * k, boss.hp, boss.trail);
+    }
 
     // ---- Bottom left: hexagon portrait, "+" box, health "hp | max", 10 white segments.
     // The picture is the hexagon (200 of its 272 px width) with the helmet rising above and 36 px of glow around.

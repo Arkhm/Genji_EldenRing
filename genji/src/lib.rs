@@ -13,6 +13,7 @@ mod controls;
 mod crosshair;
 mod deflect;
 mod dinput;
+mod enemy_bars;
 mod firing;
 mod gamepad;
 mod hud;

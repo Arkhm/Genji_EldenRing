@@ -29,6 +29,8 @@ const SWING_REACH: f32 = 5.0;
 const SWING_HALF_ANGLE: f32 = 90.0;
 /// Each swing hit fills this share of the target's bleed bar (a bleed every third swing).
 const SWING_BLEED_SHARE: f32 = 0.34;
+/// Share of each swing's damage that heals you (your request, 2026-10-08: 30 % lifesteal on every slash).
+const LIFESTEAL: f32 = 0.3;
 /// Overwatch quick melee: 40. Reach, cone and recovery are not verified.
 const MELEE_DAMAGE: f32 = 40.0;
 const MELEE_REACH: f32 = 2.5;
@@ -118,6 +120,8 @@ pub struct Blade {
     pending: Vec<Pending>,
     /// Characters hit by quick melee: seconds since.
     melee_hits: HashMap<usize, f32>,
+    /// Lifesteal earned by swing hits, not applied yet (applied by the camera task, which can change the player).
+    heal_owed: f32,
 }
 
 impl Blade {
@@ -127,6 +131,18 @@ impl Blade {
 
     pub fn left(&self) -> Option<f32> {
         self.left
+    }
+
+    /// Unsheathing (the first second of Dragonblade): no Swift Strike or Deflect then (you, 2026-10-08).
+    pub fn unsheathing(&self) -> bool {
+        self.left.is_some() && self.unsheathe > 0.0
+    }
+
+    /// Lifesteal earned since the last call, in hit points.
+    pub fn take_heal(&mut self) -> i32 {
+        let heal = self.heal_owed.floor();
+        self.heal_owed -= heal;
+        heal as i32
     }
 
     pub fn duration(&self) -> f32 {
@@ -328,10 +344,16 @@ impl Blade {
                     "{} HIT on character {:#x}: game dealt {game} (attack power {}, Corpse Piler row), hp now {} / {}",
                     p.kind, p.chr, p.attack, data.hp, data.max_hp
                 );
+                if p.kind == "swing" {
+                    self.heal_owed += LIFESTEAL * game as f32;
+                }
             } else if data.hp <= 0 {
                 continue;
             } else if p.frames >= CONFIRM_FRAMES {
                 direct(target, p.damage, p.kind, &format!("the game registered no hit in {CONFIRM_FRAMES} frames"));
+                if p.kind == "swing" {
+                    self.heal_owed += LIFESTEAL * p.damage as f32;
+                }
             } else {
                 still.push(p);
                 continue;

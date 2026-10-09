@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Dragonblade lifesteal, no dash/Deflect while unsheathing, Overwatch-style enemy health bars
+
+**Changed:**
+- **Lifesteal** (`blade.rs`, `camera.rs`):
+  - Every Dragonblade swing heals you 30% of the damage it deals. That's the game's confirmed damage, or ours when we
+    apply it directly.
+  - The healing is collected per swing and applied once a frame, never above max health and not while dead.
+  - Log: `[BLADE] lifesteal +n: hp a -> b / max`. The health pill turns yellow too.
+- **Unsheathing lock** (`camera.rs`, `blade.rs unsheathing()`): Swift Strike and Deflect can't start during
+  Dragonblade's 1 s unsheathe. Log: `[SWIFT]` or `[DEFLECT] not while Dragonblade unsheathes`.
+- **Enemy health bars** (new `enemy_bars.rs`, `hud.rs`; plan in DESIGN.md 5i). Your choice: keep Elden Ring's HUD off
+  and draw our own, Overwatch style, red.
+  - **Which enemies:** every nearby character's health is tracked. A bar shows above enemies within 50 m that lost
+    health in the last 30 s and aren't full, on screen, nearest 8.
+  - **Where:** projected with the camera we draw from.
+  - **Look:** 10 segments (104x10 px at 1080p), lit red for the health left, dark red for what's lost; health just
+    lost stays light for 0.5 s, then drains.
+  - **Boss:** a 20-segment bar at the top centre, if the game's boss list names a character near you.
+  - **Log:** every 2 s, `[BARS]` shows our bar count and what the game itself keeps in its enemy-tag and boss tables
+    with its HUD off.
+**Why:** You: "30% lifesteal in each slash", "lock deflect and dash during the unsheathe animation", "the HP of the
+enemies disappeared", then "a overwatch bar would be awesome! instead of pink, you can use red".
+**Tested how:** The build and the 31 unit tests pass. Not tested in game.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- All of the above, in game.
+- No enemy names under the bars. Our library has no lookup for the game's text yet.
+- No damage numbers (Overwatch shows none; Elden Ring did).
+- Bars can show through walls. The game's line-of-sight check isn't available to us; 50 m limits it.
+- The boss bar depends on the game filling its boss list while its HUD is off. The `[BARS]` lines will show.
+**Next:** Your test, then step 11 (sound).
+
 ## 2026-10-08 HUD: health "+" pill, yellow while healing, pink arrow on damage
 
 **Changed (`genji/src/hud.rs`):**

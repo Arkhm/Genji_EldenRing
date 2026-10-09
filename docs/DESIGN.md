@@ -465,6 +465,32 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
   - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
     cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 
+## 5i. Enemy health bars, Overwatch style (plan 2026-10-08)
+
+Switching Elden Ring's HUD off in Genji mode also hid the enemies' health bars, the boss bar and the damage numbers.
+You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's style, red instead of Overwatch's pink.
+
+- **Which enemies:** living characters within 50 m that lost health in the last 30 s and aren't at full health, on
+  screen, nearest first, at most 8.
+  - Health drops are tracked for every nearby character, whatever caused them (our hits, the game's, bleed).
+  - The game's own line-of-sight check isn't available to us, so a bar can show through a wall. The distance limit
+    keeps that rare.
+- **Where:** above the head (the top of the character's collision cylinder, plus 0.35 m), projected with the camera
+  we draw from. This is the same projection the camera log already uses.
+- **Look** (your Overwatch screenshots):
+  - 10 segments in a row, lit red for the health left; the segment being emptied lights partly;
+  - lost segments dark see-through red;
+  - health just lost flashes lighter, then drains away (0.5 s);
+  - no damage numbers (Overwatch shows none).
+- **Names:** Overwatch shows the name under the bar. Our library has no lookup for the game's text (enemy names live
+  in its message files), so names are left out for now.
+- **Boss:** the game's boss list (`CSFeManImp.boss_health_displays`, set by the game's events) names the boss
+  character. If the game fills it while its HUD is off, a long 20-segment bar is drawn at the top centre (the
+  bottom centre is the ultimate's). This is logged to check.
+- **Diagnostics:** every 2 s, the game's own enemy-tag and boss tables are logged (filled or not, visible, screen
+  position). If they turn out to be filled with the HUD off, the game's own visibility could be used later.
+- **Code:** `enemy_bars.rs` (game thread: tracking, projection, which bars) feeds `hud::State`; `hud.rs` draws.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.
