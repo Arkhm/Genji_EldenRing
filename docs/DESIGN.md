@@ -614,9 +614,9 @@ aw`.
 Genji's line):
 - The game picks the player's voice through a sound switch, named by the table
   `WwiseValueToStrParam_Switch_PlayerVoiceType`.
-- While Genji input is captured, every row's name is swapped in memory for one no sound bank has, and put back after.
-- Not known: whether this applies at once or only after a loading screen, and whether an unknown name means silence
-  or a default voice. The `VOICE` log lines show the original names.
+- While Genji input is captured, the player's rows get a name no sound bank has, in memory, and are put back after.
+  - Only rows below 50 are touched (`_00_PC_...` to `_15_PC_...`); the rows from 50 up are NPC and enemy voices.
+- Tested 2026-10-09: it works at once, and an unknown name plays nothing.
 - The same kind of table exists for the player's shoes (footsteps), equipment and attacks, should those need silencing
   too.
 

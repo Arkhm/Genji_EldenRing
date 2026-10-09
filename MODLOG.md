@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Silence only the Tarnished, not NPCs and enemies
+
+**Changed:** `genji/src/game_voice.rs` now renames only the player's rows of `PlayerVoiceType` (ids below 50).
+**Why:** Your test: the silencing works ("its working now"). But the log shows the table holds 174 rows:
+- 12 are the player's (`_00_PC_Male_Young_Neutral` to `_15_PC_Female_Aged_Deeper`);
+- the rest are NPC and enemy voices (`_50_NPC_Male_Young`, `NPC_vc300` to `NPC_vc454`).
+All 174 were renamed, which would also silence humanoid enemies' and NPCs' voices in Genji mode.
+**Tested how:** Read from your log. `cargo build --release` and `cargo test --release` pass (41 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** Whether NPC voices were actually silenced before wasn't checked; now they can't be.
+**Next:** Silence Elden Ring's footsteps and armour sounds the same way.
+
 ## 2026-10-09 Silence the Tarnished's grunts; critical-health sound audible
 
 **Changed:**
