@@ -43,6 +43,8 @@ pub struct Deflect {
     last_hp: Option<i32>,
     /// Enemy projectiles already sent back (by handle).
     reflected: HashSet<u64>,
+    /// Frames that caught something, so far (the arms play a block when this changes).
+    blocks: u32,
     reflected_total: u32,
     /// The Bone Dart rows' vanilla values while ours are applied.
     dart_vanilla: Option<DartValues>,
@@ -136,6 +138,10 @@ impl Deflect {
     }
 
     /// Deflects started so far (the HUD plays its "pressed" animation when this changes).
+    pub fn blocks(&self) -> u32 {
+        self.blocks
+    }
+
     pub fn uses(&self) -> u32 {
         self.uses
     }
@@ -217,6 +223,7 @@ impl Deflect {
         if !caught.is_empty() {
             // Your recorded block (2026-10-09): one swish-clang per frame that catches something.
             crate::sound::play("deflect_block");
+            self.blocks += 1;
         }
         for (param_id, speed) in caught {
             self.send_back(player, look, eye, &dart, param_id, speed);

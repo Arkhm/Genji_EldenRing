@@ -149,6 +149,11 @@ impl Blade {
         self.melee_wait > 0.0
     }
 
+    /// Dragonblade swings so far (the arms play a swing when this changes).
+    pub fn swings(&self) -> u32 {
+        self.swings
+    }
+
     /// A quick melee struck a character within the last second (a kill now is a melee kill, for its voice line).
     pub fn melee_recent(&self) -> bool {
         self.melee_hits.values().any(|age| *age <= 1.0)

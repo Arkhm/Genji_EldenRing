@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 10d: the arms play Genji's animations
+
+**Changed:**
+- **New `genji/src/arms_anim.rs`:** picks the animation each frame (plan in DESIGN.md 5k, 10d).
+  - **Base:** each stance's resting pose, or its walk loop on the ground above 1.5 m/s.
+  - **Actions:** play once and a new one cuts in. Swings, fans, blocks and jumps take turns between their versions.
+  - **Blends:** 0.08 s into an action, 0.25 s back to the base.
+  - Four tests.
+- `camera.rs`: notices actions starting and hands them over:
+  - throw (first shuriken of a burst), Fan of Blades, reload, quick melee, Swift Strike;
+  - Dragonblade draw, swing and end; Deflect start, block and end;
+  - jump and double jump; wall climb start, top and letting go;
+  - the arms coming up after a menu, loading or death.
+- `arms.rs`: draws a clip blended from the one before, and publishes each animation's length for `arms_anim.rs`.
+- `viewmodel.rs`:
+  - `find_variant` and `blend`;
+  - test `strips` (an animation as pictures every 0.15 s, run on request).
+- `blade.rs` and `deflect.rs` count swings and blocks; `movement.rs` has `grounded()`.
+**Why:** You: "proceed" (10d).
+**Tested how:**
+- `cargo build --release` and `cargo test --release` pass (48 tests).
+- Throw strips next to your clip2 at 13.1 s: the same flat wind-up and raised release. Overwatch's arm drifts back down
+  over about 0.3 s, hence the slower 0.25 s blend back.
+- The Dragonblade draw (12E6) next to clip1 at 2.2 s: the same course, but hard to judge without the sword. The three
+  swings matched it no better.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- No sword yet: Dragonblade's hands hold nothing.
+- With animation, the picture changes almost every frame. The overlay's copy (3-4 ms, inside the game's frame) then
+  happens every frame: watch the frame rate (logged `ARMS overlay:` lines).
+- Walking redraws constantly; Overwatch's walk barely moves the arms.
+**Next:** Your test; then the sword (and the shuriken in the hand).
+
 ## 2026-10-09 Your Overwatch arm recordings indexed
 
 **Changed:** `docs/DESIGN.md` 5k points to `D:/GenjiBridgeAssets/ow_ref/INDEX.md`. That index (outside the repository)

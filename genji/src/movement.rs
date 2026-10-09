@@ -708,6 +708,11 @@ impl Mover {
         self.dash_left > 0.0
     }
 
+    /// On the ground (the arms' walk plays only there).
+    pub fn grounded(&self) -> bool {
+        self.grounded
+    }
+
     /// Climbing a wall now (for the repeated grab sound).
     pub fn climbing(&self) -> bool {
         self.climbing

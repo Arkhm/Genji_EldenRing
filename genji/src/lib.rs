@@ -8,6 +8,7 @@
 //! - Shuriken: the engine's own projectiles, thrown from the eye (step 6).
 
 mod arms;
+mod arms_anim;
 mod blade;
 mod camera;
 mod controls;

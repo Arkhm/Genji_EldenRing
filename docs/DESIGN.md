@@ -682,6 +682,17 @@ and the field of view are right.
   - Measured outside the game at 1290x540 on 4 cores: 4-12 ms per picture (Dragonblade is the heaviest).
 - **10d. Actions play their animations:** throws, fan, reload, dash, Deflect, melee, Dragonblade (with the sword), jump
   and climb; idle and walk blend by speed.
+  - Built 2026-10-09 without the sword, which is next. `arms_anim.rs` decides the clip each frame from the stance and
+    the frame's actions (camera.rs notices them starting).
+  - **Base:** each stance's resting pose, or its walk loop above 1.5 m/s on the ground.
+  - **Actions:** throw (first shuriken of a burst), Fan of Blades, reload, quick melee, Swift Strike, the Dragonblade
+    draw, swings and end, the Deflect start, block and end, jumps, the wall climb (start, top, letting go), and the
+    arms coming up after menus or loading. Each plays once, and a new action cuts in.
+  - Clips with several versions take turns (swings, fans, blocks, jumps).
+  - **Blends:** 0.08 s into an action, 0.25 s back to the base.
+  - Checked against your recordings: the throw has the same wind-up and release as clip2 at 13.1 s. The Dragonblade draw
+    (12E6) has the same course as clip1 at 2.2 s (up, slash down, both hands on the hilt), but it's hard to judge
+    without the sword.
 - **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.
 
 ## 6. Risks and unknowns (honest list)

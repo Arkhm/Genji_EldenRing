@@ -66,7 +66,7 @@ pub struct Viewmodel {
 }
 
 /// A 3x4 skinning matrix (rows).
-type Mat = [f32; 12];
+pub type Mat = [f32; 12];
 
 fn read_u32(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
@@ -155,6 +155,17 @@ impl Viewmodel {
     /// The first animation for `role`, if exported.
     pub fn find(&self, role: &str) -> Option<usize> {
         self.anims.iter().position(|a| a.role == role)
+    }
+
+    /// Variant `k` of `role` (wrapping), if exported.
+    pub fn find_variant(&self, role: &str, k: usize) -> Option<usize> {
+        let all: Vec<usize> = (0..self.anims.len()).filter(|&i| self.anims[i].role == role).collect();
+        (!all.is_empty()).then(|| all[k % all.len()])
+    }
+
+    /// Two poses blended: `w` of `b` (0..1), the rest of `a` (short blends between clips).
+    pub fn blend(a: &[Mat], b: &[Mat], w: f32) -> Vec<Mat> {
+        a.iter().zip(b).map(|(x, y)| std::array::from_fn(|k| x[k] + (y[k] - x[k]) * w)).collect()
     }
 
     /// The skinning matrices of animation `anim` at `t` seconds (held at the last frame, or wrapped if `looping`),
@@ -557,6 +568,33 @@ mod tests {
                 canvas.vfov = deg.to_radians();
                 draw(&vm, &pose, &mut canvas, 4);
                 write_png(&dir.join(format!("fov_throw_{deg}_{ms}.png")), &canvas, [120, 128, 140]);
+            }
+        }
+    }
+
+    /// An animation as a strip of pictures (every `step` seconds) at your recordings' 2580x1080 shape, half size, for
+    /// comparing with D:\GenjiBridgeAssets\ow_ref. Writes strip_<role>_<k>.png. Roles from GENJI_STRIP (comma
+    /// separated), default throw. Run: cargo test --release strips -- --ignored
+    #[test]
+    #[ignore]
+    fn strips() {
+        let dir = Path::new(DIR);
+        let vm = Viewmodel::load(dir).unwrap();
+        let roles = std::env::var("GENJI_STRIP").unwrap_or_else(|_| "throw".into());
+        for role in roles.split(',') {
+            // "role" or "role#k" for variant k.
+            let (name, v) = role.split_once('#').map_or((role, 0), |(r, k)| (r, k.parse().unwrap()));
+            let anim = vm.find_variant(name, v).unwrap_or_else(|| panic!("no {role}"));
+            let len = vm.anims[anim].seconds();
+            let mut k = 0;
+            let mut t = 0.0;
+            while t <= len + 1e-3 {
+                let pose = vm.pose(anim, t, false);
+                let mut canvas = Canvas::new(1290, 540);
+                draw(&vm, &pose, &mut canvas, 4);
+                write_png(&dir.join(format!("strip_{}_{k:02}.png", role.replace('#', "_v"))), &canvas, [120, 128, 140]);
+                k += 1;
+                t += 0.15;
             }
         }
     }

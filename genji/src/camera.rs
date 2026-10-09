@@ -85,6 +85,9 @@ struct View {
     reacting: bool,
     in_control: bool,
     f6_was_down: bool,
+    /// The arms' animations (step 10d) and what was true last frame, to notice actions starting.
+    animator: crate::arms_anim::Animator,
+    watch: ArmsWatch,
     /// How much lower the arms are drawn right now (metres, arms.rs BLADE_DROP).
     arms_drop: f32,
     /// The Tarnished's own voice, silenced while Genji input is captured (game_voice.rs).
@@ -100,6 +103,22 @@ fn play_cues(cues: Vec<crate::cues::Cue>) {
             crate::cues::Cue::Voice(event, urgent) => crate::sound::voice(event, urgent),
         }
     }
+}
+
+/// Last frame's state, for the arms (step 10d): an action starts when one of these changes.
+#[derive(Default)]
+struct ArmsWatch {
+    /// First person was drawn last frame (false after menus, loading, death: the arms come up again).
+    shown: bool,
+    reloading: bool,
+    meleeing: bool,
+    blade: bool,
+    deflect: bool,
+    climbing: bool,
+    swings: u32,
+    blocks: u32,
+    /// Seconds since the last shuriken (a new burst starts after a pause).
+    since_throw: f32,
 }
 
 #[derive(Default)]
@@ -211,6 +230,7 @@ fn camera_step_inner(dt: f32) -> bool {
         view.mover.allow_again("Genji input released (F9 or a menu)");
     }
     if reason.is_some() {
+        view.watch.shown = false;
         view.firing.tick(dt, false, false, false);
         view.deflect.tick(dt, false, false);
         view.deflect.release(player);
@@ -302,6 +322,7 @@ fn camera_step_inner(dt: f32) -> bool {
             feet
         }
         Step::NotReady => {
+            view.watch.shown = false;
             view.firing.tick(dt, false, false, false);
             view.deflect.tick(dt, false, false);
             view.deflect.release(player);
@@ -420,6 +441,7 @@ fn camera_step_inner(dt: f32) -> bool {
             crate::sound::play("shuriken_throw");
         }
     }
+    let (threw, fanned) = (!throws.is_empty(), throws.iter().any(|a| *a != 0.0));
     for angle in throws {
         view.thrower.throw(player, &look, eye, angle);
     }
@@ -458,18 +480,84 @@ fn camera_step_inner(dt: f32) -> bool {
         crate::arms::toggle();
     }
     view.f6_was_down = f6;
+    // Step 10d: this frame's actions, in order (a later one cuts in over an earlier one), for arms_anim.rs.
+    use crate::arms_anim::{Event, Stance};
     let stance = if view.deflect.active() {
-        "deflect_idle"
+        Stance::Deflect
     } else if view.blade.active() {
-        "blade_idle"
+        Stance::Blade
     } else {
-        "idle"
+        Stance::Normal
     };
+    let w = &mut view.watch;
+    let ev = &view.mover.events;
+    let mut events = Vec::new();
+    if !w.shown {
+        events.push(Event::Spawn);
+    }
+    if ev.jumped {
+        events.push(Event::Jump);
+    }
+    if ev.double_jumped {
+        events.push(Event::DoubleJump);
+    }
+    let climbing = view.mover.climbing();
+    if ev.climb_started {
+        events.push(Event::ClimbStart);
+    }
+    if ev.vaulted {
+        events.push(Event::ClimbLedge);
+    } else if w.climbing && !climbing {
+        events.push(Event::ClimbEnd);
+    }
+    let (blade_on, deflect_on) = (view.blade.active(), view.deflect.active());
+    if w.deflect && !deflect_on {
+        events.push(Event::DeflectEnd);
+    }
+    if w.blade && !blade_on {
+        events.push(Event::BladeEnd);
+    }
+    if blade_on && !w.blade {
+        events.push(Event::BladeDraw);
+    }
+    if deflect_on && !w.deflect {
+        events.push(Event::DeflectStart);
+    }
+    let reloading_now = view.firing.hud().2.is_some();
+    if reloading_now && !w.reloading {
+        events.push(Event::Reload);
+    }
+    w.since_throw += dt;
+    if threw {
+        if fanned {
+            events.push(Event::Fan);
+        } else if w.since_throw > 0.3 {
+            events.push(Event::Throw); // the first shuriken of a burst
+        }
+        w.since_throw = 0.0;
+    }
+    let meleeing = view.blade.meleeing();
+    if meleeing && !w.meleeing {
+        events.push(Event::Melee);
+    }
+    if view.deflect.blocks() != w.blocks {
+        events.push(Event::DeflectBlock);
+    }
+    if view.blade.swings() != w.swings && blade_on {
+        events.push(Event::BladeSwing);
+    }
+    if view.mover.dash_started {
+        events.push(Event::Dash);
+    }
+    (w.shown, w.reloading, w.meleeing, w.blade, w.deflect, w.climbing, w.swings, w.blocks) =
+        (true, reloading_now, meleeing, blade_on, deflect_on, climbing, view.blade.swings(), view.deflect.blocks());
+    let ground_speed = if view.mover.grounded() { ev.ground_travel / dt.max(1e-4) } else { 0.0 };
+    let pose = view.animator.update(dt, stance, ground_speed, &events, &crate::arms::length);
     // Dragonblade's stance sits lower (arms.rs, BLADE_DROP), sliding in and out over a quarter of a second.
-    let drop_to = if stance == "blade_idle" { crate::arms::BLADE_DROP } else { 0.0 };
+    let drop_to = if stance == Stance::Blade { crate::arms::BLADE_DROP } else { 0.0 };
     let step = crate::arms::BLADE_DROP * dt / 0.25;
     view.arms_drop = if view.arms_drop < drop_to { (view.arms_drop + step).min(drop_to) } else { (view.arms_drop - step).max(drop_to) };
-    crate::arms::request(stance, 0.0, false, view.arms_drop);
+    crate::arms::request(pose, view.arms_drop);
 
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
     let (enemies, enemy_count) =

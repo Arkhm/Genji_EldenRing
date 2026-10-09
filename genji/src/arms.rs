@@ -3,15 +3,18 @@
 //! the overlay (crosshair.rs) copies each finished picture into a texture and stretches it over the screen, under
 //! the HUD and the crosshair. The game thread never waits for the drawing.
 //!
-//! The same pose asked for again isn't drawn again (a resting pose stays in the texture as it is).
+//! What to draw comes from arms_anim.rs (step 10d): a clip, blended from the previous one for a moment. The same pose
+//! asked for again isn't drawn again (a resting pose stays in the texture as it is).
 //!
 //! Logged every few seconds: pictures drawn, average and longest drawing time (ARMS lines); the overlay logs its copy
 //! time the same way.
 
+use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use crate::arms_anim::{Clip, Pose};
 use crate::glog;
 use crate::viewmodel::{self, Canvas, Viewmodel};
 
@@ -22,11 +25,18 @@ const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, PartialEq)]
 struct Request {
-    role: &'static str,
-    t: f32,
-    looping: bool,
+    pose: Pose,
     /// Metres the arms are drawn lower (the camera raised): see BLADE_DROP.
     drop: f32,
+}
+
+/// Each role's variants' lengths in seconds, known once the drawing thread has loaded the export.
+static LENGTHS: OnceLock<HashMap<String, Vec<f32>>> = OnceLock::new();
+
+/// (seconds of `role`'s variant `variant`, number of variants), once the export is loaded (game thread).
+pub fn length(role: &str, variant: usize) -> Option<(f32, usize)> {
+    let v = LENGTHS.get()?.get(role)?;
+    Some((v[variant % v.len()], v.len()))
 }
 
 /// The Dragonblade stance is drawn this much lower (your test of 2026-10-09: on your 3440x1440 screen the left arm's
@@ -63,11 +73,11 @@ pub fn start(w: usize, h: usize) {
     }
 }
 
-/// Asks for the arms in animation `role` at `t` seconds, drawn `drop` metres lower (game thread, every frame while
-/// first person shows).
-pub fn request(role: &'static str, t: f32, looping: bool, drop: f32) {
+/// Asks for the arms in `pose` (arms_anim.rs), drawn `drop` metres lower (game thread, every frame while first person
+/// shows).
+pub fn request(pose: Pose, drop: f32) {
     let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
-    s.request = Some(Request { role, t, looping, drop });
+    s.request = Some(Request { pose, drop });
     WAKE.notify_one();
 }
 
@@ -87,6 +97,11 @@ fn run(w: usize, h: usize) {
         }
     };
     glog!("ARMS", "model and {} animations loaded in {:?}; drawing at {w}x{h} on {ARM_THREADS} cores", vm.anims.len(), t.elapsed());
+    let mut lengths: HashMap<String, Vec<f32>> = HashMap::new();
+    for a in &vm.anims {
+        lengths.entry(a.role.clone()).or_default().push(a.seconds());
+    }
+    let _ = LENGTHS.set(lengths);
     let mut canvas = Canvas::new(w, h);
     let mut missing: Vec<&'static str> = Vec::new();
     let (mut drawn, mut total, mut longest, mut since) = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
@@ -106,15 +121,24 @@ fn run(w: usize, h: usize) {
         if last == Some(req) {
             continue;
         }
-        let Some(anim) = vm.find(req.role) else {
-            if !missing.contains(&req.role) {
-                glog!("ARMS", "no animation \"{}\" in the export; nothing drawn for it", req.role);
-                missing.push(req.role);
-            }
-            continue;
+        let mut posed = |clip: &Clip| -> Option<Vec<viewmodel::Mat>> {
+            let Some(anim) = vm.find_variant(clip.role, clip.variant) else {
+                if !missing.contains(&clip.role) {
+                    glog!("ARMS", "no animation \"{}\" in the export; nothing drawn for it", clip.role);
+                    missing.push(clip.role);
+                }
+                return None;
+            };
+            Some(vm.pose(anim, clip.t, clip.looping))
         };
         let started = Instant::now();
-        let pose = vm.pose(anim, req.t, req.looping);
+        let Some(main) = posed(&req.pose.main) else {
+            continue;
+        };
+        let pose = match req.pose.from.as_ref().and_then(|c| posed(c)) {
+            Some(from) if req.pose.mix < 1.0 => Viewmodel::blend(&from, &main, req.pose.mix),
+            _ => main,
+        };
         canvas.clear();
         canvas.eye = viewmodel::EYE + glam::Vec3::Z * req.drop;
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
@@ -128,7 +152,7 @@ fn run(w: usize, h: usize) {
         }
         if first {
             first = false;
-            glog!("ARMS", "first picture: {} ({}) in {took:?}, {stats:?}", req.role, vm.anims[anim].id);
+            glog!("ARMS", "first picture: {} in {took:?}, {stats:?}", req.pose.main.role);
         }
         drawn += 1;
         total += took;
@@ -140,7 +164,7 @@ fn run(w: usize, h: usize) {
                 since.elapsed().as_secs_f32(),
                 total.as_secs_f32() * 1000.0 / drawn as f32,
                 longest.as_secs_f32() * 1000.0,
-                req.role,
+                req.pose.main.role,
                 stats.pixels
             );
             (drawn, total, longest, since) = (0, Duration::ZERO, Duration::ZERO, Instant::now());
