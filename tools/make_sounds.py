@@ -37,9 +37,11 @@ ABILITY = OrderedDict([
     ('reload_2', [('91D7', None)]),
     ('reload_3', [('91D8', None)]),
     ('reload_4', [('91D9', None)]),
-    # "1-3, 8, 9 melee hit / 4-7 and 10 is melee swing"; 0829 (1P 2434) tagged melee hit.
-    ('melee_swing', [('2D10', [4, 5, 6, 7, 10])]),
-    ('melee_hit', [('2D10', [1, 2, 3, 8, 9]), ('0829', None)]),
+    # 0829 (1P 2434, the quick-melee animation) tagged melee hit. 2D10 ("1-3, 8, 9 melee hit / 4-7 and 10 is melee
+    # swing") was here too, but it plays only under the four Deflect-block animations you named (24A2, 24A3, 344C, 344D,
+    # animation picker 2026-10-09): it is most likely Deflect's block sound. Left out until your own recording of the
+    # block ("for now, skip the deflect block sound"); the quick melee has no swing sound of its own for now.
+    ('melee_hit', [('0829', None)]),
     # "sounds like deflect start"; "12 could also be that".
     ('deflect_start', [('2D18', None), ('FF72', [12])]),
     ('deflect_end', [('FF84', None)]),
@@ -90,7 +92,7 @@ VOICE_FOLDERS = {
 # 2026-10-09).
 DROP = {'deflect_block'}
 # Events the mod plays that you haven't found yet (reported, not an error).
-WANTED = ['dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
+WANTED = ['melee_swing', 'dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
 
 
 def picker_data():

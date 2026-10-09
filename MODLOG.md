@@ -3,6 +3,28 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Animation list agreed; Deflect-block sounds taken out of the quick melee
+
+**Changed:**
+- **New `tools/viewmodel_anims.py`:** the first-person animation for each role (idle, walk, jumps, climb, throw, fan,
+  reload, dash, melee, the Deflect and Dragonblade sets), from your picker tags plus the changes we agreed on:
+  - idle = each stance's frozen pose (240E, 124B, 342B);
+  - 3631 = Deflect ending during Dragonblade;
+  - 1256 = Swift Strike during Dragonblade (probably);
+  - 33F3 and 363E = the end of a wall climb (probably).
+- `tools/make_sounds.py`: the quick melee keeps only its own sound (0829, from its animation 2434). Re-run: 54 events,
+  363 files.
+  - Sound group 2D10, used until now for the melee's swing and hit, plays only under the four Deflect-block animations
+    you named (24A2, 24A3, 344C, 344D), so it is most likely Deflect's block sound.
+  - It's left out, as you asked, until your own recording of the block.
+  - So the quick melee has no swing sound for now: the shout still plays, and its hit sound is 0829.
+**Why:** You: "lets do your changes. also, I will record a blocking sound for deflect. for now, skip the deflect block
+sound."
+**Tested how:** `make_sounds.py` ran. `cargo test --release` passes (41 tests, all sound files decode).
+**Result:** Done. **Not tested in game.** A quick melee that misses is now silent apart from the shout.
+**Still broken / not tested:** None of the new roles in `viewmodel_anims.py` are checked in game yet.
+**Next:** 10b: the export and a first picture of the arms.
+
 ## 2026-10-09 Step 10a: animation picker for Genji's first-person animations
 
 **Changed:**
