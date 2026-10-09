@@ -500,6 +500,54 @@ You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's sty
   position). If they turn out to be filled with the HUD off, the game's own visibility could be used later.
 - **Code:** `enemy_bars.rs` (game thread: tracking, projection, which bars) feeds `hud::State`; `hud.rs` draws.
 
+## 5j. Step 11 in detail: sound and voice (plan 2026-10-09)
+
+**What we have:** 3,572 Overwatch sound files (Ogg) from your extraction in `D:\GenjiBridgeAssetsaw`.
+- **Voice lines:** 1,795, sorted by situation in `HeroVoice\Genji\<situation>` (Ultimate, Pain, Death, Elimination,
+  Melee, Jumping, Respawn and so on), but the lines inside each folder are unnamed.
+- **Ability and movement sounds:** unnamed, grouped by the animation or effect that plays them:
+  - first-person model `00000000DBA6` (20 animations);
+  - third-person model `00000000DB92` (51 animations);
+  - `Effects` (93 effects);
+  - `Entities\Gameplay3P\Effects` (88 effects).
+  Nothing in the files says which is the shuriken throw or the dash, so they have to be found by ear.
+
+**11a. Sound picker (find the sounds):**
+- `tools\make_sound_picker.py` writes a local page, `D:\GenjiBridgeAssets\sound_picker\index.html`. It lists every
+  group with a play button for each sound (your browser plays Ogg from the files on D:).
+- You tag sounds with the events below; the page remembers your tags in the browser.
+- The page exports the tags as a small JSON file, which you save as `D:\GenjiBridgeAssets\sound_picks.json`.
+- `tools\make_sounds.py` copies the tagged files into `D:\GenjiBridgeAssets\sound\<event>.ogg`, `02.ogg` and so
+  on.
+- Nothing is copied into the repository.
+
+**11b. Playback (the mod plays them):**
+- A sound thread in our DLL plays Ogg files with the `rodio` audio library through Windows' default output. That is
+  separate from Elden Ring's own audio engine; nothing of the game's is changed.
+- Each event picks one of its files at random (several takes, like Overwatch).
+- **Volume:** Elden Ring's own sound-effects setting (`GameSettings.sfx_volume`, 0-10), times one overall level of
+  ours.
+- **Missing files:** an event with no files is skipped and logged once.
+
+**Events** (tags in the picker):
+- **Shuriken:** throw (each shuriken), Fan of Blades throw, hit on an enemy, hit on a wall, reload.
+- **Swift Strike:** dash, dash hit, dash reset (a kill resets it).
+- **Deflect:** start, a projectile deflected, end.
+- **Dragonblade:** unsheathe, swing, swing hit, sheathe (end).
+- **Quick melee:** swing, hit.
+- **Movement:** jump, double jump, wall climb, landing.
+- **Ultimate:** ready (the sound when it reaches 100%).
+- **Voice:**
+  - the Dragonblade line ("Ryūjin no ken wo kurae!");
+  - "ultimate ready" and "ultimate charging" (Q pressed early);
+  - pain (on hits, at most every few seconds);
+  - death;
+  - elimination (sometimes, after kills);
+  - healing.
+
+**Later (not in 11):** muting Elden Ring's own sounds for the things Genji replaces (the Tarnished's grunts, the
+Throwing Dagger's sound). This needs the game's sound IDs and is looked at once ours play.
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.

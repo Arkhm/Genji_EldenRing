@@ -3,6 +3,27 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 11a: sound picker, to find Genji's sounds by ear
+
+**Changed:**
+- `docs/DESIGN.md` 5j: the sound plan (picker, playback, events).
+- New `tools/make_sound_picker.py`. It writes `D:\GenjiBridgeAssets\sound_picker\index.html`, a local page outside the
+  repository:
+  - **148 ability and movement sound events** (778 takes), first-person first. Overwatch files these sounds unnamed
+    under the animations and effects that play them; each `.02C` folder is one event with its takes, and duplicates
+    across animations are removed.
+  - **256 voice lines** from 22 of DataTool's situation folders (Ultimate, Pain, Death, Elimination and others).
+  - Every take has a play button and a tag menu (the events of DESIGN.md 5j). Tags are remembered in the browser.
+  - **Export** saves `sound_picks.json`, and also shows the text to paste.
+**Why:** You: "lets start the audios". Nothing in the files says which sound is which, so they have to be found by
+ear.
+**Tested how:**
+- The page's data was checked from the shell: all 1,034 file paths exist, and they're Ogg Vorbis (browsers play it).
+- The page itself is not tested: the built-in browser can't run local pages.
+**Result:** Built; not used yet.
+**Still broken / not tested:** The page in your browser.
+**Next:** You tag the sounds. Then step 11b: `tools/make_sounds.py` copies them, and the mod plays them.
+
 ## 2026-10-09 Quick melee also cancels a shuriken burst
 
 **Changed:** `blade.rs` (`Blade::meleeing()`), `camera.rs`: a quick melee (mouse 5) cuts a burst short like a
