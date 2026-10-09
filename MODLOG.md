@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: no more finger twists between frames; melee sound back; first swing on time; no shuriken on the wall
+
+**Changed:**
+- `viewmodel.rs`: between two stored frames of an animation, each bone's rotation is now turned (the same rotation and
+  stretch blend as between animations), not mixed in a straight line. New test `no_bone_collapses_between_frames`:
+  every animation sampled 120 times a second, no bone's volume leaves the range of the two frames around it.
+- `make_sounds.py`: `melee_swing` = sound group 0829, which plays with the quick-melee animation itself (hit or not).
+  `blade.rs`: a quick melee that lands adds the body-hit sound. Dragonblade hits keep using the melee sound as their
+  stand-in.
+- `arms_anim.rs`:
+  - a Dragonblade swing may cut the draw animation (swings only come after the draw's second anyway);
+  - no shuriken during climb animations (open hands on the wall, as in your clip3 at 14.1 s).
+**Why:** Your test:
+- "a lot of them his fingers simply expands and twists for micro seconds" (reload, M1, M2, Deflect, the melee);
+- "the shuriken stays on the middle of the screen" (climbing);
+- "the melee attack lost its sfx";
+- "instantly after the animation ends, and I attack, the swing attack doesn't appear. only a second or something
+  like that later".
+**Tested how:**
+- The exported animations turn some bones up to 180 degrees between two 30 fps frames (`PinkyFinger_3_R` 98 degrees
+  in the throw, `Weapon_R` 150 in the reload, `Weapon_L` 177 in a Deflect block, the twist helpers). Blender's keys have
+  no sign flips (checked), so the turns are Overwatch's own snaps. Mixing such matrices in a straight line collapses
+  the bone for a moment: the flicker you saw.
+- `cargo test --release` passes (51 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The shuriken in the resting pose: see the next entry (the weapons have animations of their own).
+- Swift Strike's sound with the wakizashi is unchanged.
+**Next:** The weapons' own animations.
+
 ## 2026-10-09 Weapons in Genji's hands: shuriken, Dragonblade katana, wakizashi
 
 **Changed:**

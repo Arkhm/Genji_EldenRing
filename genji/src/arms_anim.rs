@@ -70,6 +70,8 @@ pub fn parts_for(role: &str) -> u8 {
     use crate::viewmodel::{PART_ARMS, PART_KATANA, PART_SHURIKEN, PART_WAKIZASHI};
     if role.starts_with("blade_") {
         PART_ARMS | PART_KATANA
+    } else if role.contains("wall_climb") {
+        PART_ARMS // open hands on the wall (your Overwatch clip 3 at 14.1 s); the shuriken floated otherwise
     } else if role.starts_with("deflect_") || role == "dash" || role == "melee" {
         PART_ARMS | PART_WAKIZASHI
     } else {
@@ -113,7 +115,9 @@ impl Animator {
             }
             // The Dragonblade draw plays whole; only Dragonblade ending cuts it (you, 2026-10-09: drawn in the air,
             // it didn't show).
-            if e != Event::BladeEnd && self.action.is_some_and(|a| a.role == "blade_draw") {
+            // Swings come only once the draw's second is over (blade.rs), so they may cut it: you, 2026-10-09, the
+            // first swing right after the draw showed a second late.
+            if e != Event::BladeEnd && e != Event::BladeSwing && self.action.is_some_and(|a| a.role == "blade_draw") {
                 continue;
             }
             if let Some(role) = action_role(e, stance) {

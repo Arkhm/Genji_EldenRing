@@ -215,12 +215,15 @@ impl Viewmodel {
             let at = ((a.offset + i) * nb + b) * 12;
             &self.mats[at..at + 12]
         };
-        (0..nb)
-            .map(|b| {
-                let (m0, m1) = (frame(i0, b), frame(i1, b));
-                std::array::from_fn(|k| m0[k] + (m1[k] - m0[k]) * frac)
-            })
-            .collect()
+        // Between two stored frames, rotations are turned, not mixed in a straight line: Overwatch snaps some finger
+        // and weapon bones by up to 180 degrees between two frames, and mixing those matrices made fingers collapse
+        // and twist for a moment (you, 2026-10-09: "his fingers simply expand and twists for micro seconds").
+        let m0: Vec<Mat> = (0..nb).map(|b| frame(i0, b).try_into().unwrap()).collect();
+        if frac <= 0.0 || i0 == i1 {
+            return m0;
+        }
+        let m1: Vec<Mat> = (0..nb).map(|b| frame(i1, b).try_into().unwrap()).collect();
+        Self::blend(&m0, &m1, frac)
     }
 }
 
@@ -709,6 +712,50 @@ mod tests {
         let end = Viewmodel::blend(&a, &b, 1.0);
         let worst = end.iter().flatten().zip(b.iter().flatten()).map(|(p, q)| (p - q).abs()).fold(0.0, f32::max);
         assert!(worst < 1e-3, "blend at 1 differs from the pose by {worst}");
+    }
+
+    /// Candidate resting poses with the shuriken, at your recordings' screen shape, for comparing with Overwatch's
+    /// (clip2 at 1.0 s). Writes rest_<id>.png. Run on request.
+    #[test]
+    #[ignore]
+    fn rest_candidates() {
+        let dir = Path::new(DIR);
+        let vm = Viewmodel::load(dir).unwrap();
+        for id in ["240E", "242B", "242E", "3645", "2439", "242F", "3646"] {
+            let Some(anim) = vm.anims.iter().position(|a| a.id == id) else {
+                continue;
+            };
+            let pose = vm.pose(anim, 0.0, false);
+            let mut canvas = Canvas::new(1290, 540);
+            draw(&vm, &pose, &mut canvas, 4);
+            write_png(&dir.join(format!("rest_{id}.png")), &canvas, [120, 128, 140]);
+        }
+    }
+
+    /// Between two stored frames no bone collapses: its volume (determinant) stays between the two frames' (your test of
+    /// 2026-10-09: fingers expanded and twisted for a moment; Overwatch turns some bones up to 180 degrees between two
+    /// frames). Every animation sampled 120 times a second.
+    #[test]
+    fn no_bone_collapses_between_frames() {
+        let dir = Path::new(DIR);
+        if !dir.join("model.bin").is_file() {
+            return;
+        }
+        let vm = Viewmodel::load(dir).unwrap();
+        let det = |m: &Mat| glam::Mat3::from_cols(Vec3::new(m[0], m[4], m[8]), Vec3::new(m[1], m[5], m[9]), Vec3::new(m[2], m[6], m[10])).determinant();
+        for (i, a) in vm.anims.iter().enumerate() {
+            let steps = (a.seconds() * 120.0) as usize;
+            for k in 0..steps {
+                let t = k as f32 / 120.0;
+                let f = t * a.fps;
+                let (f0, f1) = (f.floor() / a.fps, (f.floor() + 1.0).min((a.frames - 1) as f32) / a.fps);
+                let (p, p0, p1) = (vm.pose(i, t, false), vm.pose(i, f0, false), vm.pose(i, f1, false));
+                for b in 0..p.len() {
+                    let (d, lo, hi) = (det(&p[b]), det(&p0[b]).min(det(&p1[b])), det(&p0[b]).max(det(&p1[b])));
+                    assert!(d >= lo * 0.95 - 1e-3 && d <= hi * 1.05 + 1e-3, "{} {} bone {b} at {t:.3} s: volume {d} outside {lo}..{hi}", a.role, a.id);
+                }
+            }
+        }
     }
 
     #[test]

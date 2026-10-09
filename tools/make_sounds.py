@@ -42,6 +42,9 @@ ABILITY = OrderedDict([
     # animation picker 2026-10-09): it is most likely Deflect's block sound. Left out until your own recording of the
     # block ("for now, skip the deflect block sound"); the quick melee has no swing sound of its own for now.
     ('melee_hit', [('0829', None)]),
+    # 0829 plays with the quick-melee animation itself (1P 2434), hit or not: it is the melee's sound, so it plays
+    # on every swing (you, 2026-10-09: "the melee attack lost its sfx").
+    ('melee_swing', [('0829', None)]),
     # "sounds like deflect start"; "12 could also be that".
     ('deflect_start', [('2D18', None), ('FF72', [12])]),
     ('deflect_end', [('FF84', None)]),
@@ -99,7 +102,7 @@ RECORDED = {
                       '../recordings/cuts/rec8_block_0.00.wav'],
 }
 # Events the mod plays that you haven't found yet (reported, not an error).
-WANTED = ['melee_swing', 'dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
+WANTED = ['dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
 
 
 def picker_data():

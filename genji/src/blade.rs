@@ -389,8 +389,13 @@ impl Blade {
                 if p.kind == "swing" {
                     self.heal_owed += LIFESTEAL * game as f32;
                 }
-                // No Dragonblade hit sound was found in Overwatch's files: the melee hit stands in.
-                crate::sound::play_gain("melee_hit", if p.kind == "swing" { 0.8 } else { 1.0 });
+                // Dragonblade: no hit sound of its own was found in Overwatch's files, the melee one stands in. The
+                // quick melee's own sound (0829) already plays with its swing: a hit adds the body-hit sound.
+                if p.kind == "swing" {
+                    crate::sound::play_gain("melee_hit", 0.8);
+                } else {
+                    crate::sound::play("hit_body");
+                }
             } else if data.hp <= 0 {
                 continue;
             } else if p.frames >= CONFIRM_FRAMES {
