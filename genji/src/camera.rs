@@ -327,6 +327,7 @@ fn camera_step_inner(dt: f32) -> bool {
         deflect_cooldown_max: view.deflect.cooldown_max(),
         ult_percent: crate::ult::percent(),
         blade_left: view.blade.left(),
+        blade_duration: view.blade.duration(),
     });
     true
 }

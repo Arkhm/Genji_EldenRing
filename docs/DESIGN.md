@@ -407,7 +407,12 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
     the tile fades to grey while the number fades in.
   - **Cooldown finished (0.6 s):** tall cyan light bars down to the screen's bottom edge, a white star, a glow column,
     square particles, and the tile glowing before it turns white again.
-  - **Layout:** the tiles lean slightly (right side lower), as in the clip.
+  - **Layout:** the tiles stand upright, symmetric and the same size, per your screenshot. The slight lean in the clip
+    was the pressed tile, not the resting one.
+  - **Pressed:** the tile is pushed down, its top dropping about 10 of its 64 px within 0.12 s. It stays pushed
+    through the cooldown and pops back up when the ready flash starts.
+  - **Dragonblade time left:** a cyan bar under the crosshair that shrinks toward its middle. The clip doesn't show
+    how Overwatch does it, so this look is my own.
   - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
     cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 

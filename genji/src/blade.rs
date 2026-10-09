@@ -129,6 +129,10 @@ impl Blade {
         self.left
     }
 
+    pub fn duration(&self) -> f32 {
+        DURATION
+    }
+
     /// Timers; call every frame.
     pub fn advance(&mut self, dt: f32) {
         self.swing_wait = (self.swing_wait - dt).max(0.0);

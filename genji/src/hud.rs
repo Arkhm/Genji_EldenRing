@@ -44,8 +44,10 @@ const LIT_IN: f32 = 0.07;
 const SWIFT_LIT: f32 = 0.4;
 /// After the cyan: the tile fades to grey while the countdown number fades in (clip part 3), seconds.
 const COOLDOWN_ENTRY: f32 = 0.17;
-/// Overwatch's ability tiles lean: their right side sits lower by this share of their width (clip part 3).
-const LEAN: f32 = 0.08;
+/// Ability used: the tile is pushed down, its top dropping by this share of its height (clip part 3: about 10 of
+/// 64 px), within PRESS_IN seconds.
+const PRESS_DEPTH: f32 = 0.16;
+const PRESS_IN: f32 = 0.12;
 /// Electric ribbons around the ready ultimate (slots; each shows a ribbon for part of its cycle), and blue flames.
 const ULT_WISPS: u32 = 3;
 const ULT_FLAMES: u32 = 30;
@@ -70,6 +72,7 @@ pub struct State {
     pub deflect_cooldown_max: f32,
     pub ult_percent: u32,
     pub blade_left: Option<f32>,
+    pub blade_duration: f32,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -88,6 +91,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     deflect_cooldown_max: 1.0,
     ult_percent: 0,
     blade_left: None,
+    blade_duration: 0.0,
 });
 
 pub fn update(state: State) {
@@ -359,8 +363,8 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     // side sits lower.
     let badge = |center_x: f32, top: f32, label: &str, filled: f32, lean: f32| {
         let t = measure(r.label, label);
-        let h = 22.0 * k;
-        let w = (t[0] + 14.0 * k).max(h);
+        let h = 25.0 * k;
+        let w = (t[0] + 16.0 * k).max(h - 1.0 * k);
         let (x0, x1) = (center_x - w / 2.0, center_x + w / 2.0);
         let d = w * lean;
         tile_quad(&draw, r.white, x0, top, x1, top + h, d, alpha([20, 24, 34, 255], 0.45 * (1.0 - filled)));
@@ -501,10 +505,22 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         badge(cx, q_top, "Q", 0.0, 0.0);
     }
 
-    // ---- Bottom right: Swift Strike and Deflect tiles (clip parts 3-5: 64 px tiles leaning slightly, LSHIFT's left
-    // edge 434 px from the right edge and its top 172 px above the bottom), then the ammo panel.
+    // ---- Dragonblade time left, under the crosshair (Overwatch shows ultimate time near the reticle; its exact look
+    // is not in your clip): a cyan bar shrinking towards its middle.
+    if let Some(left) = s.blade_left {
+        let share = if s.blade_duration > 0.0 { (left / s.blade_duration).clamp(0.0, 1.0) } else { 0.0 };
+        let (mx, my) = (width / 2.0, height / 2.0 + 46.0 * k);
+        let (half, th) = (42.0 * k, 4.0 * k);
+        draw.add_rect([mx - half - 1.5 * k, my - th / 2.0 - 1.5 * k], [mx + half + 1.5 * k, my + th / 2.0 + 1.5 * k], col([10, 14, 24, 150])).filled(true).rounding(2.0 * k).build();
+        picture(&draw, r.glow_dot, [mx, my], half * 2.6 * share.max(0.2), 0.0, alpha([60, 180, 255, 255], 0.5));
+        draw.add_rect([mx - half * share, my - th / 2.0], [mx + half * share, my + th / 2.0], col(CYAN)).filled(true).rounding(1.5 * k).build();
+    }
+
+    // ---- Bottom right: Swift Strike and Deflect tiles (clip parts 3-5; your screenshot of 2026-10-08: upright,
+    // symmetric, the same size), then the ammo panel. LSHIFT's left edge is 434 px from the right edge, its top 172 px
+    // above the bottom.
     let size = 64.0 * k;
-    let drop = size * LEAN;
+    let round = 3.0 * k;
     let box_top = height - 172.0 * k;
     let mut x = width - 434.0 * k;
     for (icon, key, cooldown, max, lit, lit_since, lit_off_at, ready_at) in [
@@ -512,39 +528,59 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         (r.deflect, "E", s.deflect_cooldown, s.deflect_cooldown_max, deflect_lit, r.anim.deflect_pressed_at, r.anim.deflect_lit_off_at, r.anim.deflect_ready_at),
     ] {
         let ready = cooldown <= 0.0;
-        let (x0, x1, y0, y1) = (x, x + size, box_top, box_top + size);
-        let mid = [x0 + size / 2.0, y0 + size / 2.0 + drop / 2.0];
-        let tile = |tex: Picture, top: f32, bottom: f32, tint: [u8; 4]| tile_quad(&draw, tex, x0, top, x1, bottom, drop, tint);
         let flash_t = ready_at.map(|t0| now - t0).filter(|t| *t < READY_FLASH);
+        let entry = lit_off_at.map_or(1.0, |t| ((now - t) / COOLDOWN_ENTRY).clamp(0.0, 1.0));
+        // Pressed (clip part 3): the tile is pushed down, its top dropping by about a sixth of its height within
+        // 0.12 s while its bottom stays; it stays a little less pushed through the cooldown and pops back up as the
+        // ready flash starts (part 5).
+        let depth = if lit {
+            lit_since.map_or(1.0, |t| 1.0 - (1.0 - ((now - t) / PRESS_IN).clamp(0.0, 1.0)).powi(2))
+        } else if !ready {
+            1.0 - 0.25 * entry
+        } else {
+            flash_t.map_or(0.0, |t| 0.75 * (1.0 - t / 0.1).max(0.0))
+        };
+        let (x0, x1, y1) = (x, x + size, box_top + size);
+        let y0 = box_top + depth * PRESS_DEPTH * size;
+        let mid = [x0 + size / 2.0, (y0 + y1) / 2.0];
+        let solid = |top: f32, bottom: f32, c: [u8; 4], round_top: bool| {
+            if c[3] > 0 {
+                draw.add_rect([x0, top], [x1, bottom], col(c)).filled(true).rounding(round).round_top_left(round_top).round_top_right(round_top).build();
+            }
+        };
+        let gradient = |tint: [u8; 4]| {
+            if let Some((id, _)) = r.tile_grad {
+                draw.add_image_rounded(id, [x0, y0], [x1, y1], round).col(col(tint)).build();
+            }
+        };
         if lit {
             // Used (part 3): the tile turns saturated cyan, the emblem stays dark.
             let blend = lit_since.map_or(1.0, |t| ((now - t) / LIT_IN).clamp(0.0, 1.0));
-            tile(r.tile_grad, y0, y1, mix(WHITE, ACTIVE_CYAN, blend));
+            gradient(mix(WHITE, ACTIVE_CYAN, blend));
             picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK);
         } else if !ready {
             // Cooldown (parts 3-4): grey tile, cyan rising from the bottom, the emblem, the whole seconds left. Right
             // after the cyan, the tile fades to grey while the number fades in.
-            tile(r.white, y0, y1, COOLING_GREY);
+            solid(y0, y1, COOLING_GREY, true);
             let done = (1.0 - cooldown / max.max(0.01)).clamp(0.0, 1.0);
-            let fill_top = y1 - size * done;
-            tile(r.white, fill_top, y1, FILL_CYAN);
-            if done > 0.02 && done < 0.98 {
-                draw.add_line([x0, fill_top], [x1, fill_top + drop], col(alpha([225, 255, 255, 255], 0.8))).thickness(1.5 * k).build();
+            let fill_top = y1 - (y1 - y0) * done;
+            solid(fill_top, y1, FILL_CYAN, done > 0.97);
+            if done > 0.02 && done < 0.97 {
+                draw.add_line([x0, fill_top], [x1, fill_top], col(alpha([225, 255, 255, 255], 0.8))).thickness(1.5 * k).build();
             }
-            let entry = lit_off_at.map_or(1.0, |t| ((now - t) / COOLDOWN_ENTRY).clamp(0.0, 1.0));
             if entry < 1.0 {
-                tile(r.white, y0, y1, alpha(ACTIVE_CYAN, 1.0 - entry));
+                solid(y0, y1, alpha(ACTIVE_CYAN, 1.0 - entry), true);
             }
             picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK);
             digits(mid, r.italic_cd, entry, &format!("{}", cooldown.ceil() as u32));
         } else {
             // Ready: off-white tile, dark emblem. Just after a cooldown (part 5) the tile is luminous cyan first,
             // the emblem showing through it again from 0.1 s, white again by about 0.55 s.
-            tile(r.tile_grad, y0, y1, WHITE);
+            gradient(WHITE);
             match flash_t {
                 Some(t) => {
                     let glow = if t < 0.12 { 0.95 } else { 0.95 * (1.0 - ((t - 0.12) / 0.43).clamp(0.0, 1.0)) };
-                    tile(r.white, y0, y1, alpha([170, 245, 255, 255], glow));
+                    solid(y0, y1, alpha([170, 245, 255, 255], glow), true);
                     // The emblem shows through as light blue first, dark again by the end.
                     let back = ((t - 0.1) / 0.15).clamp(0.0, 1.0);
                     let tint = mix([110, 190, 240, 255], ICON_DARK, ((t - 0.25) / 0.3).clamp(0.0, 1.0));
@@ -553,33 +589,37 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
                 None => picture(&draw, icon, mid, size * 0.8, 0.0, ICON_DARK),
             }
         }
-        // Thin white underline, then the key badge (filled only when ready and not in use).
-        tile(r.white, y1 + 4.0 * k, y1 + 6.5 * k, alpha(WHITE, 0.95));
-        let badge_w = measure(r.label, key)[0] + 14.0 * k;
-        let badge_x = mid[0] - badge_w.max(22.0 * k) / 2.0;
-        // After a cooldown the badge fills in towards the end of the flash (clip part 5).
+        // Thin white underline, then the key badge (filled only when ready and not in use; after a cooldown it fills
+        // in towards the end of the flash, clip part 5).
+        draw.add_rect([x0, y1 + 4.0 * k], [x1, y1 + 6.5 * k], col(alpha(WHITE, 0.95))).filled(true).rounding(1.0 * k).build();
         let filled = match (ready && !lit, flash_t) {
             (false, _) => 0.0,
             (true, Some(t)) => ((t - 0.25) / 0.25).clamp(0.0, 1.0),
             (true, None) => 1.0,
         };
-        badge(mid[0], y1 + 23.0 * k + (badge_x - x0) * LEAN, key, filled, LEAN);
+        badge(x0 + size / 2.0, y1 + 23.0 * k, key, filled, 0.0);
         if let Some(t) = flash_t {
             ready_flash(&draw, r, mid, size, t, height, k);
         }
-        x += size + 12.0 * k;
+        x += size + 14.0 * k;
     }
-    // Ammo panel between two glowing cyan bars.
-    let ax = x + 14.0 * k;
+    // Ammo panel (your screenshot): see-through, between two thin glowing cyan lines with angled ends, each with a
+    // brighter, thicker stretch (top line towards the right, bottom line in the middle).
+    let ax = x + 12.0 * k;
     let aw = width - ax - 50.0 * k;
     let (pt, pb) = (height - 154.0 * k, height - 79.0 * k);
-    draw.add_rect([ax, pt], [ax + aw, pb], col([20, 24, 34, 90])).filled(true).build();
-    for y in [pt, pb] {
-        for (th, a) in [(9.0, 0.15), (5.0, 0.35), (2.5, 1.0)] {
+    draw.add_rect([ax, pt], [ax + aw, pb], col([255, 255, 255, 14])).filled(true).build();
+    for (y, from, to) in [(pt, 0.55, 0.95), (pb, 0.45, 0.78)] {
+        let inward = if y == pt { 6.0 * k } else { -6.0 * k };
+        for (th, a) in [(8.0, 0.15), (4.0, 0.35), (2.0, 1.0)] {
             draw.add_line([ax + 6.0 * k, y], [ax + aw - 6.0 * k, y], col(alpha(CYAN, a))).thickness(th * k).build();
         }
-        draw.add_line([ax, y + if y == pt { 6.0 } else { -6.0 } * k], [ax + 6.0 * k, y], col(CYAN)).thickness(2.0 * k).build();
-        draw.add_line([ax + aw - 6.0 * k, y], [ax + aw, y + if y == pt { 6.0 } else { -6.0 } * k], col(CYAN)).thickness(2.0 * k).build();
+        let (sx0, sx1) = (ax + aw * from, ax + aw * to);
+        for (th, a) in [(12.0, 0.2), (4.5, 1.0)] {
+            draw.add_line([sx0, y], [sx1, y], col(alpha([120, 245, 255, 255], a))).thickness(th * k).build();
+        }
+        draw.add_line([ax, y + inward], [ax + 6.0 * k, y], col(CYAN)).thickness(2.0 * k).build();
+        draw.add_line([ax + aw - 6.0 * k, y], [ax + aw, y + inward], col(CYAN)).thickness(2.0 * k).build();
     }
     let mid = (pt + pb) / 2.0;
     let icon_w = 78.0 * k;

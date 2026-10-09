@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: upright tiles, the "pushed down" press, Dragonblade timer under the crosshair
+
+**Changed (`genji/src/hud.rs`):**
+- **LSHIFT/E tiles:**
+  - Upright, symmetric and the same size, with rounded corners, as in your Overwatch screenshot. My lean came from
+    misreading the clip: only the pressed tile leans.
+  - 14 px apart. The key badges are 25 px tall.
+- **Pressing LSHIFT or E:** besides turning cyan, the tile is pushed down. Its top drops about 10 of 64 px within
+  0.12 s while its bottom stays, measured on clip part 3, frames 26-34. It stays pushed slightly less through the
+  cooldown and pops back up when the ready flash starts.
+- **Dragonblade time left:** a cyan bar 46 px under the crosshair, shrinking toward its middle. `State.blade_duration`
+  and `blade.rs duration()` are back.
+- **Ammo panel:** see-through instead of dark. Each cyan line has a brighter, thicker stretch, as in your
+  screenshot.
+**Why:** You, with your Overwatch screenshot next to ours: tiles off angle, press animation missing, Dragonblade
+timer wanted.
+**Tested how:** The build passes. A mock-up of the press sequence from the same formulas was compared with the clip's
+frames (`D:\GenjiBridgeAssets\hud_ref\mock7_press.png`). Not seen in game.
+**Result:** The mock-up's press lines up with the clip. Not tested in game.
+**Still broken / not tested:**
+- In game.
+- The Dragonblade timer's look is my guess.
+- F7 (fill ult) is still in.
+**Next:** Your test.
+
 ## 2026-10-08 HUD: ultimate and ability tiles rebuilt from your analysed Overwatch clip
 
 **Changed:**
