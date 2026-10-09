@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Sound picker grouped by animation, with each animation's length
+
+**Changed:** `tools/make_sound_picker.py`:
+- The ability sounds are now grouped under the animation (Genji's move) that first plays them, first person first.
+  Each group shows the animation's length.
+- **How the lengths are read:** the `AnimationEffects` folders are named after their animations, and all 20
+  first-person ones match an `.owanimclip` file. The length is the last keyframe's frame over the frames per second,
+  read from DataTool's file format (`owm-formats/owanimclip.txt` in its source).
+- **A misread along the way:** the 127 at the start of the header is the bone count, not the frame count.
+- Example: first-person animation `2436` lasts 1.5 s and plays 4 different sounds, which fits Genji's reload.
+**Why:** You: "if they are grouped by the animations, isnt easier to check the animations then?"
+**Tested how:** 74 animations got lengths (0.1-3.9 s, believable). The page script passes a syntax check. Not opened
+in a browser by me.
+**Result:** Built.
+**Still broken / not tested:** Seeing the animations themselves needs a 3D renderer (see the answer to you).
+**Next:** Your call on rendering the animations.
+
 ## 2026-10-09 Sound picker: voice lines with their words and tagged in advance; take lengths shown
 
 **Changed:**

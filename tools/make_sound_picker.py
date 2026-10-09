@@ -11,6 +11,7 @@ Usage: python tools\\make_sound_picker.py   then open the page in your browser.
 """
 import json
 import os
+import struct
 from collections import OrderedDict
 
 RAW = r'D:\GenjiBridgeAssets\raw'
@@ -81,8 +82,47 @@ def duration(path):
     return round(samples / rate, 2) if rate else None
 
 
+def clip_length(model_dir, anim_id):
+    """(seconds, frames) of an animation, or None. Read from its .owanimclip (DataTool's format, owm-formats/
+    owanimclip.txt: u16 version x2, u32 bone count, f32 frames per second, u32 frame count, then per bone a name and
+    tracks of keyframes); the length is the last keyframe's frame over the frames per second. The AnimationEffects
+    folders are named after the animation that plays their sounds."""
+    for dirpath, _, files in os.walk(os.path.join(model_dir, 'Animations')):
+        name = anim_id + '.owanimclip'
+        if name not in files:
+            continue
+        with open(os.path.join(dirpath, name), 'rb') as fh:
+            data = fh.read()
+        bones = int.from_bytes(data[4:8], 'little')
+        fps = struct.unpack('<f', data[8:12])[0]
+        at, last = 16, 0
+        try:
+            for _ in range(bones):
+                # .NET string: 7-bit encoded length, then UTF-8.
+                length, shift = 0, 0
+                while True:
+                    b = data[at]; at += 1
+                    length |= (b & 0x7F) << shift; shift += 7
+                    if b < 0x80:
+                        break
+                at += length
+                tracks = int.from_bytes(data[at:at + 4], 'little'); at += 4
+                for _ in range(tracks):
+                    keys = int.from_bytes(data[at + 4:at + 8], 'little')
+                    comps = int.from_bytes(data[at + 8:at + 12], 'little')
+                    at += 12
+                    for _ in range(keys):
+                        last = max(last, int.from_bytes(data[at:at + 4], 'little'))
+                        at += 4 + 4 * comps
+        except IndexError:
+            return None
+        return (round(last / fps, 2), last) if fps > 0 else None
+    return None
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    anims = {}  # "1P 000000002434" -> [seconds, frames]
     events = OrderedDict()  # .02C folder name -> {files: [...], seen: [...]}
     seen_files = set()
     for label, root in SOURCES:
@@ -95,6 +135,10 @@ def main():
             event = os.path.basename(dirpath)
             parts = os.path.relpath(dirpath, root).split(os.sep)
             where = f'{label} {parts[0].replace(".00D", "")}' if parts and parts[0] not in ('Sounds',) else label
+            if root.endswith('AnimationEffects') and where not in anims and parts:
+                length = clip_length(os.path.dirname(root), parts[0])
+                if length:
+                    anims[where] = list(length)
             e = events.setdefault(event, {'files': [], 'seen': []})
             if where not in e['seen']:
                 e['seen'].append(where)
@@ -131,6 +175,7 @@ def main():
     data = {
         'events': [{'id': k, 'files': v['files'], 'secs': v.get('secs', []), 'seen': v['seen']} for k, v in events.items()],
         'defaults': defaults,
+        'anims': anims,
         'voice': [{'folder': k, 'files': v} for k, v in voice.items()],
         'tags': TAGS,
     }
@@ -230,8 +275,23 @@ function tagSelect(key, onchange) {
 const main = document.getElementById('main');
 const rows = [];
 function section(title) { const h = document.createElement('h2'); h.textContent = title; main.appendChild(h); }
-section('Ability and movement sounds (' + DATA.events.length + ' events; first-person first)');
+section('Ability and movement sounds (' + DATA.events.length + ' events), grouped by the animation that plays them');
+const intro = document.createElement('p'); intro.className = 'help';
+intro.textContent = 'Each group is one animation (one move) of Genji, first person (1P) first, with how long it lasts. ' +
+  'A short 1P animation with 3 sounds is likely a throw; a ~1.5 s one with clicks a reload; a 2 s one Deflect, and so on.';
+main.appendChild(intro);
+let lastGroup = null;
 for (const ev of DATA.events) {
+  const group = ev.seen[0] || '';
+  if (group !== lastGroup) {
+    lastGroup = group;
+    const g = document.createElement('h2'); g.style.color = '#c9b8ff'; g.style.fontSize = '14px';
+    const len = (DATA.anims || {})[group];
+    const count = DATA.events.filter(e => (e.seen[0] || '') === group).length;
+    g.textContent = (group.startsWith('1P') ? 'First-person animation ' : group.startsWith('3P') ? 'Third-person animation ' : '') +
+      group.replace(/^(1P|3P) /, '') + (len ? ' \u00B7 ' + len[0] + ' s (' + len[1] + ' frames)' : '') + ' \u00B7 ' + count + ' sound(s)';
+    main.appendChild(g); rows.push({ el: g, key: null, text: group });
+  }
   const card = document.createElement('div'); card.className = 'card';
   const meta = document.createElement('div'); meta.className = 'meta';
   meta.innerHTML = `<b>${ev.id.replace('.02C', '')}</b><span>${ev.files.length} take(s) - ${ev.seen.join(', ')}</span>`;
@@ -265,6 +325,7 @@ function update() {
   const filter = document.getElementById('filter').value, find = document.getElementById('find').value.toLowerCase();
   let shown = 0;
   for (const r of rows) {
+    if (r.key === null) { r.el.style.display = ''; continue; }
     const done = !!picks[r.key] || !!notes[r.key];
     const ok = (filter === 'all' || (filter === 'tagged') === done) && (!find || r.text.toLowerCase().includes(find) || (notes[r.key] || '').toLowerCase().includes(find));
     r.el.style.display = ok ? '' : 'none'; if (ok) shown++;
