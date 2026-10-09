@@ -3,6 +3,35 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Sound picker: voice lines with their words and tagged in advance; take lengths shown
+
+**Changed:**
+- **Research** (your request: an easier way to identify the sounds):
+  - **Community lists:** none maps Genji's ability sounds. The old Overwatch Item Tracker sound lists (2017-2018) match
+    none of our 2,144 sound IDs, and an OWLib issue confirms ability sounds are only grouped by the animations that
+    reference them.
+  - **DataTool's subtitles:** they cover voice. `list-subtitles-real` showed Genji's voice set `0x54` has 1,262
+    subtitled lines. `extract-hero-voice ... Genji --subtitles-with-sounds` (offline, read-only on the old Overwatch
+    build) put all 1,366 voice files, named after their words, into `D:\GenjiBridgeAssets\voice_subs`.
+- `tools/make_sound_picker.py`:
+  - **Voice lines** now come from those named files: 276 lines in 19 situation folders. From `Unknown` it keeps only
+    effort sounds: "(Swift Strike)", "(exertion)", "(jumping sound)" and similar.
+  - **Tagged in advance** (178, applied once; your own changes are kept):
+    - ult line "(Japanese) Take the blade of the dragon god!" (2 takes);
+    - "My ultimate is ready" / "My blade is ready to be unleashed";
+    - "charging" / "almost ready";
+    - pain (19), death (6), eliminations (90), healing (3), respawn (27), jump grunts (3), melee shouts (9), dash
+      shouts (15).
+  - **New tags:** voice dash, voice melee.
+  - **Ability sound takes** now show their length, read from each file's header.
+**Why:** You: "check on the internet if there's a way to identify these audios easier".
+**Tested how:** The page data was checked: all voice files exist, the advance tags are right for the Ultimate folder,
+and the take lengths read; the page script passes a syntax check. Not opened in a browser by me.
+**Result:** Voice is identified without listening. Ability sounds still need your ears; the lengths help.
+**Still broken / not tested:** The page in your browser. Voice lines you tagged before this change were under the
+old file paths, so those tags don't carry over (the advance tags cover them).
+**Next:** You finish the ability sounds and export; then step 11b.
+
 ## 2026-10-09 Step 11a: sound picker, to find Genji's sounds by ear
 
 **Changed:**

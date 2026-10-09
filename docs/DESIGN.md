@@ -502,7 +502,8 @@ You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's sty
 
 ## 5j. Step 11 in detail: sound and voice (plan 2026-10-09)
 
-**What we have:** 3,572 Overwatch sound files (Ogg) from your extraction in `D:\GenjiBridgeAssetsaw`.
+**What we have:** 3,572 Overwatch sound files (Ogg) from your extraction in `D:\GenjiBridgeAssets
+aw`.
 - **Voice lines:** 1,795, sorted by situation in `HeroVoice\Genji\<situation>` (Ultimate, Pain, Death, Elimination,
   Melee, Jumping, Respawn and so on), but the lines inside each folder are unnamed.
 - **Ability and movement sounds:** unnamed, grouped by the animation or effect that plays them:
@@ -511,6 +512,14 @@ You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's sty
   - `Effects` (93 effects);
   - `Entities\Gameplay3P\Effects` (88 effects).
   Nothing in the files says which is the shuriken throw or the dash, so they have to be found by ear.
+- **Voice lines with their words** (found 2026-10-09). DataTool's own `list-subtitles-real` showed the game keeps
+  subtitles for Genji's lines (voice set `0x54`).
+  - Re-extracting with `extract-hero-voice <out> Genji --subtitles-with-sounds` (into
+    `D:\GenjiBridgeAssets\voice_subs`) names each file after its words, for example `00000001FEDD.0B2-(Japanese)_
+    Take the blade of the dragon god!.ogg` ("Ryūjin no ken wo kurae!").
+  - This finds the ult line, "My ultimate is ready/charging", pain, death, eliminations, healing, respawn, and the
+    "(Swift Strike)" shouts without listening.
+  - Ability sounds have no subtitles; those stay "by ear".
 
 **11a. Sound picker (find the sounds):**
 - `tools\make_sound_picker.py` writes a local page, `D:\GenjiBridgeAssets\sound_picker\index.html`. It lists every

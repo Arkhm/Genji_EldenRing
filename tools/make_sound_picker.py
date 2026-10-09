@@ -2,8 +2,10 @@
 which is which by ear and tag them. Output: D:\\GenjiBridgeAssets\\sound_picker\\index.html (outside the repository).
 
 Overwatch's sounds come unnamed. Each `.02C` folder is one sound event (its files are takes of the same sound), found
-under the animations and effects that play it; the picker lists every event once, with where it appears. Voice lines
-are listed per file, by DataTool's situation folders.
+under the animations and effects that play it; the picker lists every event once, with where it appears and how long
+each take is. Voice lines come from a second DataTool extraction with subtitles (2026-10-09:
+`extract-hero-voice ... --subtitles-with-sounds` into D:\\GenjiBridgeAssets\\voice_subs), so each file name carries its
+words; the obvious ones are tagged in advance (you can change them).
 
 Usage: python tools\\make_sound_picker.py   then open the page in your browser.
 """
@@ -13,7 +15,7 @@ from collections import OrderedDict
 
 RAW = r'D:\GenjiBridgeAssets\raw'
 SKIN = os.path.join(RAW, r'Heroes\Genji\Skin\Overwatch\Overwatch')
-VOICE = os.path.join(RAW, r'HeroVoice\Genji')
+VOICE = r'D:\GenjiBridgeAssets\voice_subs\HeroVoice\Genji'
 OUT = r'D:\GenjiBridgeAssets\sound_picker'
 # The first-person model's animations first (what you hear as Genji), then third person, then effects.
 SOURCES = [
@@ -25,8 +27,26 @@ SOURCES = [
     ('Other', SKIN),
 ]
 VOICE_FOLDERS = ['Ultimate', 'Pain', 'Death', 'Elimination', 'Melee', 'MeleeEnemyKilledRemark', 'Jumping', 'JumpEnd',
-                 'Health', 'HealthPack', 'Healing', 'Respawn', 'KillStreak', 'Multikill', 'Scream', 'ScreamFall',
-                 'Stagger', 'Knockdown', 'OnFire', 'Thanks', 'Hello', 'Laugh']
+                 'HealthPack', 'Healing', 'Respawn', 'KillStreak', 'Multikill', 'Scream', 'ScreamFall', 'Stagger',
+                 'Knockdown', 'OnFire', 'Unknown']
+# From `Unknown`, only the effort sounds (it also holds hundreds of unrelated lines).
+UNKNOWN_KEEP = ('(Swift Strike)', 'Swift strike!', '(exertion)', '(jumping sound)', '(grunts)', '(inhale)', '(exhale)')
+# Tags given in advance, by (folder path start, words in the file name): the first match wins.
+VOICE_DEFAULTS = [
+    ('Ultimate/Ready', '', 'voice_ult_ready'),
+    ('Ultimate/Charging', '', 'voice_ult_charging'),
+    ('Ultimate/AlmostReady', '', 'voice_ult_charging'),
+    ('Ultimate', 'blade of the dragon god', 'voice_ult_activate'),
+    ('Pain', '', 'voice_pain'),
+    ('Death', '', 'voice_death'),
+    ('Elimination', '', 'voice_elimination'),
+    ('HealthPack', '', 'voice_healing'),
+    ('Respawn', '', 'voice_respawn'),
+    ('Jumping', '', 'voice_jump'),
+    ('Melee', '(shouts)', 'voice_melee'),
+    ('Unknown', 'Swift Strike', 'voice_dash'),
+    ('Unknown', 'Swift strike', 'voice_dash'),
+]
 # The tags (events the mod plays). Keep in step with genji/src/sound.rs.
 TAGS = OrderedDict([
     ('Shuriken', ['shuriken_throw', 'fan_throw', 'shuriken_hit_enemy', 'shuriken_hit_wall', 'reload']),
@@ -37,12 +57,28 @@ TAGS = OrderedDict([
     ('Movement', ['jump', 'double_jump', 'wall_climb', 'land', 'footstep']),
     ('Ultimate', ['ult_ready_sfx']),
     ('Voice', ['voice_ult_activate', 'voice_ult_ready', 'voice_ult_charging', 'voice_pain', 'voice_death',
-               'voice_elimination', 'voice_healing', 'voice_jump', 'voice_respawn']),
+               'voice_elimination', 'voice_healing', 'voice_jump', 'voice_respawn', 'voice_dash', 'voice_melee']),
 ])
 
 
 def rel(path):
     return os.path.relpath(path, OUT).replace('\\', '/')
+
+
+def duration(path):
+    """Seconds, from the Ogg Vorbis header (sample rate) and the last page's sample count; None if unreadable."""
+    try:
+        with open(path, 'rb') as fh:
+            data = fh.read()
+    except OSError:
+        return None
+    i = data.find(b'\x01vorbis')
+    last = data.rfind(b'OggS')
+    if i < 0 or last < 0:
+        return None
+    rate = int.from_bytes(data[i + 12:i + 16], 'little')
+    samples = int.from_bytes(data[last + 6:last + 14], 'little')
+    return round(samples / rate, 2) if rate else None
 
 
 def main():
@@ -67,19 +103,34 @@ def main():
                     continue
                 seen_files.add(f)
                 e['files'].append(rel(os.path.join(dirpath, f)))
+                e.setdefault('secs', []).append(duration(os.path.join(dirpath, f)))
     events = OrderedDict((k, v) for k, v in events.items() if v['files'])
     voice = OrderedDict()
+    defaults = {}
     for folder in VOICE_FOLDERS:
         d = os.path.join(VOICE, folder)
         if not os.path.isdir(d):
             continue
         files = []
         for dirpath, _, fs in os.walk(d):
-            files += [rel(os.path.join(dirpath, f)) for f in sorted(fs) if f.lower().endswith('.ogg')]
+            for f in sorted(fs):
+                if not f.lower().endswith('.ogg'):
+                    continue
+                if folder == 'Unknown' and not any(k in f for k in UNKNOWN_KEEP):
+                    continue
+                path = rel(os.path.join(dirpath, f))
+                sub = os.path.relpath(dirpath, VOICE).replace('\\', '/')
+                words = f.split('-', 1)[1][:-4] if '-' in f else f
+                files.append({'path': path, 'words': words, 'where': sub})
+                for start, needle, tag in VOICE_DEFAULTS:
+                    if sub.startswith(start) and needle in f:
+                        defaults['file:' + path] = tag
+                        break
         if files:
             voice[folder] = files
     data = {
-        'events': [{'id': k, 'files': v['files'], 'seen': v['seen']} for k, v in events.items()],
+        'events': [{'id': k, 'files': v['files'], 'secs': v.get('secs', []), 'seen': v['seen']} for k, v in events.items()],
+        'defaults': defaults,
         'voice': [{'folder': k, 'files': v} for k, v in voice.items()],
         'tags': TAGS,
     }
@@ -87,7 +138,7 @@ def main():
     with open(os.path.join(OUT, 'index.html'), 'w', encoding='utf-8') as fh:
         fh.write(html)
     print(f'{len(events)} sound events ({sum(len(v["files"]) for v in events.values())} files), '
-          f'{sum(len(v) for v in voice.values())} voice lines in {len(voice)} folders -> {OUT}\\index.html')
+          f'{sum(len(v) for v in voice.values())} voice lines in {len(voice)} folders ({len(defaults)} tagged in advance) -> {OUT}\\index.html')
 
 
 PAGE = r'''<!doctype html>
@@ -145,6 +196,11 @@ const DATA = /*DATA*/;
 const KEY = 'genji-sound-picks-v1';
 let picks = {};
 try { picks = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { picks = {}; }
+// Voice tags given in advance: applied once each (a change of yours is kept).
+let applied = {};
+try { applied = JSON.parse(localStorage.getItem(KEY + '-defaults') || '{}'); } catch (e) { applied = {}; }
+for (const [k, t] of Object.entries(DATA.defaults || {})) if (!applied[k]) { if (!picks[k]) picks[k] = t; applied[k] = 1; }
+try { localStorage.setItem(KEY + '-defaults', JSON.stringify(applied)); localStorage.setItem(KEY, JSON.stringify(picks)); } catch (e) {}
 const NOTES = 'genji-sound-notes-v1';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(NOTES) || '{}'); } catch (e) { notes = {}; }
@@ -180,24 +236,29 @@ for (const ev of DATA.events) {
   const meta = document.createElement('div'); meta.className = 'meta';
   meta.innerHTML = `<b>${ev.id.replace('.02C', '')}</b><span>${ev.files.length} take(s) - ${ev.seen.join(', ')}</span>`;
   const takes = document.createElement('div'); takes.className = 'takes';
-  ev.files.forEach((f, i) => { const b = document.createElement('button'); b.textContent = '\u25B6 ' + (i + 1);
+  ev.files.forEach((f, i) => { const b = document.createElement('button');
+    const secs = (ev.secs || [])[i]; b.textContent = '\u25B6 ' + (i + 1) + (secs != null ? ' \u00B7 ' + secs + 's' : '');
     b.title = f; b.onclick = () => play(f, b); takes.appendChild(b); });
   const key = 'event:' + ev.id;
   const mark = () => { card.classList.toggle('tagged', !!picks[key]); card.classList.toggle('noted', !!notes[key]); };
   card.append(meta, takes, tagSelect(key, mark), noteBox(key, mark)); mark();
   main.appendChild(card); rows.push({ el: card, key, text: ev.id + ' ' + ev.seen.join(' ') });
 }
-section('Voice lines (by situation)');
+section('Voice lines (with their words; the obvious ones are tagged already)');
 for (const vf of DATA.voice) {
   const h = document.createElement('h2'); h.style.color = '#ffd36b'; h.textContent = vf.folder + ' (' + vf.files.length + ')'; main.appendChild(h);
-  vf.files.forEach((f, i) => {
+  vf.files.forEach((v, i) => {
+    const f = v.path;
     const row = document.createElement('div'); row.className = 'voice-row';
     const b = document.createElement('button'); b.textContent = '\u25B6 ' + (i + 1); b.onclick = () => play(f, b);
-    const name = document.createElement('span'); name.className = 'count'; name.textContent = f.split('/').pop();
+    const name = document.createElement('span');
+    const words = document.createElement('b'); words.textContent = v.words;
+    const where = document.createElement('span'); where.className = 'count'; where.textContent = '  ' + v.where;
+    name.append(words, where);
     const key = 'file:' + f;
     const mark = () => { row.classList.toggle('tagged', !!picks[key]); row.classList.toggle('noted', !!notes[key]); };
     row.append(b, name, tagSelect(key, mark), noteBox(key, mark)); mark();
-    main.appendChild(row); rows.push({ el: row, key, text: vf.folder + ' ' + f });
+    main.appendChild(row); rows.push({ el: row, key, text: vf.folder + ' ' + v.where + ' ' + v.words });
   });
 }
 function update() {
