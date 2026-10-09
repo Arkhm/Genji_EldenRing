@@ -68,7 +68,7 @@ struct ArmsTexture {
     size: (u32, u32),
     /// The last picture copied in (arms.rs numbers them).
     seq: u64,
-    /// A picture is in the texture and first person is showing.
+    /// A picture is in the texture.
     ready: bool,
     copies: u32,
     copy_time: std::time::Duration,
@@ -123,8 +123,7 @@ fn copy_arms(a: &mut ArmsTexture, render_context: &mut dyn RenderContext) {
         return;
     };
     if !VISIBLE.load(Ordering::Relaxed) {
-        a.ready = false;
-        return;
+        return; // the texture keeps its picture for when first person shows again
     }
     let Some((seq, rgba)) = crate::arms::latest(a.seq) else {
         return;

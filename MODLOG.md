@@ -3,6 +3,35 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: fix the memory leak that hid them and crashed the game
+
+**Changed:**
+- **New `tools/patch_hudhook.py`:** makes a fixed copy of the overlay library (hudhook 0.9.3, MIT) in `third_party/`,
+  which is never committed, from Rust's download cache.
+  - `genji/Cargo.toml` uses that copy (`[patch.crates-io]`), and `tools/build.ps1` runs the script before building.
+  - The fix: the texture update now makes one upload buffer per texture and reuses it, and moves the texture back to
+    the copy state before each later update.
+- `arms.rs`: a pose asked for again isn't drawn or copied again. The resting pose is copied once, not 60 times a
+  second.
+- `crosshair.rs`: the texture keeps its picture while first person is hidden, so the arms are back at once after a
+  menu.
+**Why:** Your test of 10c: "after the deflect ended, the arm disappeared", "when I tried to use the blade, it didn't
+show up either", "when I opened the game's menu, the game crashed". Your log:
+- Your game runs at 3440x1440, so the arms' picture is 1720x720 (5 MB).
+- Copying it into the texture took 7-8 ms every frame, inside the game's frame (frame rate 43-51).
+- At 140 s: "texture copy failed ... Not enough memory resources", and the arms were hidden for the rest of the
+  session (it came right after a Deflect, by chance).
+- The crash came at the menu after that, when the game needed memory.
+- hudhook's `replace_texture` made a new 5 MB upload buffer on every call and never released it (its own comment says
+  the leak is "necessary"). That's about 300 MB a second at 60 frames.
+**Tested how:** `cargo build --release` (with the fixed copy) and `cargo test --release` pass (44 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Whether the copy is now fast (logged: `ARMS overlay:` lines).
+- Whether memory stays flat when the picture changes every frame. That only happens in 10d, with animations.
+- Drawing at 1720x720 took 9-10 ms on average on our thread (fine: the game doesn't wait for it).
+**Next:** Your test; the Deflect block picker.
+
 ## 2026-10-09 Deflect block sound from your new recordings
 
 **Changed:**

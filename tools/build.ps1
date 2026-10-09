@@ -2,8 +2,13 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 
+# Our fixed copy of the overlay library (third_party\, never committed): made once from Rust's download cache.
 Push-Location "$root\genji"
 try {
+    cargo fetch
+    if ($LASTEXITCODE -ne 0) { throw "cargo fetch failed" }
+    python "$root\tools\patch_hudhook.py"
+    if ($LASTEXITCODE -ne 0) { throw "tools\patch_hudhook.py failed" }
     cargo build --release
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 } finally {

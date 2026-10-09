@@ -3,6 +3,8 @@
 //! the overlay (crosshair.rs) copies each finished picture into a texture and stretches it over the screen, under
 //! the HUD and the crosshair. The game thread never waits for the drawing.
 //!
+//! The same pose asked for again isn't drawn again (a resting pose stays in the texture as it is).
+//!
 //! Logged every few seconds: pictures drawn, average and longest drawing time (ARMS lines); the overlay logs its copy
 //! time the same way.
 
@@ -69,6 +71,8 @@ fn run(w: usize, h: usize) {
     let mut missing: Vec<&'static str> = Vec::new();
     let (mut drawn, mut total, mut longest, mut since) = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
     let mut first = true;
+    // The pose last drawn: the same pose again (a resting pose, every frame) is neither drawn nor copied again.
+    let mut last: Option<Request> = None;
     loop {
         let req = {
             let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
@@ -79,6 +83,9 @@ fn run(w: usize, h: usize) {
                 s = WAKE.wait(s).unwrap_or_else(|e| e.into_inner());
             }
         };
+        if last == Some(req) {
+            continue;
+        }
         let Some(anim) = vm.find(req.role) else {
             if !missing.contains(&req.role) {
                 glog!("ARMS", "no animation \"{}\" in the export; nothing drawn for it", req.role);
@@ -92,6 +99,7 @@ fn run(w: usize, h: usize) {
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();
+        last = Some(req);
         {
             let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
             s.frame = Some(frame);

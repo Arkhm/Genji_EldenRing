@@ -24,3 +24,8 @@ windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Memo
 [profile.release]
 debug = 1          # line numbers in crash backtraces
 
+
+# Our fixed copy of hudhook (tools/patch_hudhook.py makes it in third_party/, which is never committed): its texture
+# update leaked a 5 MB buffer per call, which crashed the game once the arms' picture was updated every frame.
+[patch.crates-io]
+hudhook = { path = "../third_party/hudhook-0.9.3" }
