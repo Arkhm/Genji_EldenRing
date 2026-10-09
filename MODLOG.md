@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Your Deflect block picks; Dragonblade arms sit lower (cut end hidden)
+
+**Changed:**
+- Your block picks (`block_picks.json`: rec7 at 0.56 and 1.19 s, rec8 at 0.51, 0.66 and 0.81 s) are copied to
+  `D:/GenjiBridgeAssets`. `make_sounds.py` re-run: `deflect_block` is now exactly those 5.
+- `arms.rs` and `camera.rs`: in the Dragonblade stance the arms are drawn 6 cm lower (`BLADE_DROP`). They slide down and
+  back up over a quarter of a second when the stance changes.
+- `viewmodel.rs`: the camera (eye, field of view) is part of the picture being drawn. Two comparison tests, run only
+  on request:
+  - `cameras`: eye positions and fields of view for the Dragonblade and resting poses;
+  - `fov_versus_overwatch`: our throw at four fields of view next to your Overwatch frame.
+**Why:** Your test: the block picks, "now it's good", and the screenshot: "his left arm is sticking out a little of the
+screen". On your 3440x1440 screen the left arm's cut end (the model stops there) showed at the bottom in the
+Dragonblade pose.
+**Tested how:** Pictures at your screen's shape:
+- **Field of view:** our throw at 70.5 degrees vertical (your 103) has the same hand size and nearly the same place as
+  your Overwatch frame from the kill clip. So the field of view stays; drawing the arms bigger (60 degrees hides the
+  cut end too) would no longer match.
+- **Eye at the model's camera socket** (0, 0, 1.616): the cut end still shows.
+- **Arms lower:** at 2 cm the cut end shows, at 4 cm a sliver, at 6 cm nothing. Lowering every stance would push the
+  resting arm away from where Overwatch has it, so only Dragonblade is lowered.
+- `cargo test --release` passes (44 tests).
+- Your log of the leak-fix test: no memory errors, copies 3-4 ms, only when the pose changed.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- During the quarter-second slide the picture changes every frame. That's the first real test of the copy fix with
+  frame-by-frame updates.
+- Other Dragonblade animations (10d) may show the cut end in other places.
+**Next:** Your check, then 10d.
+
 ## 2026-10-09 Deflect block picker
 
 **Changed:**

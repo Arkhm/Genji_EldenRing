@@ -187,13 +187,16 @@ impl Viewmodel {
 pub struct Canvas {
     pub w: usize,
     pub h: usize,
+    /// The camera: the eye in the model's space and the vertical field of view (radians).
+    pub eye: Vec3,
+    pub vfov: f32,
     pub rgba: Vec<u8>,
     depth: Vec<f32>,
 }
 
 impl Canvas {
     pub fn new(w: usize, h: usize) -> Self {
-        Self { w, h, rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
+        Self { w, h, eye: EYE, vfov: vertical_fov(), rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
     }
 
     pub fn clear(&mut self) {
@@ -224,8 +227,8 @@ fn rotate(m: &Mat, n: Vec3) -> Vec3 {
 
 /// Model space -> view space (x right, y up, z forward from the eye). Looking along -Y with Z up, the right hand
 /// side is -X (the first preview had +X and came out mirrored).
-fn to_view(p: Vec3) -> Vec3 {
-    let d = p - EYE;
+fn to_view(p: Vec3, eye: Vec3) -> Vec3 {
+    let d = p - eye;
     Vec3::new(-d.x, d.z, -d.y)
 }
 
@@ -268,7 +271,7 @@ struct Tri {
     y1: usize,
 }
 
-fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize) -> Prepared {
+fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f32) -> Prepared {
     let m = &vm.model;
     let mut view = Vec::with_capacity(m.pos.len());
     let mut nrm = Vec::with_capacity(m.pos.len());
@@ -282,12 +285,12 @@ fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize) -> Prepared {
                 n += wgt * rotate(mat, m.nrm[i]);
             }
         }
-        view.push(to_view(p));
+        view.push(to_view(p, eye));
         let n = n.normalize_or_zero();
         nrm.push(Vec3::new(-n.x, n.z, -n.y));
     }
     let (wf, hf) = (w as f32, h as f32);
-    let focal = 1.0 / (vertical_fov() / 2.0).tan();
+    let focal = 1.0 / (vfov / 2.0).tan();
     let aspect = wf / hf;
     let screen = |v: Vec3| Vec2::new((v.x / v.z * focal / aspect * 0.5 + 0.5) * wf, (0.5 - v.y / v.z * focal * 0.5) * hf);
     let (mut tris, mut culled) = (Vec::new(), 0);
@@ -385,7 +388,7 @@ const BAND_ROWS: usize = 32;
 /// threads at once.
 pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas, threads: usize) -> Stats {
     let (w, h) = (canvas.w, canvas.h);
-    let p = prepare(vm, pose, w, h);
+    let p = prepare(vm, pose, w, h, canvas.eye, canvas.vfov);
     let mut bands: Vec<Band> = canvas
         .rgba
         .chunks_mut(BAND_ROWS * w * 4)
@@ -507,6 +510,55 @@ mod tests {
         println!("blade_idle 1290x540: 1 thread {t1:?}, 4 threads {t4:?}");
         let alpha = |c: &Canvas| c.rgba.chunks_exact(4).map(|p| p[3]).collect::<Vec<_>>();
         assert_eq!(alpha(&one), alpha(&four));
+    }
+
+    /// Camera candidates for the Dragonblade pose at your screen's shape (3440x1440, drawn at half size), to find where
+    /// Overwatch's camera is (your test of 2026-10-09: the left arm's cut end showed at the bottom). Writes
+    /// camera_<name>.png. Run: cargo test --release cameras -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn cameras() {
+        let dir = Path::new(DIR);
+        let vm = Viewmodel::load(dir).unwrap();
+        let ow = vertical_fov();
+        for (name, eye, vfov) in [
+            ("now", EYE, ow),
+            ("down_2cm", EYE + Vec3::Z * 0.02, ow),
+            ("down_4cm", EYE + Vec3::Z * 0.04, ow),
+            ("down_6cm", EYE + Vec3::Z * 0.06, ow),
+            ("socket_01AC", Vec3::new(0.0, 0.0, 1.616), ow),
+            ("socket_0012", Vec3::new(0.0, 0.003, 1.621), ow),
+            ("now_fov60", EYE, 60f32.to_radians()),
+            ("socket_01AC_fov60", Vec3::new(0.0, 0.0, 1.616), 60f32.to_radians()),
+        ] {
+            for role in ["blade_idle", "idle"] {
+                let pose = vm.pose(vm.find(role).unwrap(), 0.0, false);
+                let mut canvas = Canvas::new(1720, 720);
+                canvas.eye = eye;
+                canvas.vfov = vfov;
+                draw(&vm, &pose, &mut canvas, 4);
+                write_png(&dir.join(format!("camera_{role}_{name}.png")), &canvas, [120, 128, 140]);
+            }
+        }
+    }
+
+    /// Our throw at several times and fields of view, next to your Overwatch frame (kill clip, during a throw), at
+    /// its 2580x1080 shape: which field of view does Overwatch draw the arms with? Writes fov_throw_<deg>_<ms>.png.
+    #[test]
+    #[ignore]
+    fn fov_versus_overwatch() {
+        let dir = Path::new(DIR);
+        let vm = Viewmodel::load(dir).unwrap();
+        let throw = vm.find("throw").unwrap();
+        for deg in [70.5f32, 60.0, 50.0, 42.0] {
+            for ms in [0, 50, 100, 150, 200, 300] {
+                let pose = vm.pose(throw, ms as f32 / 1000.0, false);
+                let mut canvas = Canvas::new(1290, 540);
+                canvas.vfov = deg.to_radians();
+                draw(&vm, &pose, &mut canvas, 4);
+                write_png(&dir.join(format!("fov_throw_{deg}_{ms}.png")), &canvas, [120, 128, 140]);
+            }
+        }
     }
 
     #[test]

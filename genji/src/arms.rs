@@ -25,7 +25,13 @@ struct Request {
     role: &'static str,
     t: f32,
     looping: bool,
+    /// Metres the arms are drawn lower (the camera raised): see BLADE_DROP.
+    drop: f32,
 }
+
+/// The Dragonblade stance is drawn this much lower (your test of 2026-10-09: on your 3440x1440 screen the left arm's
+/// cut end showed at the bottom; at 4 cm a sliver still shows, at 6 cm none). camera.rs slides it in and out.
+pub const BLADE_DROP: f32 = 0.06;
 
 struct Shared {
     request: Option<Request>,
@@ -44,10 +50,11 @@ pub fn start(w: usize, h: usize) {
     }
 }
 
-/// Asks for the arms in animation `role` at `t` seconds (game thread, every frame while first person shows).
-pub fn request(role: &'static str, t: f32, looping: bool) {
+/// Asks for the arms in animation `role` at `t` seconds, drawn `drop` metres lower (game thread, every frame while
+/// first person shows).
+pub fn request(role: &'static str, t: f32, looping: bool, drop: f32) {
     let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
-    s.request = Some(Request { role, t, looping });
+    s.request = Some(Request { role, t, looping, drop });
     WAKE.notify_one();
 }
 
@@ -96,6 +103,7 @@ fn run(w: usize, h: usize) {
         let started = Instant::now();
         let pose = vm.pose(anim, req.t, req.looping);
         canvas.clear();
+        canvas.eye = viewmodel::EYE + glam::Vec3::Z * req.drop;
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();

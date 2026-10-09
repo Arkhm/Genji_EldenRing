@@ -84,6 +84,8 @@ struct View {
     /// Last frame: the game played its own animation (a hit reaction after a drop) / our controller drove.
     reacting: bool,
     in_control: bool,
+    /// How much lower the arms are drawn right now (metres, arms.rs BLADE_DROP).
+    arms_drop: f32,
     /// The Tarnished's own voice, silenced while Genji input is captured (game_voice.rs).
     game_voice: crate::game_voice::GameVoice,
 }
@@ -455,7 +457,11 @@ fn camera_step_inner(dt: f32) -> bool {
     } else {
         "idle"
     };
-    crate::arms::request(stance, 0.0, false);
+    // Dragonblade's stance sits lower (arms.rs, BLADE_DROP), sliding in and out over a quarter of a second.
+    let drop_to = if stance == "blade_idle" { crate::arms::BLADE_DROP } else { 0.0 };
+    let step = crate::arms::BLADE_DROP * dt / 0.25;
+    view.arms_drop = if view.arms_drop < drop_to { (view.arms_drop + step).min(drop_to) } else { (view.arms_drop - step).max(drop_to) };
+    crate::arms::request(stance, 0.0, false, view.arms_drop);
 
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
     let (enemies, enemy_count) =
