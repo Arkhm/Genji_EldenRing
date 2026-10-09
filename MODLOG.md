@@ -3,6 +3,28 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Third sound export: your recordings in, Deflect block left out
+
+**Changed:** `tools/make_sounds.py`:
+- **Your third export,** copied to `D:\GenjiBridgeAssets\sound_picks.json`:
+  - dash: 3 recorded takes (rec3 at 2.92, 7.39, 10.31 s);
+  - footsteps: 22;
+  - Deflect start and end: 2 each;
+  - cooldown ready: 3;
+  - ult ready: 1.
+- **Deflect block** is dropped on purpose (your call: too much background noise).
+- **Recordings win:** where you recorded an event, the recordings replace the sounds from Overwatch's files for it
+  (Deflect start and end).
+- **Result:** 54 events, 373 files in `D:\GenjiBridgeAssets\sound`.
+**Why:** You: "lets just not use the deflect actual block sound... stick just to the deflect start and end".
+**Tested how:** The tool ran (counts above).
+**Result:** The sound set is complete enough for playback.
+**Still broken / not tested:**
+- **Not found:** dash hit, Dragonblade hit (the body-hit and melee-hit sounds will stand in), jump (the jump voice
+  covers it).
+- Dash reset doesn't exist in Overwatch.
+**Next:** Step 11b, playback in the mod.
+
 ## 2026-10-09 Your Overwatch recordings cut into single sounds, in the picker
 
 **Changed:**

@@ -84,6 +84,9 @@ VOICE_FOLDERS = {
     'Knockdown': 'voice_knockdown',
     'JumpEnd': 'voice_jump_end',
 }
+# Left out on purpose: "lets just not use the deflect actual block sound, it has too much background noise" (you,
+# 2026-10-09).
+DROP = {'deflect_block'}
 # Events the mod plays that you haven't found yet (reported, not an error).
 WANTED = ['dash', 'dash_hit', 'dash_reset', 'deflect_block', 'blade_hit', 'jump', 'ult_ready_sfx', 'footstep']
 
@@ -110,10 +113,15 @@ def main():
             chosen = range(1, len(group) + 1) if takes is None else takes
             files += [group[t - 1] for t in chosen if 1 <= t <= len(group)]
         out[event] = files
-    # Your recorded sounds (tools/cut_recordings.py), whatever their tag.
+    # Your recorded sounds (tools/cut_recordings.py), whatever their tag. Where you recorded an event, your recording
+    # replaces the sounds from Overwatch's files for it (Deflect start and end: the recorded start holds the whole
+    # 2 s hum; mixing both sources at random would sound uneven).
     for tag, files in picks.items():
-        out.setdefault(tag, [])
-        out[tag] += [f for f in files if '/recordings/cuts/' in f]
+        recorded = [f for f in files if '/recordings/cuts/' in f]
+        if recorded:
+            out[tag] = recorded
+    for tag in DROP:
+        out.pop(tag, None)
     # Voice: your tags, minus "dont use"; folders you named in notes.
     skip = {k[5:] for k, n in notes.items() if k.startswith('file:') and 'dont use' in n['note'].lower()}
     for tag, files in picks.items():
@@ -150,7 +158,7 @@ def main():
         print(f'{event:20s} {len(files):3d}')
     with open(os.path.join(OUT, 'index.json'), 'w', encoding='utf-8') as fh:
         json.dump(index, fh, indent=1, ensure_ascii=False)
-    missing = [w for w in WANTED if w not in index]
+    missing = [w for w in WANTED if w not in index and w not in DROP]
     print(f'{len(index)} events, {sum(len(v) for v in index.values())} files -> {OUT}')
     print('not found yet:', ', '.join(missing) if missing else 'none')
 
