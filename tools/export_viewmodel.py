@@ -5,15 +5,19 @@ in the background, with the Overwatch importer add-on loaded from D:\\GenjiBridg
   blender.exe -b --factory-startup --python tools\\export_viewmodel.py
 
 Output (all little-endian):
-- model.bin: "GVM1", u32 vertex count, u32 index count, u32 bone count; then per vertex position (3 f32), normal
-  (3 f32), texture coordinates (2 f32, as Blender has them: v up), 4 bone numbers (u8) and 4 weights (f32, summing
-  to 1); then the triangle indices (u32). Positions and normals in Blender's space at rest: metres, Z up, Genji
+- model.bin: "GVM2", u32 vertex count, u32 index count, u32 bone count; then per vertex position (3 f32), normal
+  (3 f32), texture coordinates (2 f32, as Blender has them: v up), 4 bone numbers (u8), 4 weights (f32, summing
+  to 1) and the part it belongs to (u8, then 3 unused bytes); then the triangle indices (u32).
+  Parts: 0 the arms; the weapons in WEAPONS below, each fixed to its hand bone the way Overwatch attaches them
+  (Gameplay1P.owentity: model DA9E at hardpoint_000A, DA9D and DAA1 at hardpoint_000B; those points follow the bones
+  Weapon_R and Weapon_L). Positions and normals in Blender's space at rest: metres, Z up, Genji
   looking along -Y, his eye at about (0, 0.05, 1.65).
 - anims.bin: for every frame of every animation, one 3x4 matrix (12 f32, by rows) per bone that takes a vertex from
   its rest position to its posed position (skinning matrices), in Blender's space.
 - anims.json: per animation its role, id, frames per second, frame count and first frame in anims.bin; anims.txt:
   the same as plain lines ("role id fps frames offset"), which the mod reads.
-- albedo.png (2048x2048, from Overwatch's 4096) and emission.png (1024x1024, his green lights).
+- albedo.png (2048x2048, from Overwatch's 4096) and emission.png (1024x1024, his green lights); each weapon's
+  part<n>_albedo.png and part<n>_emission.png (1024x1024); parts.txt: "part albedo emission" per line ("-" if none).
 - export_check.txt: on two frames of every animation, the largest distance between the mesh posed the mod's way
   (these matrices and weights) and Blender's own posed mesh. Should be well under a millimetre.
 """
@@ -35,6 +39,14 @@ io_scene_owm.register()
 MODEL_DIR = r'D:\GenjiBridgeAssets\raw\Heroes\Genji\Skin\Overwatch\Overwatch\Models\00000000DBA6.00C'
 OUT = r'D:\GenjiBridgeAssets\viewmodel'
 TEXTURES = [('Albedo', 'albedo.png', 2048), ('Emission', 'emission.png', 1024)]
+MODELS = r'D:\GenjiBridgeAssets\raw\Heroes\Genji\Skin\Overwatch\Overwatch\Models'
+# (part, model, attachment point, the bone it follows): the shuriken stack, the Dragonblade katana, the wakizashi
+# (short blade). Found 2026-10-09 in Entities\Gameplay1P.owentity; the two sheaths on the back aren't in view.
+WEAPONS = [
+    (1, '00000000DA9E', 'hardpoint_000A', 'Weapon_R'),
+    (2, '00000000DA9D', 'hardpoint_000B', 'Weapon_L'),
+    (3, '00000000DAA1', 'hardpoint_000B', 'Weapon_L'),
+]
 
 
 def clip_path(anim_id):
@@ -50,9 +62,9 @@ def clip_fps(path):
     return struct.unpack('<f', head[8:12])[0]
 
 
-def export_mesh(obj, arm):
-    """Unique (vertex, texture coordinate, normal) triangle corners with their 4 strongest bone weights. Also returns,
-    per original vertex, one exported copy (for the check)."""
+def export_mesh(obj, arm, part=0, rigid_bone=None):
+    """Unique (vertex, texture coordinate, normal) triangle corners with their 4 strongest bone weights (or, for a
+    weapon, all on `rigid_bone`). Also returns, per original vertex, one exported copy (for the check)."""
     me = obj.data
     me.calc_loop_triangles()
     uv = me.uv_layers.active.data
@@ -72,13 +84,16 @@ def export_mesh(obj, arm):
                 i = corners[key] = len(verts)
                 copy_of.setdefault(v, i)
                 vert = me.vertices[v]
-                weights = sorted(((g.weight, group_bone[g.group]) for g in vert.groups
-                                  if group_bone.get(g.group) is not None), reverse=True)[:4]
+                if rigid_bone is not None:
+                    weights = [(1.0, rigid_bone)]
+                else:
+                    weights = sorted(((g.weight, group_bone[g.group]) for g in vert.groups
+                                      if group_bone.get(g.group) is not None), reverse=True)[:4]
                 total = sum(w for w, _ in weights) or 1.0
                 weights = [(w / total, b) for w, b in weights] + [(0.0, 0)] * (4 - len(weights))
                 p = world @ vert.co
                 nn = (rot @ n).normalized()
-                verts.append((p.x, p.y, p.z, nn.x, nn.y, nn.z, u.x, u.y, [b for _, b in weights], [w for w, _ in weights]))
+                verts.append((p.x, p.y, p.z, nn.x, nn.y, nn.z, u.x, u.y, [b for _, b in weights], [w for w, _ in weights], part))
             indices.append(i)
     return verts, indices, copy_of
 
@@ -110,21 +125,56 @@ def main():
     scene = bpy.context.scene
 
     verts, indices, copy_of = export_mesh(body, arm)
-    with open(os.path.join(OUT, 'model.bin'), 'wb') as fh:
-        fh.write(b'GVM1' + struct.pack('<III', len(verts), len(indices), len(arm.data.bones)))
-        for (px, py, pz, nx, ny, nz, u, v, bones, weights) in verts:
-            fh.write(struct.pack('<8f4B4f', px, py, pz, nx, ny, nz, u, v, *bones, *weights))
-        fh.write(struct.pack(f'<{len(indices)}I', *indices))
-    print(f'MODEL {len(verts)} vertices, {len(indices) // 3} triangles, {len(arm.data.bones)} bones')
-
+    body_verts = len(verts)
     images = {n.label: n.image.filepath for n in body.data.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE' and n.image}
     for label, name, size in TEXTURES:
         save_texture(images[label], name, size)
         print('TEXTURE', label, images[label], '->', name)
+    parts = ['0 albedo.png emission.png']
 
-    rest = np.array([v[:3] for v in verts])
-    bone_ids = np.array([v[8] for v in verts])
-    bone_w = np.array([v[9] for v in verts])
+    # The weapons: each placed on its attachment point at rest, then exported as fixed to that point's bone.
+    bone_index = {b.name: i for i, b in enumerate(arm.data.bones)}
+    for part, model, socket, bone in WEAPONS:
+        before = set(bpy.data.objects)
+        bpy.ops.import_mesh.overtools2_model(directory=os.path.join(MODELS, model + '.00C') + os.sep, files=[{'name': model + '.owmdl'}])
+        new = [o for o in bpy.data.objects if o not in before]
+        for root in (o for o in new if o.parent is None):
+            root.parent = bpy.data.objects[socket]
+            root.matrix_parent_inverse.identity()
+            root.matrix_basis.identity()
+        bpy.context.view_layer.update()
+        names = {}
+        for obj in (o for o in new if o.type == 'MESH'):
+            mat = obj.data.materials[0] if obj.data.materials else None
+            imgs = {n.label: n.image.filepath for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image} if mat else {}
+            if 'Albedo' not in imgs:
+                continue  # decals
+            wv, wi, _ = export_mesh(obj, arm, part, bone_index[bone])
+            indices += [i + len(verts) for i in wi]
+            verts += wv
+            names = imgs
+            print(f'WEAPON part {part} {model} on {bone}: {len(wv)} vertices, {len(wi) // 3} triangles')
+        files = []
+        for label in ('Albedo', 'Emission'):
+            if label in names:
+                files.append(f'part{part}_{label.lower()}.png')
+                save_texture(names[label], files[-1], 1024)
+            else:
+                files.append('-')
+        parts.append(f'{part} {files[0]} {files[1]}')
+
+    with open(os.path.join(OUT, 'model.bin'), 'wb') as fh:
+        fh.write(b'GVM2' + struct.pack('<III', len(verts), len(indices), len(arm.data.bones)))
+        for (px, py, pz, nx, ny, nz, u, v, bones, weights, part) in verts:
+            fh.write(struct.pack('<8f4B4fB3x', px, py, pz, nx, ny, nz, u, v, *bones, *weights, part))
+        fh.write(struct.pack(f'<{len(indices)}I', *indices))
+    with open(os.path.join(OUT, 'parts.txt'), 'w', encoding='utf-8') as fh:
+        fh.writelines(line + '\n' for line in parts)
+    print(f'MODEL {len(verts)} vertices ({body_verts} the arms), {len(indices) // 3} triangles, {len(arm.data.bones)} bones')
+
+    rest = np.array([v[:3] for v in verts[:body_verts]])
+    bone_ids = np.array([v[8] for v in verts[:body_verts]])
+    bone_w = np.array([v[9] for v in verts[:body_verts]])
     sample = sorted(copy_of.items())[::4]
     index, check, worst = [], [], 0.0
     with open(os.path.join(OUT, 'anims.bin'), 'wb') as fh:

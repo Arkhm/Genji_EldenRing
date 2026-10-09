@@ -154,6 +154,7 @@ fn run(w: usize, h: usize) {
         canvas.clear();
         canvas.eye = viewmodel::EYE + glam::Vec3::Z * req.drop;
         canvas.tilt = req.tilt;
+        canvas.parts = req.pose.parts;
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();

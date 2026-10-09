@@ -54,12 +54,27 @@ pub struct Clip {
     pub looping: bool,
 }
 
-/// What to draw: `main`, blended from `from` (frozen where it was) with `mix` the share of `main` (0..1).
+/// What to draw: `main`, blended from `from` (frozen where it was) with `mix` the share of `main` (0..1), and which
+/// parts show (viewmodel.rs PART_*: the arms and the weapon in hand).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Pose {
     pub main: Clip,
     pub from: Option<Clip>,
     pub mix: f32,
+    pub parts: u8,
+}
+
+/// The weapon in hand for an animation (2026-10-09): the katana for everything Dragonblade, the wakizashi (short
+/// blade) for Swift Strike, the quick melee and Deflect, the shuriken otherwise.
+pub fn parts_for(role: &str) -> u8 {
+    use crate::viewmodel::{PART_ARMS, PART_KATANA, PART_SHURIKEN, PART_WAKIZASHI};
+    if role.starts_with("blade_") {
+        PART_ARMS | PART_KATANA
+    } else if role.starts_with("deflect_") || role == "dash" || role == "melee" {
+        PART_ARMS | PART_WAKIZASHI
+    } else {
+        PART_ARMS | PART_SHURIKEN
+    }
 }
 
 #[derive(Default)]
@@ -152,7 +167,7 @@ impl Animator {
                 self.from = None;
             }
         }
-        Pose { main: now, from: self.from, mix: if self.from.is_some() { self.mix } else { 1.0 } }
+        Pose { main: now, from: self.from, mix: if self.from.is_some() { self.mix } else { 1.0 }, parts: parts_for(now.role) }
     }
 
     fn current(&self) -> Option<Clip> {

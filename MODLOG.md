@@ -3,6 +3,40 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Weapons in Genji's hands: shuriken, Dragonblade katana, wakizashi
+
+**Changed:**
+- `tools/export_viewmodel.py`: also exports three weapon models as parts of the model. Each is fixed to its hand bone,
+  the way Overwatch attaches them:
+  - part 1, the shuriken stack (DA9E), on `Weapon_R`;
+  - part 2, the Dragonblade katana (DA9D), on `Weapon_L`;
+  - part 3, the wakizashi short blade (DAA1), on `Weapon_L`.
+  - Found in `Entities/Gameplay1P.owentity`: DA9E at `hardpoint_000A`, DA9D and DAA1 at `hardpoint_000B`. Those two
+    points follow the bones `Weapon_R` and `Weapon_L`.
+  - Each weapon has its colour and glow textures (1024). The model file is now version 2 (`GVM2`: a part number per
+    vertex), with `parts.txt` listing each part's textures.
+  - The two sheaths on the back (DAA0, DAA2) are left out: never in view.
+- `viewmodel.rs`: reads both versions, gives each part its own textures, and draws only the parts asked for
+  (`Canvas.parts`).
+- `arms_anim.rs`: `parts_for(role)`. The katana shows for every Dragonblade animation; the wakizashi for Swift Strike,
+  the quick melee and Deflect; the shuriken otherwise.
+- The `previews` test draws each pose with its weapon.
+**Why:** You: "you forgot about his small blade. the one he uses to dash and melee".
+**Tested how:**
+- The export check is still exact (0.000 mm). 25,642 vertices, 40,206 triangles (the arms 17,026 vertices).
+- Pictures at your recordings' screen shape next to your clips:
+  - resting pose: the shuriken in the right hand in the same place (your skin's shuriken are bigger and purple);
+  - Dragonblade: the katana's curved end to the left of the hands and its long part back over the shoulder, as in
+    clip1 at 5.0 s;
+  - Deflect: the wakizashi held horizontally, pointing left, as in your Deflect recordings;
+  - quick melee and Swift Strike: the wakizashi in the hand.
+- `cargo test --release` passes (50 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Which weapon shows during each animation is my rule, not read from Overwatch's files.
+- The weapons' own small bones (the shuriken spinning, for instance) don't move.
+**Next:** Your test.
+
 ## 2026-10-09 Arms: proper blends, draw protected, low through the sheathe, hands stay on the wall
 
 **Changed:**

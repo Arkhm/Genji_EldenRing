@@ -32,9 +32,17 @@ pub struct Model {
     uv: Vec<Vec2>,
     bones: Vec<[u8; 4]>,
     weights: Vec<[f32; 4]>,
+    /// The part each vertex belongs to: 0 the arms, then the weapons (PART_* below).
+    part: Vec<u8>,
     indices: Vec<u32>,
     bone_count: usize,
 }
+
+/// Parts of the model (tools\export_viewmodel.py, WEAPONS), as bits of a mask of what to show.
+pub const PART_ARMS: u8 = 1 << 0;
+pub const PART_SHURIKEN: u8 = 1 << 1;
+pub const PART_KATANA: u8 = 1 << 2;
+pub const PART_WAKIZASHI: u8 = 1 << 3;
 
 pub struct Anim {
     pub role: String,
@@ -61,8 +69,8 @@ pub struct Viewmodel {
     pub anims: Vec<Anim>,
     /// Every frame of every animation: per bone a 3x4 matrix by rows.
     mats: Vec<f32>,
-    albedo: Texture,
-    emission: Texture,
+    /// Per part: its colour texture and, if it has one, its glow texture.
+    textures: Vec<(Texture, Option<Texture>)>,
 }
 
 /// A 3x4 skinning matrix (rows).
@@ -85,12 +93,15 @@ impl Viewmodel {
     pub fn load(dir: &Path) -> Result<Self, String> {
         let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| format!("{name}: {e}"));
         let b = read("model.bin")?;
-        if &b[0..4] != b"GVM1" {
-            return Err("model.bin: not a GVM1 file".into());
-        }
+        // GVM1: the arms only; GVM2: a part number per vertex (the weapons).
+        let with_parts = match &b[0..4] {
+            b"GVM1" => false,
+            b"GVM2" => true,
+            _ => return Err("model.bin: not a GVM1 or GVM2 file".into()),
+        };
         let (nv, ni, nb) = (read_u32(&b, 4) as usize, read_u32(&b, 8) as usize, read_u32(&b, 12) as usize);
-        const STRIDE: usize = 8 * 4 + 4 + 4 * 4;
-        if b.len() != 16 + nv * STRIDE + ni * 4 {
+        let stride: usize = 8 * 4 + 4 + 4 * 4 + if with_parts { 4 } else { 0 };
+        if b.len() != 16 + nv * stride + ni * 4 {
             return Err(format!("model.bin: size {} doesn't match {nv} vertices and {ni} indices", b.len()));
         }
         let mut model = Model {
@@ -99,11 +110,12 @@ impl Viewmodel {
             uv: Vec::with_capacity(nv),
             bones: Vec::with_capacity(nv),
             weights: Vec::with_capacity(nv),
+            part: Vec::with_capacity(nv),
             indices: Vec::with_capacity(ni),
             bone_count: nb,
         };
         for i in 0..nv {
-            let at = 16 + i * STRIDE;
+            let at = 16 + i * stride;
             let f = |k: usize| read_f32(&b, at + 4 * k);
             model.pos.push(Vec3::new(f(0), f(1), f(2)));
             model.nrm.push(Vec3::new(f(3), f(4), f(5)));
@@ -114,8 +126,9 @@ impl Viewmodel {
             }
             model.bones.push(bones);
             model.weights.push(std::array::from_fn(|k| read_f32(&b, at + 36 + 4 * k)));
+            model.part.push(if with_parts { b[at + 52] } else { 0 });
         }
-        let at = 16 + nv * STRIDE;
+        let at = 16 + nv * stride;
         model.indices = (0..ni).map(|k| read_u32(&b, at + 4 * k)).collect();
         if model.indices.iter().any(|&i| i as usize >= nv) {
             return Err("model.bin: an index past the vertices".into());
@@ -143,13 +156,22 @@ impl Viewmodel {
         if mats.len() != total * nb * 12 {
             return Err(format!("anims.bin: {} floats, expected {}", mats.len(), total * nb * 12));
         }
-        Ok(Self {
-            model,
-            anims,
-            mats,
-            albedo: load_texture(&dir.join("albedo.png"))?,
-            emission: load_texture(&dir.join("emission.png"))?,
-        })
+        // parts.txt: "part albedo emission" ("-": none); without it, the arms' two textures.
+        let list = std::fs::read_to_string(dir.join("parts.txt")).unwrap_or_else(|_| "0 albedo.png emission.png".into());
+        let mut textures = Vec::new();
+        for line in list.lines().filter(|l| !l.trim().is_empty()) {
+            let p: Vec<&str> = line.split_whitespace().collect();
+            if p.len() != 3 || p[0].parse::<usize>() != Ok(textures.len()) {
+                return Err(format!("parts.txt: bad line {line:?}"));
+            }
+            let albedo = load_texture(&dir.join(p[1]))?;
+            let glow = if p[2] == "-" { None } else { Some(load_texture(&dir.join(p[2]))?) };
+            textures.push((albedo, glow));
+        }
+        if let Some(&p) = model.part.iter().find(|&&p| p as usize >= textures.len()) {
+            return Err(format!("model.bin: part {p} has no textures in parts.txt"));
+        }
+        Ok(Self { model, anims, mats, textures })
     }
 
     /// The first animation for `role`, if exported.
@@ -212,13 +234,15 @@ pub struct Canvas {
     /// Radians the arms are turned down around the eye (up if negative): while climbing, the camera's pitch, so the
     /// hands stay on the wall when you look up (Overwatch).
     pub tilt: f32,
+    /// Which parts to draw (PART_* bits).
+    pub parts: u8,
     pub rgba: Vec<u8>,
     depth: Vec<f32>,
 }
 
 impl Canvas {
     pub fn new(w: usize, h: usize) -> Self {
-        Self { w, h, eye: EYE, vfov: vertical_fov(), tilt: 0.0, rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
+        Self { w, h, eye: EYE, vfov: vertical_fov(), tilt: 0.0, parts: PART_ARMS | PART_SHURIKEN, rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
     }
 
     pub fn clear(&mut self) {
@@ -320,7 +344,7 @@ struct Tri {
     y1: usize,
 }
 
-fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f32, tilt: f32) -> Prepared {
+fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f32, tilt: f32, parts: u8) -> Prepared {
     let (st, ct) = tilt.sin_cos();
     // Turn down by `tilt` around the eye's sideways axis (view space: y up, z forward).
     let turn = |v: Vec3| Vec3::new(v.x, v.y * ct - v.z * st, v.y * st + v.z * ct);
@@ -348,6 +372,9 @@ fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f3
     let (mut tris, mut culled) = (Vec::new(), 0);
     for tri in m.indices.chunks_exact(3) {
         let v = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
+        if parts & (1 << m.part[v[0]]) == 0 {
+            continue; // a part not shown now (a weapon put away)
+        }
         let (va, vb, vc) = (view[v[0]], view[v[1]], view[v[2]]);
         if va.z < NEAR || vb.z < NEAR || vc.z < NEAR {
             culled += 1;
@@ -415,8 +442,9 @@ fn raster(vm: &Viewmodel, p: &Prepared, w: usize, band: &mut Band) -> usize {
                 let (pa, pb, pc) = (wa * iza / iz, wb * izb / iz, wc * izc / iz);
                 let uv = m.uv[a] * pa + m.uv[b] * pb + m.uv[c] * pc;
                 let n = (p.nrm[a] * pa + p.nrm[b] * pb + p.nrm[c] * pc).normalize_or_zero();
-                let albedo = sample(&vm.albedo, uv);
-                let glow = sample(&vm.emission, uv);
+                let (albedo_tex, glow_tex) = &vm.textures[m.part[a] as usize];
+                let albedo = sample(albedo_tex, uv);
+                let glow = glow_tex.as_ref().map_or([0.0; 3], |t| sample(t, uv));
                 let lit = AMBIENT + DIFFUSE * n.dot(light).max(0.0);
                 let px = &mut band.rgba[at * 4..at * 4 + 4];
                 for k in 0..3 {
@@ -440,7 +468,7 @@ const BAND_ROWS: usize = 32;
 /// threads at once.
 pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas, threads: usize) -> Stats {
     let (w, h) = (canvas.w, canvas.h);
-    let p = prepare(vm, pose, w, h, canvas.eye, canvas.vfov, canvas.tilt);
+    let p = prepare(vm, pose, w, h, canvas.eye, canvas.vfov, canvas.tilt, canvas.parts);
     let mut bands: Vec<Band> = canvas
         .rgba
         .chunks_mut(BAND_ROWS * w * 4)
@@ -536,11 +564,15 @@ mod tests {
         let t = std::time::Instant::now();
         let vm = Viewmodel::load(dir).unwrap();
         println!("loaded {} animations in {:?}", vm.anims.len(), t.elapsed());
-        for (role, at) in [("idle", 0.0), ("blade_idle", 0.0), ("deflect_idle", 0.0), ("reload", 0.6), ("throw", 0.15)] {
+        for (role, at) in [("idle", 0.0), ("blade_idle", 0.0), ("deflect_idle", 0.0), ("reload", 0.6), ("throw", 0.15), ("melee", 0.2), ("dash", 0.15)] {
             let anim = vm.find(role).unwrap_or_else(|| panic!("no {role}"));
             let pose = vm.pose(anim, at, false);
             for (w, h) in [(2580, 1080), (1290, 540)] {
                 let mut canvas = Canvas::new(w, h);
+                canvas.parts = crate::arms_anim::parts_for(role);
+                if role.starts_with("blade_") {
+                    canvas.eye = EYE + Vec3::Z * crate::arms::BLADE_DROP;
+                }
                 let t = std::time::Instant::now();
                 let stats = draw(&vm, &pose, &mut canvas, 4);
                 let took = t.elapsed();

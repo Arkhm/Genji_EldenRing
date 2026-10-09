@@ -697,6 +697,11 @@ and the field of view are right.
   - Checked against your recordings: the throw has the same wind-up and release as clip2 at 13.1 s. The Dragonblade draw
     (12E6) has the same course as clip1 at 2.2 s (up, slash down, both hands on the hilt), but it's hard to judge
     without the sword.
+- **Weapons** (2026-10-09): Overwatch's first-person entity (`Gameplay1P.owentity`) attaches the shuriken stack (DA9E)
+  to `Weapon_R`, and the Dragonblade katana (DA9D) and the wakizashi (DAA1) to `Weapon_L`.
+  - They're exported as parts of the model, fixed to those bones.
+  - The arms show the katana in Dragonblade, the wakizashi for Swift Strike, the quick melee and Deflect, and the
+    shuriken otherwise.
 - **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.
 
 ## 6. Risks and unknowns (honest list)
