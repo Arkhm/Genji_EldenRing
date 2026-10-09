@@ -505,15 +505,21 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         badge(cx, q_top, "Q", 0.0, 0.0);
     }
 
-    // ---- Dragonblade time left, under the crosshair (Overwatch shows ultimate time near the reticle; its exact look
-    // is not in your clip): a cyan bar shrinking towards its middle.
+    // ---- Dragonblade time left, around the crosshair (your Overwatch screenshots, 2026-10-08): a white ring of
+    // about 30 px for the time left, running clockwise from 12 o'clock, leaving a grey trail for the time used, and
+    // the whole seconds left ("6s") below it.
     if let Some(left) = s.blade_left {
         let share = if s.blade_duration > 0.0 { (left / s.blade_duration).clamp(0.0, 1.0) } else { 0.0 };
-        let (mx, my) = (width / 2.0, height / 2.0 + 46.0 * k);
-        let (half, th) = (42.0 * k, 4.0 * k);
-        draw.add_rect([mx - half - 1.5 * k, my - th / 2.0 - 1.5 * k], [mx + half + 1.5 * k, my + th / 2.0 + 1.5 * k], col([10, 14, 24, 150])).filled(true).rounding(2.0 * k).build();
-        picture(&draw, r.glow_dot, [mx, my], half * 2.6 * share.max(0.2), 0.0, alpha([60, 180, 255, 255], 0.5));
-        draw.add_rect([mx - half * share, my - th / 2.0], [mx + half * share, my + th / 2.0], col(CYAN)).filled(true).rounding(1.5 * k).build();
+        let c = [width / 2.0, height / 2.0];
+        let (radius, th) = (29.5 * k, 3.5 * k);
+        let start = -FRAC_PI_2;
+        arc_at(&draw, c, radius, start + share * TAU, (1.0 - share) * TAU, col([150, 150, 155, 130]), th);
+        if share > 0.0 {
+            arc_at(&draw, c, radius, start, share * TAU, col([245, 245, 248, 235]), th);
+        }
+        let t = format!("{}s", left.ceil().max(0.0) as u32);
+        let size = measure(r.bold_small, &t);
+        text([c[0] - size[0] / 2.0, c[1] + 42.0 * k - size[1] / 2.0], r.bold_small, WHITE, &t);
     }
 
     // ---- Bottom right: Swift Strike and Deflect tiles (clip parts 3-5; your screenshot of 2026-10-08: upright,
@@ -603,23 +609,20 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         }
         x += size + 14.0 * k;
     }
-    // Ammo panel (your screenshot): see-through, between two thin glowing cyan lines with angled ends, each with a
-    // brighter, thicker stretch (top line towards the right, bottom line in the middle).
-    let ax = x + 12.0 * k;
+    // Ammo panel (your screenshot of 2026-10-08, its 4 degree tilt taken out): 16 px right of the E tile; its top line
+    // 8 px below the tile tops, its bottom line on the tiles' underlines; two straight cyan lines of even thickness
+    // with short angled ends; see-through inside.
+    let ax = x + 2.0 * k;
     let aw = width - ax - 50.0 * k;
-    let (pt, pb) = (height - 154.0 * k, height - 79.0 * k);
+    let (pt, pb) = (box_top + 8.0 * k, box_top + size + 5.25 * k);
     draw.add_rect([ax, pt], [ax + aw, pb], col([255, 255, 255, 14])).filled(true).build();
-    for (y, from, to) in [(pt, 0.55, 0.95), (pb, 0.45, 0.78)] {
-        let inward = if y == pt { 6.0 * k } else { -6.0 * k };
-        for (th, a) in [(8.0, 0.15), (4.0, 0.35), (2.0, 1.0)] {
-            draw.add_line([ax + 6.0 * k, y], [ax + aw - 6.0 * k, y], col(alpha(CYAN, a))).thickness(th * k).build();
+    for y in [pt, pb] {
+        let inward = if y == pt { 4.0 * k } else { -4.0 * k };
+        for (th, a) in [(9.0, 0.15), (5.0, 0.35), (3.0, 1.0)] {
+            draw.add_line([ax + 4.0 * k, y], [ax + aw - 4.0 * k, y], col(alpha(CYAN, a))).thickness(th * k).build();
         }
-        let (sx0, sx1) = (ax + aw * from, ax + aw * to);
-        for (th, a) in [(12.0, 0.2), (4.5, 1.0)] {
-            draw.add_line([sx0, y], [sx1, y], col(alpha([120, 245, 255, 255], a))).thickness(th * k).build();
-        }
-        draw.add_line([ax, y + inward], [ax + 6.0 * k, y], col(CYAN)).thickness(2.0 * k).build();
-        draw.add_line([ax + aw - 6.0 * k, y], [ax + aw, y + inward], col(CYAN)).thickness(2.0 * k).build();
+        draw.add_line([ax, y + inward], [ax + 4.0 * k, y], col(CYAN)).thickness(2.5 * k).build();
+        draw.add_line([ax + aw - 4.0 * k, y], [ax + aw, y + inward], col(CYAN)).thickness(2.5 * k).build();
     }
     let mid = (pt + pb) / 2.0;
     let icon_w = 78.0 * k;

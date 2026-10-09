@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: Dragonblade countdown ring, ammo panel lined up with the tiles
+
+**Changed (`genji/src/hud.rs`):**
+- **Dragonblade time left:** your Overwatch screenshots (6s, 5s, 1s) replace my cyan bar.
+  - A white ring around the crosshair, radius about 30 px and 3.5 px thick, measured on them.
+  - The white is the time left, running clockwise from 12 o'clock; the time used turns grey.
+  - "6s" style seconds sit 42 px below the centre.
+- **Ammo panel:** measured on your Overwatch screenshot, after taking out its 4° tilt (the whole bottom-right group is
+  slightly rotated in Overwatch).
+  - Its bottom line sits exactly on the LSHIFT/E underlines, and its top line 8 px below the tile tops.
+  - It starts 16 px right of the E tile.
+  - Both lines are straight, 3 px thick with a glow, with short angled ends. The thicker "tabs" are gone.
+**Why:** You: the red lines (tile underlines and the panel's bottom line) and the yellow lines should be straight,
+as in Overwatch; and the ult countdown is a white ring with a grey trail.
+**Tested how:** The build passes. Positions come from pixel measurements of your screenshots. Not seen in game.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game.
+- The ring's size assumes your screenshots were at 1080 lines, like your clip. If they came from your 1440p screen,
+  it is a third too big.
+- The two round icons above Overwatch's ammo panel (perks) aren't drawn: Genji mode has no perks.
+**Next:** Your test.
+
 ## 2026-10-08 HUD: upright tiles, the "pushed down" press, Dragonblade timer under the crosshair
 
 **Changed (`genji/src/hud.rs`):**

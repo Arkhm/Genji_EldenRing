@@ -411,8 +411,12 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
     was the pressed tile, not the resting one.
   - **Pressed:** the tile is pushed down, its top dropping about 10 of its 64 px within 0.12 s. It stays pushed
     through the cooldown and pops back up when the ready flash starts.
-  - **Dragonblade time left:** a cyan bar under the crosshair that shrinks toward its middle. The clip doesn't show
-    how Overwatch does it, so this look is my own.
+  - **Dragonblade time left** (your screenshots): a white ring of about 30 px around the crosshair. The white is the
+    time left, running clockwise from 12 o'clock; the time used is a grey trail. The seconds ("6s") sit below it.
+  - **Ammo panel lined up with the tiles** (your screenshot, with Overwatch's 4° tilt taken out):
+    - its bottom line is on the tiles' underlines, and its top line 8 px below the tile tops;
+    - it starts 16 px right of the E tile;
+    - both lines are straight and evenly thick.
   - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
     cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 
