@@ -162,8 +162,8 @@ Each step is small, revertible and ends with a test you run, plus a log I read. 
 | 7 | **Swift Strike** with kill reset (built 2026-10-07, not tested in game; see 5d) | dash through enemies | dash distance ~15 m; cooldown resets after a kill |
 | 8 | **Deflect** (done 2026-10-08, see 5f) | block an archer | frontal hits blocked while active; returned projectiles logged |
 | 9 | **Dragonblade + ult charge** (done 2026-10-08, see 5g) | build charge, press Q | charge numbers rise with damage; swing hits logged |
-| 10 | **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
-| 11 | **Sound and voice lines** | use each ability | sounds play; logged event list |
+| 10 | (plan in 5k) **Viewmodel rendering**: Genji's first-person arms and sword drawn into the frame, with his animations | look at your hands | (visual check by you) plus render errors logged as zero |
+| 11 | **Done 2026-10-09** (see 5j). **Sound and voice lines** | use each ability | sounds play; logged event list |
 | 12 | **HUD**: health, cooldowns, ult meter, crosshair (crosshair done 2026-10-07; the rest planned in 5h, built before 10 and 11) | play | (visual check by you) |
 | 13 | Polish: Torrent, ladders, menus, death, balance | play the game | |
 
@@ -622,6 +622,52 @@ Genji's line):
 
 **Later (not in 11):** muting Elden Ring's other own sounds for the things Genji replaces (the Tarnished's grunts, the
 Throwing Dagger's sound). This needs the game's sound IDs and is looked at once ours play.
+
+## 5k. Step 10 in detail: Genji's first-person arms and sword (plan 2026-10-09)
+
+**Goal:** Genji's arms (and his sword during Dragonblade) on screen in first person, moving with Overwatch's own
+first-person animations for each action, as in Overwatch.
+
+**What we have:**
+- His first-person model `00000000DBA6`: arms and hands, 88 bones, its textures.
+- 129 first-person animations in Overwatch's format, which the Blender importer (io_scene_owm) reads.
+- Only 20 of the 129 play sounds, so only those were previewed for the sound picker. Idle, walking and the rest are
+  still unnamed.
+- The sword is a separate model.
+
+**How to draw it** (my recommendation; your call before step 10c):
+- **A. Our own small software renderer (recommended).**
+  - The DLL draws the arms itself, on the CPU, into a picture the size of the screen's lower part: triangles, a
+    depth buffer, Genji's textures, simple lighting.
+  - The overlay (the same one that draws the HUD) replaces a texture with that picture each frame and lays it over
+    the game.
+  - First-person arms are always drawn on top of the world in shooters anyway, so nothing has to mix with Elden Ring's
+    own 3D.
+  - Everything stays in our Rust code. The same renderer can write a picture to a file outside the game, so the
+    framing can be checked before any game test.
+  - Cost: the drawing (a few ms, to be measured) plus the texture copy (the overlay library creates an upload buffer
+    and waits for it; about 1-2 ms, to be measured). Both logged.
+- **B. A real Direct3D 12 drawing pass inside the overlay.** Best quality and speed, but the overlay library doesn't
+  open its drawing to us. It means our own graphics pipeline and hooks: much more work and more ways to crash the game.
+- **C. Elden Ring draws Genji.** His model and animations converted to Elden Ring's formats (FLVER, HKX) and loaded
+  as the player's body. Very hard conversions; Elden Ring's camera and animation system would fight our controller.
+
+**Steps:**
+- **10a. Name the animations:**
+  - Render all 129 as looping previews (the same Blender script, all animations instead of only those with sounds).
+  - An animation picker page like the sound picker, with my guesses filled in: idle, walk, jump, throw, Fan of Blades,
+    reload, Swift Strike, Deflect start/loop/end, Dragonblade draw/idle/swings/end, quick melee, wall climb...
+  - You correct the tags and export them.
+- **10b. Export and a first picture:**
+  - A Blender script writes the model (positions, normals, texture coordinates, bone weights), its textures, and
+    every picked animation baked as bone poses per frame, to `D:\GenjiBridgeAssetsiewmodel` (outside the
+    repository).
+  - The renderer draws the idle pose from Genji's eye with your field of view into a PNG at your screen size.
+  - You compare it with Overwatch.
+- **10c. In game, idle only:** the arms drawn over the game; drawing and copy times logged.
+- **10d. Actions play their animations:** throws, fan, reload, dash, Deflect, melee, Dragonblade (with the sword), jump
+  and climb; idle and walk blend by speed.
+- **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.
 
 ## 6. Risks and unknowns (honest list)
 
