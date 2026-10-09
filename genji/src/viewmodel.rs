@@ -163,9 +163,17 @@ impl Viewmodel {
         (!all.is_empty()).then(|| all[k % all.len()])
     }
 
-    /// Two poses blended: `w` of `b` (0..1), the rest of `a` (short blends between clips).
+    /// Two poses blended: `w` of `b` (0..1), the rest of `a` (short blends between clips). Each bone's rotation is
+    /// blended as a rotation and its position as a position. Mixing the matrices' numbers directly (the first way)
+    /// squashed and twisted the arm while blending: you saw it on M1 (2026-10-09).
     pub fn blend(a: &[Mat], b: &[Mat], w: f32) -> Vec<Mat> {
-        a.iter().zip(b).map(|(x, y)| std::array::from_fn(|k| x[k] + (y[k] - x[k]) * w)).collect()
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| {
+                let ((rx, sx, tx), (ry, sy, ty)) = (parts(x), parts(y));
+                from_parts(rx.slerp(ry, w), sx * (1.0 - w) + sy * w, tx.lerp(ty, w))
+            })
+            .collect()
     }
 
     /// The skinning matrices of animation `anim` at `t` seconds (held at the last frame, or wrapped if `looping`),
@@ -201,13 +209,16 @@ pub struct Canvas {
     /// The camera: the eye in the model's space and the vertical field of view (radians).
     pub eye: Vec3,
     pub vfov: f32,
+    /// Radians the arms are turned down around the eye (up if negative): while climbing, the camera's pitch, so the
+    /// hands stay on the wall when you look up (Overwatch).
+    pub tilt: f32,
     pub rgba: Vec<u8>,
     depth: Vec<f32>,
 }
 
 impl Canvas {
     pub fn new(w: usize, h: usize) -> Self {
-        Self { w, h, eye: EYE, vfov: vertical_fov(), rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
+        Self { w, h, eye: EYE, vfov: vertical_fov(), tilt: 0.0, rgba: vec![0; w * h * 4], depth: vec![0.0; w * h] }
     }
 
     pub fn clear(&mut self) {
@@ -224,6 +235,31 @@ pub struct Stats {
     pub pixels: usize,
     /// The area drawn in, [x0, y0, x1, y1) in pixels (with a pixel around for the edge colours), if any.
     pub rect: Option<[u32; 4]>,
+}
+
+/// A skinning matrix as a rotation, a stretch and a translation: M = R * S with S symmetric (polar decomposition).
+/// Some of Genji's bones are scaled up to 4 times and sheared (Overwatch's twist and stretch helpers), so a plain
+/// scale-and-rotation split loses them.
+fn parts(m: &Mat) -> (glam::Quat, glam::Mat3, Vec3) {
+    let mm = glam::Mat3::from_cols(Vec3::new(m[0], m[4], m[8]), Vec3::new(m[1], m[5], m[9]), Vec3::new(m[2], m[6], m[10]));
+    // R = lim (R + R^-T) / 2, starting from M (converges in a few steps for these matrices).
+    let mut r = mm;
+    for _ in 0..12 {
+        let next = (r + r.inverse().transpose()) * 0.5;
+        let done = (next - r).to_cols_array().iter().all(|v| v.abs() < 1e-6);
+        r = next;
+        if done {
+            break;
+        }
+    }
+    let stretch = r.transpose() * mm;
+    (glam::Quat::from_mat3(&r).normalize(), stretch, Vec3::new(m[3], m[7], m[11]))
+}
+
+fn from_parts(q: glam::Quat, stretch: glam::Mat3, t: Vec3) -> Mat {
+    let a = glam::Mat3::from_quat(q) * stretch;
+    let (c0, c1, c2) = (a.x_axis, a.y_axis, a.z_axis);
+    [c0.x, c1.x, c2.x, t.x, c0.y, c1.y, c2.y, t.y, c0.z, c1.z, c2.z, t.z]
 }
 
 fn apply(m: &Mat, p: Vec3) -> Vec3 {
@@ -284,7 +320,10 @@ struct Tri {
     y1: usize,
 }
 
-fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f32) -> Prepared {
+fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f32, tilt: f32) -> Prepared {
+    let (st, ct) = tilt.sin_cos();
+    // Turn down by `tilt` around the eye's sideways axis (view space: y up, z forward).
+    let turn = |v: Vec3| Vec3::new(v.x, v.y * ct - v.z * st, v.y * st + v.z * ct);
     let m = &vm.model;
     let mut view = Vec::with_capacity(m.pos.len());
     let mut nrm = Vec::with_capacity(m.pos.len());
@@ -298,9 +337,9 @@ fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize, eye: Vec3, vfov: f3
                 n += wgt * rotate(mat, m.nrm[i]);
             }
         }
-        view.push(to_view(p, eye));
+        view.push(turn(to_view(p, eye)));
         let n = n.normalize_or_zero();
-        nrm.push(Vec3::new(-n.x, n.z, -n.y));
+        nrm.push(turn(Vec3::new(-n.x, n.z, -n.y)));
     }
     let (wf, hf) = (w as f32, h as f32);
     let focal = 1.0 / (vfov / 2.0).tan();
@@ -401,7 +440,7 @@ const BAND_ROWS: usize = 32;
 /// threads at once.
 pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas, threads: usize) -> Stats {
     let (w, h) = (canvas.w, canvas.h);
-    let p = prepare(vm, pose, w, h, canvas.eye, canvas.vfov);
+    let p = prepare(vm, pose, w, h, canvas.eye, canvas.vfov, canvas.tilt);
     let mut bands: Vec<Band> = canvas
         .rgba
         .chunks_mut(BAND_ROWS * w * 4)
@@ -616,6 +655,28 @@ mod tests {
                 t += 0.15;
             }
         }
+    }
+
+    /// Blending halfway between two poses keeps every bone rigid (no squashing), and the ends are the poses.
+    #[test]
+    fn blend_keeps_bones_rigid() {
+        let dir = Path::new(DIR);
+        if !dir.join("model.bin").is_file() {
+            return;
+        }
+        let vm = Viewmodel::load(dir).unwrap();
+        let a = vm.pose(vm.find("idle").unwrap(), 0.0, false);
+        let b = vm.pose(vm.find("throw").unwrap(), 0.3, false);
+        let mid = Viewmodel::blend(&a, &b, 0.5);
+        // The volume each bone gives the mesh (the determinant) stays between the two poses': no squashing flat.
+        let det = |m: &Mat| glam::Mat3::from_cols(Vec3::new(m[0], m[4], m[8]), Vec3::new(m[1], m[5], m[9]), Vec3::new(m[2], m[6], m[10])).determinant();
+        for (m, (x0, y0)) in mid.iter().zip(a.iter().zip(&b)) {
+            let (lo, hi) = (det(x0).min(det(y0)), det(x0).max(det(y0)));
+            assert!(det(m) >= lo * 0.9 - 1e-3 && det(m) <= hi * 1.1 + 1e-3, "{} not within {lo}..{hi}", det(m));
+        }
+        let end = Viewmodel::blend(&a, &b, 1.0);
+        let worst = end.iter().flatten().zip(b.iter().flatten()).map(|(p, q)| (p - q).abs()).fold(0.0, f32::max);
+        assert!(worst < 1e-3, "blend at 1 differs from the pose by {worst}");
     }
 
     #[test]

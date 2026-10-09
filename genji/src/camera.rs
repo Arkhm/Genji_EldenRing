@@ -88,6 +88,8 @@ struct View {
     /// The arms' animations (step 10d) and what was true last frame, to notice actions starting.
     animator: crate::arms_anim::Animator,
     watch: ArmsWatch,
+    /// How far the arms follow the body instead of the camera while climbing (0..1).
+    climb_tilt: f32,
     /// How much lower the arms are drawn right now (metres, arms.rs BLADE_DROP).
     arms_drop: f32,
     /// The Tarnished's own voice, silenced while Genji input is captured (game_voice.rs).
@@ -553,11 +555,16 @@ fn camera_step_inner(dt: f32) -> bool {
         (true, reloading_now, meleeing, blade_on, deflect_on, climbing, view.blade.swings(), view.deflect.blocks());
     let ground_speed = if view.mover.grounded() { ev.ground_travel / dt.max(1e-4) } else { 0.0 };
     let pose = view.animator.update(dt, stance, ground_speed, &events, &crate::arms::length);
-    // Dragonblade's stance sits lower (arms.rs, BLADE_DROP), sliding in and out over a quarter of a second.
-    let drop_to = if stance == Stance::Blade { crate::arms::BLADE_DROP } else { 0.0 };
+    // Dragonblade's animations sit lower (arms.rs, BLADE_DROP), sliding in and out over a quarter of a second; by the
+    // animation playing, so the sheathe at the end stays low too (you, 2026-10-09: "I can see past his shoulder").
+    let drop_to = if pose.main.role.starts_with("blade_") { crate::arms::BLADE_DROP } else { 0.0 };
     let step = crate::arms::BLADE_DROP * dt / 0.25;
     view.arms_drop = if view.arms_drop < drop_to { (view.arms_drop + step).min(drop_to) } else { (view.arms_drop - step).max(drop_to) };
-    crate::arms::request(pose, view.arms_drop);
+    // Climbing: the hands stay on the wall, the way the body faces, not the camera; looking up they go out of view
+    // (you, 2026-10-09, as in Overwatch). Eased in and out over 0.15 s.
+    let climbing_anim = pose.main.role.contains("wall_climb");
+    view.climb_tilt = if climbing_anim { (view.climb_tilt + dt / 0.15).min(1.0) } else { (view.climb_tilt - dt / 0.15).max(0.0) };
+    crate::arms::request(pose, view.arms_drop, look.pitch * view.climb_tilt);
 
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
     let (enemies, enemy_count) =

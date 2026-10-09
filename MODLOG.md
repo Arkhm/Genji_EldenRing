@@ -3,6 +3,39 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: proper blends, draw protected, low through the sheathe, hands stay on the wall
+
+**Changed:**
+- `viewmodel.rs`: blending two poses now splits each bone's matrix into a rotation and a stretch (polar decomposition).
+  The rotations are blended as rotations, the stretches and positions mixed directly. New test: the volume never
+  collapses, and the ends match the poses.
+  - Mixing the matrices' numbers directly squashed and twisted the arm during blends.
+  - 8 of Genji's 88 bones are scaled (up to 4x) and sheared (Overwatch's twist and stretch helpers), which is why a
+    plain scale-and-rotation split didn't work either.
+- `arms_anim.rs`:
+  - the blend back to rest is 0.15 s (was 0.25);
+  - the Dragonblade draw plays whole (only Dragonblade ending cuts it);
+  - every animation started is logged (`ARMS play <role> (version n) for <event>`).
+- `camera.rs`:
+  - The arms stay 6 cm lower for as long as a Dragonblade animation plays, the sheathe at the end included (was: until
+    Dragonblade's timer ended).
+  - While a climb animation plays, the arms turn with the body, not the camera: looking up, the hands go down out of
+    view. Eased in and out over 0.15 s (`Canvas.tilt`).
+**Why:** Your test:
+- "unleashing the blade in the air, the animation does not execute";
+- "when it ends, and he sheathes, I can see past his shoulder";
+- "when climbing, in overwatch, you only see your hands if you are looking at the wall";
+- "the m1 ... its slow, so I can see with my eye the twist".
+- Your log shows Dragonblade starting each time, so something else in the same moment must have cut the draw. It's
+  now protected, and the new log lines will show what happens.
+**Tested how:** `cargo build --release` and `cargo test --release` pass (50 tests). Copy times in your log: 1.5-2.8 ms
+on average (was 3-4). Most of what's left is the fixed wait on each copy, not its size.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- No swords or shuriken in the hands yet.
+- The fixed copy wait.
+**Next:** Your test; the Dragonblade sword, the short blade (Swift Strike, quick melee) and the shuriken.
+
 ## 2026-10-09 Arms: copy only the area where they changed
 
 **Changed:**

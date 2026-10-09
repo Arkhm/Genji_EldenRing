@@ -28,6 +28,8 @@ struct Request {
     pose: Pose,
     /// Metres the arms are drawn lower (the camera raised): see BLADE_DROP.
     drop: f32,
+    /// Radians the arms are turned down (climbing: the camera's pitch).
+    tilt: f32,
 }
 
 /// Each role's variants' lengths in seconds, known once the drawing thread has loaded the export.
@@ -76,11 +78,11 @@ pub fn start(w: usize, h: usize) {
     }
 }
 
-/// Asks for the arms in `pose` (arms_anim.rs), drawn `drop` metres lower (game thread, every frame while first person
-/// shows).
-pub fn request(pose: Pose, drop: f32) {
+/// Asks for the arms in `pose` (arms_anim.rs), drawn `drop` metres lower and turned down by `tilt` radians (game
+/// thread, every frame while first person shows).
+pub fn request(pose: Pose, drop: f32, tilt: f32) {
     let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
-    s.request = Some(Request { pose, drop });
+    s.request = Some(Request { pose, drop, tilt });
     WAKE.notify_one();
 }
 
@@ -151,6 +153,7 @@ fn run(w: usize, h: usize) {
         };
         canvas.clear();
         canvas.eye = viewmodel::EYE + glam::Vec3::Z * req.drop;
+        canvas.tilt = req.tilt;
         let stats = viewmodel::draw(&vm, &pose, &mut canvas, ARM_THREADS);
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();

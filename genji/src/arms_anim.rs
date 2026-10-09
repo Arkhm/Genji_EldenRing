@@ -7,10 +7,10 @@
 //! - Actions play once from the start (a new one cuts in), then the base takes over again.
 //! - Every change blends from the old pose over FADE seconds, so nothing pops.
 
-/// Seconds a change of clip blends over: quick into an action, slower back to the base (your Overwatch clip 2, a
-/// throw at 13.1 s: the arm drifts back down over about 0.3 s at the end).
+/// Seconds a change of clip blends over: quick into an action, a little slower back to the base. Was 0.25 back: with
+/// the first (squashing) blend you could see the arm twist on M1 (you, 2026-10-09).
 pub const FADE: f32 = 0.08;
-pub const FADE_BACK: f32 = 0.25;
+pub const FADE_BACK: f32 = 0.15;
 /// Ground speed above which the walk loop plays, m/s.
 const WALK_SPEED: f32 = 1.5;
 /// Length assumed for a clip the export doesn't have (arms.rs reports lengths once the model is loaded).
@@ -96,6 +96,11 @@ impl Animator {
             if minor(e) && self.action.is_some_and(|a| !minor_role(a.role)) {
                 continue;
             }
+            // The Dragonblade draw plays whole; only Dragonblade ending cuts it (you, 2026-10-09: drawn in the air,
+            // it didn't show).
+            if e != Event::BladeEnd && self.action.is_some_and(|a| a.role == "blade_draw") {
+                continue;
+            }
             if let Some(role) = action_role(e, stance) {
                 let variants = lengths(role, 0).map_or(1, |(_, n)| n.max(1));
                 let turn = self.turns.entry(role).or_insert(0);
@@ -105,6 +110,7 @@ impl Animator {
                 }
                 self.action = Some(Clip { role, variant, t: 0.0, looping: false });
                 started = true;
+                crate::glog!("ARMS", "play {role} (version {}) for {e:?}", variant + 1);
             }
         }
         // The action advances; when it's over, the base takes over.
