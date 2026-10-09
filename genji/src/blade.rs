@@ -31,9 +31,10 @@ const SWING_HALF_ANGLE: f32 = 90.0;
 const SWING_BLEED_SHARE: f32 = 0.34;
 /// Share of each swing's damage that heals you (your request, 2026-10-08: 30 % lifesteal on every slash).
 const LIFESTEAL: f32 = 0.3;
-/// The ending roar starts this long before Dragonblade ends (its file lasts 2.9 s; you: "it starts when the blade is
-/// about to end").
-const END_ROAR_BEFORE: f32 = 2.9;
+/// The ending roar starts this long before Dragonblade ends: its file is heard for 2.82 s (2.91 s with its silent tail;
+/// you: "it starts when the blade is about to end"). The blade-ending and sheathe sounds are queued with the roar, to
+/// start the moment it goes quiet (you, 2026-10-09: the sheathe "has to come instantly after the ending roar").
+const END_ROAR_BEFORE: f32 = 2.82;
 /// "My ultimate is charging" at most this often when Q is pressed early, seconds.
 const CHARGING_LINE_EVERY: f32 = 4.0;
 /// Overwatch quick melee: 40. Reach, cone and recovery are not verified.
@@ -185,11 +186,11 @@ impl Blade {
             if left <= END_ROAR_BEFORE && !self.end_roar_played {
                 self.end_roar_played = true;
                 crate::sound::play("blade_end_roar");
+                crate::sound::play_after("blade_end", END_ROAR_BEFORE);
+                crate::sound::play_after("blade_sheathe", END_ROAR_BEFORE);
             }
             if left <= 0.0 {
                 self.left = None;
-                crate::sound::play("blade_end");
-                crate::sound::play_after("blade_sheathe", 0.25);
                 glog!("BLADE", "Dragonblade #{} over after {} swings", self.uses, self.swings);
             } else {
                 self.left = Some(left);

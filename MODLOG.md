@@ -3,6 +3,32 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Sound levels and the Dragonblade sheathe timing
+
+**Changed:**
+- `genji/src/sound.rs`: a per-event level table (`EVENT_GAIN`).
+  - The shuriken throw is at 0.45, about 7 dB quieter.
+  - "Ryujin no ken wo kurae!" is at 2.5, about 8 dB louder.
+  - The overall limit was raised from 2.0 to 3.0 so the louder voice line isn't capped.
+- `genji/src/blade.rs`:
+  - The blade-ending and sheathe sounds are now queued together with the ending roar. They start the moment the
+    roar goes quiet (2.82 s after it begins).
+  - Before, they were sent when the timer reached 0, and the sheathe had a further 0.25 s delay.
+  - The roar now starts 2.82 s before the end (was 2.9 s).
+**Why:** Your play test: "the m1 shuriken is too loud compared to the others", "the ult voice line is quite low",
+"the sheathing sound is a bit late. it has to come instantly after the ending roar".
+**Tested how:** Measured the files with ffmpeg:
+- Throw: mean about -15 dB, peak about -2 dB. Hits: mean about -26 dB.
+- Ult line: peak -13 dB. The unsheathe roar played with it peaks at -1 dB.
+- Ending roar: audible for 2.82 s, then silence to 2.91 s.
+`cargo build --release` and `cargo test --release` pass (35 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The new levels are estimates from the measurements; your ears decide.
+- The sheathe timing relies on the audio thread's own delay, so it can't drift from the roar.
+- If the Dragonblade ever ended early, the end sounds would still play at the roar's end. Nothing ends it early now.
+**Next:** Your levels check, then 11b-2 (movement and voice extras).
+
 ## 2026-10-09 Step 11b-1: the mod plays Genji's sounds (abilities)
 
 **Changed:**

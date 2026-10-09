@@ -23,6 +23,9 @@ use crate::glog;
 const SOUND_DIR: &str = r"D:\GenjiBridgeAssets\sound";
 /// Our level on top of Elden Ring's sound effects setting (Overwatch's files are mastered loud).
 const MASTER: f32 = 0.8;
+/// Per-event level on top of MASTER, from your play test (2026-10-09). Measured from the files: the throw is about
+/// 10 dB louder than the hit sounds; "Ryujin no ken wo kurae!" peaks 12 dB under the roar it plays with.
+const EVENT_GAIN: [(&str, f32); 2] = [("shuriken_throw", 0.45), ("voice_ult_activate", 2.5)];
 /// Events not logged each time they play (too frequent).
 const QUIET: [&str; 2] = ["footstep", "shuriken_throw"];
 
@@ -177,7 +180,8 @@ impl Player {
                 return;
             }
         };
-        let level = (MASTER * self.volume * gain).clamp(0.0, 2.0);
+        let event_gain = EVENT_GAIN.iter().find(|(e, _)| *e == event).map_or(1.0, |(_, g)| *g);
+        let level = (MASTER * self.volume * gain * event_gain).clamp(0.0, 3.0);
         let source = source.convert_samples::<f32>().amplify(level).delay(Duration::from_secs_f32(delay.max(0.0)));
         if !QUIET.contains(&event) {
             glog!("SOUND", "{event} (take {} of {count}){}", take + 1, channel.map(|c| format!(" on {c}")).unwrap_or_default());
