@@ -84,6 +84,7 @@ struct View {
     /// Last frame: the game played its own animation (a hit reaction after a drop) / our controller drove.
     reacting: bool,
     in_control: bool,
+    f6_was_down: bool,
     /// How much lower the arms are drawn right now (metres, arms.rs BLADE_DROP).
     arms_drop: f32,
     /// The Tarnished's own voice, silenced while Genji input is captured (game_voice.rs).
@@ -279,6 +280,7 @@ fn camera_step_inner(dt: f32) -> bool {
             driving = true;
             if view.mover.dash_started {
                 view.swift.started();
+                view.deflect.cancel("Swift Strike");
                 crate::sound::play("dash");
                 crate::sound::voice("voice_dash", false);
             }
@@ -449,7 +451,13 @@ fn camera_step_inner(dt: f32) -> bool {
     }
     view.sound.ult_ready = ult_ready;
 
-    // 6b. Genji's arms (step 10c, arms.rs): each stance's resting pose for now; actions come in 10d.
+    // 6b. Genji's arms (step 10c, arms.rs): each stance's resting pose for now; actions come in 10d. F6 hides them
+    // (a test switch).
+    let f6 = dinput::key_down(&keys_now, dik::F6);
+    if f6 && !view.f6_was_down {
+        crate::arms::toggle();
+    }
+    view.f6_was_down = f6;
     let stance = if view.deflect.active() {
         "deflect_idle"
     } else if view.blade.active() {

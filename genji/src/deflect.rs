@@ -103,6 +103,13 @@ impl Deflect {
         self.left.is_some()
     }
 
+    /// Ends Deflect at once if it's up (Swift Strike cancels it, as in Overwatch: you, 2026-10-09).
+    pub fn cancel(&mut self, why: &str) {
+        if self.left.is_some() {
+            self.end(why);
+        }
+    }
+
     fn end(&mut self, why: &str) {
         self.left = None;
         self.cooldown = COOLDOWN;

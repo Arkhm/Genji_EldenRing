@@ -3,6 +3,25 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Swift Strike cancels Deflect; F6 hides the arms (flicker test)
+
+**Changed:**
+- `deflect.rs`: `cancel()`. `camera.rs` calls it when a dash starts, so Deflect ends at once. Its end sound plays, its
+  cooldown starts, and the protection goes off.
+- `arms.rs` and `crosshair.rs`: F6 switches the arms off and on (logged `ARMS F6: ...`). It's a test switch.
+**Why:** Your test:
+- "when using reflect, if you dash, the reflect should instantly be canceled" (Overwatch).
+- "the lights of the map are flickering ... gets a little dark for a small second". Your log shows the arms' picture
+  was copied only 2-13 times in each 5-20 s stretch, so the copies can't cause a fast, constant flicker. The cause
+  isn't known: F6 shows whether the arms have anything to do with it.
+**Tested how:** `cargo build --release` and `cargo test --release` pass (44 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The flicker.
+- The frame rate in your log was 43-55 most of the time (60 in earlier sessions). Not known whether that's the area
+  (open field, grass) or us; F6 helps tell.
+**Next:** You compare with the arms on and off (F6), and with Genji mode off (F9).
+
 ## 2026-10-09 Your Deflect block picks; Dragonblade arms sit lower (cut end hidden)
 
 **Changed:**

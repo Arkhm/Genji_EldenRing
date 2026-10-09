@@ -37,6 +37,7 @@ pub mod dik {
     pub const F: usize = 0x21;
     pub const LSHIFT: usize = 0x2A;
     pub const SPACE: usize = 0x39;
+    pub const F6: usize = 0x40;
     pub const F7: usize = 0x41;
     pub const F8: usize = 0x42;
     pub const F9: usize = 0x43;

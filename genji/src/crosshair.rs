@@ -170,7 +170,7 @@ impl Overlay {
             return;
         }
         // Genji's arms, stretched over the whole screen, under everything else we draw.
-        if let (Some(id), true) = (self.arms.id, self.arms.ready) {
+        if let (Some(id), true, true) = (self.arms.id, self.arms.ready, crate::arms::shown()) {
             ui.get_foreground_draw_list().add_image(id, [0.0, 0.0], [width, height]).build();
         }
         crate::hud::draw_kill_skull(ui, &mut self.hud, width, height);

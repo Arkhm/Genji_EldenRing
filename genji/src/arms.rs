@@ -39,6 +39,19 @@ struct Shared {
     seq: u64,
 }
 
+/// F6 switches the arms off and on (a test switch: your test of 2026-10-09 saw the game's light flicker, to tell
+/// whether the arms cause it).
+static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn toggle() {
+    let on = !SHOWN.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+    glog!("ARMS", "F6: arms {}", if on { "shown" } else { "hidden" });
+}
+
+pub fn shown() -> bool {
+    SHOWN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 static SHARED: Mutex<Shared> = Mutex::new(Shared { request: None, frame: None, seq: 0 });
 static WAKE: Condvar = Condvar::new();
 
