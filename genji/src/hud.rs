@@ -44,6 +44,12 @@ const LIT_IN: f32 = 0.07;
 const SWIFT_LIT: f32 = 0.4;
 /// After the cyan: the tile fades to grey while the countdown number fades in (clip part 3), seconds.
 const COOLDOWN_ENTRY: f32 = 0.17;
+/// The "+" pill stays yellow this long after health last went up, seconds (your Overwatch screenshots: it shows
+/// while healing; Elden Ring's flask restores health over a moment).
+const HEAL_HOLD: f32 = 0.8;
+/// The pink "health went down" arrow shows this long after the last damage, seconds.
+const DAMAGE_HOLD: f32 = 1.2;
+
 /// Ability used: the tile is pushed down, its top dropping by this share of its height (clip part 3: about 10 of
 /// 64 px), within PRESS_IN seconds.
 const PRESS_DEPTH: f32 = 0.16;
@@ -150,6 +156,15 @@ struct Anim {
     deflect_was_lit: bool,
     swift_lit_off_at: Option<f32>,
     deflect_lit_off_at: Option<f32>,
+    /// Health last frame (None while the HUD is hidden, so coming back doesn't count as a change).
+    last_hp: Option<i32>,
+    last_max_hp: i32,
+    healed_at: Option<f32>,
+    damaged_at: Option<f32>,
+    /// How far the "+" pill shows healing (yellow) and damage (pink arrow), 0-1, eased.
+    heal_shown: f32,
+    damage_shown: f32,
+    last_now: f32,
     blade_was_on: bool,
     ult_pressed_at: Option<f32>,
 }
@@ -275,7 +290,6 @@ const PANEL_WHITE: [u8; 4] = [232, 235, 240, 235];
 const DIM: [u8; 4] = [215, 220, 230, 200];
 const SHADOW: [u8; 4] = [0, 0, 0, 110];
 const CYAN: [u8; 4] = [90, 235, 255, 255];
-const ICON_ON_WHITE: [u8; 4] = [40, 45, 60, 255];
 /// Clip parts 3-4: the active tile and the cooldown fill are a saturated cyan; the waiting tile a see-through grey.
 const ACTIVE_CYAN: [u8; 4] = [70, 255, 245, 255];
 const FILL_CYAN: [u8; 4] = [68, 255, 250, 255];
@@ -311,9 +325,30 @@ fn picture(draw: &DrawListMut, pic: Picture, center: [f32; 2], size: f32, angle:
 pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     let s = *STATE.lock().unwrap_or_else(|e| e.into_inner());
     if !s.visible {
+        r.anim.last_hp = None;
         return;
     }
     let now = ui.time() as f32;
+    // Healing and damage, from health going up or down (not when the maximum changes, or from 0 when you come back).
+    if let Some(prev) = r.anim.last_hp {
+        if s.max_hp == r.anim.last_max_hp && prev > 0 {
+            if s.hp > prev {
+                if r.anim.healed_at.is_none_or(|t| now - t > HEAL_HOLD) {
+                    glog!("HUD", "healing indicator on ({prev} -> {} of {})", s.hp, s.max_hp);
+                }
+                r.anim.healed_at = Some(now);
+            } else if s.hp < prev {
+                r.anim.damaged_at = Some(now);
+            }
+        }
+    }
+    r.anim.last_hp = Some(s.hp);
+    r.anim.last_max_hp = s.max_hp;
+    let dt = (now - r.anim.last_now).clamp(0.0, 0.1);
+    r.anim.last_now = now;
+    let toward = |v: f32, on: bool, seconds: f32| if on { (v + dt / seconds).min(1.0) } else { (v - dt / seconds).max(0.0) };
+    r.anim.heal_shown = toward(r.anim.heal_shown, r.anim.healed_at.is_some_and(|t| now - t < HEAL_HOLD), 0.15);
+    r.anim.damage_shown = toward(r.anim.damage_shown, r.anim.damaged_at.is_some_and(|t| now - t < DAMAGE_HOLD), 0.2);
     // Flashes when something becomes ready.
     let swift_cooling = s.swift_cooldown > 0.0;
     if r.anim.swift_was_cooling && !swift_cooling {
@@ -407,12 +442,32 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     }
     let hx = px + pw - 8.0 * k;
     let seg_top = base - 30.0 * k;
-    let plus = 22.0 * k;
     let num_mid = seg_top - 22.0 * k;
-    draw.add_rect([hx, num_mid - plus / 2.0], [hx + plus, num_mid + plus / 2.0], col(PANEL_WHITE)).filled(true).rounding(2.0 * k).build();
-    picture(&draw, r.plus, [hx + plus / 2.0, num_mid], plus * 0.7, 0.0, ICON_ON_WHITE);
+    // The "+" pill (your Overwatch screenshots, 2026-10-08): a rounded pill, its left 56 % white with a dark "+", the
+    // rest dark see-through grey. Damage: the white goes dark too, the "+" light grey, and a pink arrow pointing down
+    // shows in the right part. Healing: the left part yellow with a dark "+", the right part dark yellow, a yellow
+    // outline.
+    let (heal, hurt) = (r.anim.heal_shown, r.anim.damage_shown * (1.0 - r.anim.heal_shown));
+    let (pill_w, pill_h) = (40.0 * k, 24.0 * k);
+    let (x0, y0, x1, y1) = (hx, num_mid - pill_h / 2.0, hx + pill_w, num_mid + pill_h / 2.0);
+    let split = x0 + pill_w * 0.56;
+    let dark = [40, 40, 58, 160];
+    let right = mix(dark, [118, 98, 18, 215], heal);
+    let left = mix(mix(PANEL_WHITE, dark, hurt), [245, 214, 32, 255], heal);
+    let cross = mix(mix([60, 60, 78, 255], [205, 205, 212, 255], hurt), [92, 76, 10, 255], heal);
+    let round = 4.0 * k;
+    draw.add_rect([split, y0], [x1, y1], col(right)).filled(true).rounding(round).round_top_left(false).round_bot_left(false).build();
+    draw.add_rect([x0, y0], [split, y1], col(left)).filled(true).rounding(round).round_top_right(false).round_bot_right(false).build();
+    draw.add_rect([x0, y0], [x1, y1], col(mix([20, 20, 30, 110], [250, 226, 40, 255], heal))).thickness((1.0 + 0.6 * heal) * k).rounding(round).build();
+    picture(&draw, r.plus, [(x0 + split) / 2.0, num_mid], pill_h * 0.68, 0.0, cross);
+    if hurt > 0.0 {
+        let (ax, ay) = ((split + x1) / 2.0, num_mid);
+        draw.add_triangle([ax - 5.0 * k, ay - 3.0 * k], [ax + 5.0 * k, ay - 3.0 * k], [ax, ay + 4.0 * k], col(alpha([238, 64, 238, 255], hurt)))
+            .filled(true)
+            .build();
+    }
     let hp = s.hp.max(0).to_string();
-    let nx = hx + plus + 10.0 * k;
+    let nx = x1 + 10.0 * k;
     let t = measure(r.bold_big, &hp);
     text([nx, num_mid - t[1] / 2.0], r.bold_big, WHITE, &hp);
     let sep_x = nx + t[0] + 6.0 * k;

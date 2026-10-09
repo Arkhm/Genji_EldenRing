@@ -430,6 +430,14 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
     - A snap to the ready state (72).
     - Built from shared parts: `Look` (the badge with adjustable sizes and colours), keyframe tables (`key`,
       `key_col`), `ult_gain` and `eruption`.
+  - **Health "+" pill** (your Overwatch screenshots):
+    - Normal: the left 56% is white with a dark "+", and the rest dark see-through grey.
+    - Healing: health going up turns it yellow (left yellow, right dark yellow, yellow outline). It stays yellow 0.8 s
+      after the last rise.
+    - Damage: health going down turns the whole pill dark, the "+" light grey, and shows a pink arrow pointing down
+      for 1.2 s.
+    - Each state fades in and out over 0.15-0.2 s.
+    - A change of maximum health doesn't count, and neither does coming back to the HUD.
   - **Ultimate pressed (0.4 s):** the ring expands and fades, and the emblem gives way to the empty meter with its
     "0". Q becomes outlined.
   - **During Dragonblade:** the meter shows the charge, as in the clip. The draining ring with seconds is gone.

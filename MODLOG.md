@@ -3,6 +3,31 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: health "+" pill, yellow while healing, pink arrow on damage
+
+**Changed (`genji/src/hud.rs`):**
+- **The "+" box is now Overwatch's pill,** 40x24 px with rounded corners. Normally its left 56% is white with a dark
+  "+", and the rest dark see-through grey.
+- **Healing:** whenever health goes up (your R flask, or any other healing), the pill turns yellow:
+  - left part yellow with a dark olive "+", right part dark yellow, yellow outline;
+  - it stays yellow 0.8 s after the last rise.
+- **Damage:** whenever health goes down, the pill's white part goes dark, the "+" turns light grey, and a pink arrow
+  pointing down shows in the right part for 1.2 s. Healing takes priority.
+- **Transitions:** each state fades in and out over 0.15-0.2 s.
+- **What doesn't count:** health changing because the maximum changed (levelling, gear), coming back from a hidden
+  HUD, or rising from 0.
+- **Log:** `[HUD] healing indicator on (a -> b of max)` each time healing starts.
+- **Docs:** README's "what works" list updated with the HUD parts you checked in game today. The outdated "DEFLECT
+  under the crosshair" line is fixed.
+**Why:** You, with Overwatch screenshots of the pill: normal, damaged, healing.
+**Tested how:**
+- A mock-up of the three states next to your screenshots (`D:\GenjiBridgeAssets\hud_ref\mock13_pill.png`). It showed
+  the damaged pill's two halves at different darkness; fixed by drawing them side by side, not one over the other.
+- The build and the 31 unit tests pass.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game: drink a flask, take a hit.
+**Next:** Your test; then step 12 is done.
+
 ## 2026-10-08 HUD: the ultimate becoming ready (99% to 100%), and the charging meter redone to match
 
 **Changed (`genji/src/hud.rs`)**, following your "ULT GAINED" spec:

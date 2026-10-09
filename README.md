@@ -37,13 +37,19 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   what's under the crosshair; kills give runes. No throw limit (510 throws in a row, tested 2026-10-07).
   Bursts of 3, Fan of Blades on right click, 30 shuriken and the automatic reload (step 6b) are built, **not
   tested** yet.
-- Overwatch-style HUD (step 12): portrait and health, ultimate ring, Swift Strike and Deflect cooldowns, ammo, using
-  Overwatch's own icons from your extracted files. **Not tested** yet.
+- Overwatch-style HUD (step 12), with Elden Ring's own HUD switched off in Genji mode. It was rebuilt from your
+  Overwatch screenshots and clip, and you checked it in game on 2026-10-08:
+  - the hexagon portrait with the head standing out, and health;
+  - LSHIFT/E tiles: the press, cooldown fill and ready flash;
+  - the ammo panel lined up with the tiles;
+  - the ultimate: charging meter, ready flipbook flares, the 100% animation and the press;
+  - the Dragonblade countdown ring around the crosshair.
+  The health "+" pill turning yellow while healing and showing a pink arrow on damage is **not tested** yet.
 - Crosshair: your Overwatch crosshair (green, length 6, gap 13, 80%, black outline) drawn over the game while
   the first-person view is on (part of step 12). Tested 2026-10-07: it shows up.
 - All Genji damage scales with dexterity (Elden Ring's own scaling curve, grade A). **Not tested** yet.
-- Deflect, first part (step 8a): E blocks damage from the front for 2 s (E again ends it), 8 s cooldown; "DEFLECT"
-  shows under the crosshair. Tested 2026-10-08 (arrows across the screen, melee).
+- Deflect, first part (step 8a): E blocks damage from the front for 2 s (E again ends it), 8 s cooldown; the E tile
+  shows it. Tested 2026-10-08 (arrows across the screen, melee).
   Projectiles come back as themselves along your aim with their own damage (step 8b, tested 2026-10-08).
 - Dragonblade (Q when the ultimate is full; hold left click to swing; Corpse Piler hits with bleed and a Blood
   Blade crescent as the visible sweep; swings ignore shields), ultimate charge, and quick melee on mouse 5 (breaks
