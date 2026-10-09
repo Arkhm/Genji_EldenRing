@@ -652,6 +652,11 @@ first-person animations for each action, as in Overwatch.
 - **C. Elden Ring draws Genji.** His model and animations converted to Elden Ring's formats (FLVER, HKX) and loaded
   as the player's body. Very hard conversions; Elden Ring's camera and animation system would fight our controller.
 
+**Overwatch reference** (your recordings, 2026-10-09): `D:\GenjiBridgeAssets\ow_ref\INDEX.md` lists what each of
+your three clips shows and when (Dragonblade; walking, throws, Fan of Blades, reload; wall climb, landing), with a
+frame every 0.1 s. The resting pose matches ours: the wrist at the same place on the screen, the same size. So the eye
+and the field of view are right.
+
 **Steps:**
 - **10a. Name the animations:**
   - Render all 129 as looping previews (the same Blender script, all animations instead of only those with sounds).

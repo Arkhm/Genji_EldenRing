@@ -3,6 +3,22 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Your Overwatch arm recordings indexed
+
+**Changed:** `docs/DESIGN.md` 5k points to `D:/GenjiBridgeAssets/ow_ref/INDEX.md`. That index (outside the repository)
+holds your three recordings as a frame every 0.1 s plus contact sheets, and lists what each shows and when:
+- clip1: Dragonblade draw, resting grip, swings, end;
+- clip2: walking, throws, Fan of Blades, reload;
+- clip3: walking, wall climb, landing.
+**Why:** You: "I will record genji doing his animations, and you can analyze his arms positions and frames and save in
+your memory for further better comparisons."
+**Tested how:** Looked at every 0.3 s of the three clips. Overlaid your standing frame (clip2 at 1.0 s) on our resting
+pose at the same screen shape: the wrist sits at the same place (x 0.47, y about 0.84), at the same size.
+**Result:** The camera and field of view are confirmed. Overwatch's resting hand is a fist holding the shuriken; ours
+is loosely curled (no shuriken model yet).
+**Still broken / not tested:** Nothing changed in the mod.
+**Next:** 10d, using these frames to check each animation.
+
 ## 2026-10-09 Swift Strike cancels Deflect; F6 hides the arms (flicker test)
 
 **Changed:**
