@@ -22,6 +22,10 @@ use crate::targets::{self, Target};
 const DURATION: f32 = 6.0;
 /// Unsheathing before the 6 s start: no swings, the duration doesn't drain (you, 2026-10-08: about 1 s).
 const UNSHEATHE: f32 = 1.0;
+/// The sheathe after Dragonblade: Overwatch's animation (1P 34A2) lasts 1.0 s and the sword reaches the sheath on his
+/// back at its very end. Until then no shuriken, quick melee, reload, Deflect or Swift Strike (you, 2026-10-09: "the
+/// only thing that can cancel that animation, and that is only when the sword gets inside the sheath, is the dash").
+pub const SHEATHE: f32 = 1.0;
 const SWING_DAMAGE: f32 = 100.0;
 const SWING_INTERVAL: f32 = 0.61;
 const SWING_REACH: f32 = 5.0;
@@ -118,6 +122,8 @@ pub struct Blade {
     left: Option<f32>,
     /// Seconds of unsheathing left (before `left` starts draining).
     unsheathe: f32,
+    /// Seconds of the sheathe after Dragonblade left.
+    sheathe: f32,
     swing_wait: f32,
     melee_wait: f32,
     swings: u32,
@@ -164,6 +170,11 @@ impl Blade {
         self.left.is_some() && self.unsheathe > 0.0
     }
 
+    /// Putting the sword away after Dragonblade (SHEATHE).
+    pub fn sheathing(&self) -> bool {
+        self.sheathe > 0.0
+    }
+
     /// Lifesteal earned since the last call, in hit points.
     pub fn take_heal(&mut self) -> i32 {
         let heal = self.heal_owed.floor();
@@ -180,6 +191,12 @@ impl Blade {
         self.swing_wait = (self.swing_wait - dt).max(0.0);
         self.melee_wait = (self.melee_wait - dt).max(0.0);
         self.charging_line_wait = (self.charging_line_wait - dt).max(0.0);
+        if self.sheathe > 0.0 {
+            self.sheathe = (self.sheathe - dt).max(0.0);
+            if self.sheathe <= 0.0 {
+                glog!("BLADE", "sheathed");
+            }
+        }
         for age in self.melee_hits.values_mut() {
             *age += dt;
         }
@@ -201,7 +218,8 @@ impl Blade {
             }
             if left <= 0.0 {
                 self.left = None;
-                glog!("BLADE", "Dragonblade #{} over after {} swings", self.uses, self.swings);
+                self.sheathe = SHEATHE;
+                glog!("BLADE", "Dragonblade #{} over after {} swings; sheathing {SHEATHE} s", self.uses, self.swings);
             } else {
                 self.left = Some(left);
             }
@@ -212,7 +230,7 @@ impl Blade {
     /// melee). Returns true if Dragonblade started this frame.
     pub fn act(&mut self, q_pressed: bool, swing_held: bool, melee_pressed: bool, player: &PlayerIns, look: &Look, eye: Vec3) -> bool {
         let mut started = false;
-        if q_pressed && !self.active() {
+        if q_pressed && !self.active() && !self.sheathing() {
             if crate::ult::spend() {
                 self.left = Some(DURATION);
                 self.unsheathe = UNSHEATHE;
@@ -234,7 +252,7 @@ impl Blade {
             self.swing_wait = SWING_INTERVAL;
             self.swing(player, look, eye);
         }
-        if !self.active() && melee_pressed && self.melee_wait <= 0.0 {
+        if !self.active() && !self.sheathing() && melee_pressed && self.melee_wait <= 0.0 {
             self.melee_wait = MELEE_RECOVERY;
             self.melee(player, look, eye);
         }

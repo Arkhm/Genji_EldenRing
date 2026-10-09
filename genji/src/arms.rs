@@ -148,7 +148,7 @@ fn run(w: usize, h: usize) {
             continue;
         };
         let pose = match req.pose.from.as_ref().and_then(|c| posed(c)) {
-            Some(from) if req.pose.mix < 1.0 => Viewmodel::blend(&from, &main, req.pose.mix),
+            Some(from) if req.pose.mix < 1.0 => vm.blend(&from, &main, req.pose.mix),
             _ => main,
         };
         canvas.clear();

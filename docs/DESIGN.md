@@ -693,7 +693,16 @@ and the field of view are right.
   - Clips with several versions take turns (swings, fans, blocks, jumps).
   - Jumps, the climb and the arms coming up never cut into a combat action (2026-10-09). They play only when
     nothing else is playing.
-  - **Blends:** 0.08 s into an action, 0.25 s back to the base.
+  - **Blends:** 0.08 s into an action, 0.15 s back to the base.
+  - **Between two frames and in blends,** each bone turns relative to its parent, around its own joint. The export
+    writes the skeleton for this (`bones.txt`: parents and rest positions). Turning whole skinning matrices instead
+    turned each bone around the model's origin at the feet and threw the fingers up to 97 cm off their path for a
+    moment (2026-10-09).
+  - **Rotation keys:** the Overwatch importer can write two keys in a row with opposite signs (the same rotation).
+    Blender then spins the bone the long way round between them. The exporter flips each key to the sign of the one
+    before.
+  - The Dragonblade draw and the sheathe play whole. The sheathe (1.0 s) also stops shuriken, melee, reload,
+    Deflect and Swift Strike in the game; a dash pressed during it starts once the sword is in.
   - Checked against your recordings: the throw has the same wind-up and release as clip2 at 13.1 s. The Dragonblade draw
     (12E6) has the same course as clip1 at 2.2 s (up, slash down, both hands on the hilt), but it's hard to judge
     without the sword.

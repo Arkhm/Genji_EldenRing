@@ -51,6 +51,55 @@ struct Shuriken {
     mats: Vec<f32>,
 }
 
+/// The arms' skeleton (bones.txt): per bone its parent and its rest matrix in world space, and an order with every
+/// parent before its children. Blends turn each bone relative to its parent, around its own joint.
+struct Skeleton {
+    parent: Vec<Option<usize>>,
+    rest: Vec<Mat>,
+    rest_inv: Vec<Mat>,
+    order: Vec<usize>,
+}
+
+impl Skeleton {
+    fn parse(list: &str, nb: usize) -> Result<Self, String> {
+        let (mut parent, mut rest) = (Vec::new(), Vec::new());
+        for line in list.lines().filter(|l| !l.trim().is_empty()) {
+            let p: Vec<&str> = line.split_whitespace().collect();
+            let bad = || format!("bones.txt: bad line {line:?}");
+            if p.len() != 15 || p[0].parse::<usize>() != Ok(parent.len()) {
+                return Err(bad());
+            }
+            let up: i64 = p[1].parse().map_err(|_| bad())?;
+            parent.push(if up < 0 { None } else { Some(up as usize) });
+            let mut m = [0.0; 12];
+            for (k, v) in m.iter_mut().enumerate() {
+                *v = p[3 + k].parse().map_err(|_| bad())?;
+            }
+            rest.push(m);
+        }
+        if parent.len() != nb || parent.iter().flatten().any(|&q| q >= nb) {
+            return Err(format!("bones.txt: {} bones, expected {nb}", parent.len()));
+        }
+        // Parents first.
+        let mut order = Vec::with_capacity(nb);
+        let mut placed = vec![false; nb];
+        while order.len() < nb {
+            let before = order.len();
+            for i in 0..nb {
+                if !placed[i] && parent[i].is_none_or(|q| placed[q]) {
+                    placed[i] = true;
+                    order.push(i);
+                }
+            }
+            if order.len() == before {
+                return Err("bones.txt: the parents go round in a loop".into());
+            }
+        }
+        let rest_inv = rest.iter().map(inverse).collect();
+        Ok(Self { parent, rest, rest_inv, order })
+    }
+}
+
 /// Parts of the model (tools\export_viewmodel.py, WEAPONS), as bits of a mask of what to show.
 pub const PART_ARMS: u8 = 1 << 0;
 pub const PART_SHURIKEN: u8 = 1 << 1;
@@ -85,6 +134,8 @@ pub struct Viewmodel {
     /// Per part: its colour texture and, if it has one, its glow texture.
     textures: Vec<(Texture, Option<Texture>)>,
     shuriken: Option<Shuriken>,
+    /// Without it (an older export), blends turn each bone around the model's origin.
+    skeleton: Option<Skeleton>,
 }
 
 /// A 3x4 skinning matrix (rows).
@@ -220,7 +271,11 @@ impl Viewmodel {
             }
             _ => None,
         };
-        Ok(Self { model, anims, mats, textures, shuriken })
+        let skeleton = match std::fs::read_to_string(dir.join("bones.txt")) {
+            Ok(list) => Some(Skeleton::parse(&list, nb)?),
+            Err(_) => None,
+        };
+        Ok(Self { model, anims, mats, textures, shuriken, skeleton })
     }
 
     /// The first animation for `role`, if exported.
@@ -234,17 +289,40 @@ impl Viewmodel {
         (!all.is_empty()).then(|| all[k % all.len()])
     }
 
-    /// Two poses blended: `w` of `b` (0..1), the rest of `a` (short blends between clips). Each bone's rotation is
-    /// blended as a rotation and its position as a position. Mixing the matrices' numbers directly (the first way)
-    /// squashed and twisted the arm while blending: you saw it on M1 (2026-10-09).
-    pub fn blend(a: &[Mat], b: &[Mat], w: f32) -> Vec<Mat> {
-        a.iter()
-            .zip(b)
-            .map(|(x, y)| {
-                let ((rx, sx, tx), (ry, sy, ty)) = (parts(x), parts(y));
-                from_parts(rx.slerp(ry, w), sx * (1.0 - w) + sy * w, tx.lerp(ty, w))
-            })
-            .collect()
+    /// Two poses blended: `w` of `b` (0..1), the rest of `a` (between two frames, and short blends between clips).
+    /// Each bone turns relative to its parent, around its own joint, the way the animation moves it. History (your
+    /// tests of 2026-10-09): mixing the matrices' numbers directly squashed the fingers; turning each bone's matrix
+    /// as a whole turned it around the model's origin at the feet, 1.5 m from the hand, and threw the fingers out
+    /// for a moment ("his fingers simply expand and twist").
+    pub fn blend(&self, a: &[Mat], b: &[Mat], w: f32) -> Vec<Mat> {
+        let Some(sk) = &self.skeleton else {
+            return blend_each(a, b, w);
+        };
+        let nb = sk.parent.len();
+        // Bone matrices (rest -> posed bone in world space), then each relative to its parent.
+        let posed = |s: &[Mat]| -> Vec<Mat> { (0..nb).map(|i| compose(&s[i], &sk.rest[i])).collect() };
+        let (pa, pb) = (posed(a), posed(b));
+        let local = |p: &[Mat], i: usize| match sk.parent[i] {
+            Some(q) => compose(&inverse(&p[q]), &p[i]),
+            None => p[i],
+        };
+        let mut out = vec![[0.0; 12]; nb];
+        for &i in &sk.order {
+            let l = mix(&local(&pa, i), &local(&pb, i), w);
+            out[i] = match sk.parent[i] {
+                Some(q) => compose(&out[q], &l),
+                None => l,
+            };
+        }
+        let mut s: Vec<Mat> = (0..nb).map(|i| compose(&out[i], &sk.rest_inv[i])).collect();
+        // The shuriken's bones: relative to the hand.
+        let hand = self.shuriken.as_ref().map_or(0, |sh| sh.hand);
+        let (ia, ib) = (inverse(&a[hand]), inverse(&b[hand]));
+        for k in nb..a.len().min(b.len()) {
+            let rel = mix(&compose(&ia, &a[k]), &compose(&ib, &b[k]), w);
+            s.push(compose(&s[hand], &rel));
+        }
+        s
     }
 
     /// The skinning matrices of animation `anim` at `t` seconds (held at the last frame, or wrapped if `looping`):
@@ -270,7 +348,7 @@ impl Viewmodel {
                     let rel = |i: usize| -> Vec<Mat> {
                         (0..sh.bones).map(|b| sh.mats[((offset + i) * sh.bones + b) * 12..][..12].try_into().unwrap()).collect()
                     };
-                    let r = if frac > 0.0 && i1 != i0 { Self::blend(&rel(i0), &rel(i1), frac) } else { rel(i0) };
+                    let r = if frac > 0.0 && i1 != i0 { blend_each(&rel(i0), &rel(i1), frac) } else { rel(i0) };
                     m.extend(r.iter().map(|r| compose(&hand_m, r)));
                 }
                 None => m.extend(std::iter::repeat_n(hand_m, self.model.extra_bones)),
@@ -295,15 +373,14 @@ impl Viewmodel {
             let at = ((a.offset + i) * nb + b) * 12;
             &self.mats[at..at + 12]
         };
-        // Between two stored frames, rotations are turned, not mixed in a straight line: Overwatch snaps some finger
-        // and weapon bones by up to 180 degrees between two frames, and mixing those matrices made fingers collapse
-        // and twist for a moment (you, 2026-10-09: "his fingers simply expand and twists for micro seconds").
+        // Between two stored frames, each bone turns around its joint (blend): Overwatch turns some finger and weapon
+        // bones by up to 180 degrees between two frames.
         let m0: Vec<Mat> = (0..nb).map(|b| frame(i0, b).try_into().unwrap()).collect();
         if frac <= 0.0 || i0 == i1 {
             return m0;
         }
         let m1: Vec<Mat> = (0..nb).map(|b| frame(i1, b).try_into().unwrap()).collect();
-        Self::blend(&m0, &m1, frac)
+        self.blend(&m0, &m1, frac)
     }
 }
 
@@ -361,6 +438,25 @@ fn parts(m: &Mat) -> (glam::Quat, glam::Mat3, Vec3) {
     }
     let stretch = r.transpose() * mm;
     (glam::Quat::from_mat3(&r).normalize(), stretch, Vec3::new(m[3], m[7], m[11]))
+}
+
+/// Each matrix blended on its own: rotation turned, stretch and translation mixed (right for matrices whose
+/// translation is small: relative to a parent or to the hand).
+fn blend_each(a: &[Mat], b: &[Mat], w: f32) -> Vec<Mat> {
+    a.iter().zip(b).map(|(x, y)| mix(x, y, w)).collect()
+}
+
+fn mix(x: &Mat, y: &Mat, w: f32) -> Mat {
+    let ((rx, sx, tx), (ry, sy, ty)) = (parts(x), parts(y));
+    from_parts(rx.slerp(ry, w), sx * (1.0 - w) + sy * w, tx.lerp(ty, w))
+}
+
+/// The inverse of a 3x4 matrix (as a 4x4 with 0 0 0 1 below).
+fn inverse(m: &Mat) -> Mat {
+    let a = glam::Mat3::from_cols(Vec3::new(m[0], m[4], m[8]), Vec3::new(m[1], m[5], m[9]), Vec3::new(m[2], m[6], m[10])).inverse();
+    let t = -(a * Vec3::new(m[3], m[7], m[11]));
+    let (c0, c1, c2) = (a.x_axis, a.y_axis, a.z_axis);
+    [c0.x, c1.x, c2.x, t.x, c0.y, c1.y, c2.y, t.y, c0.z, c1.z, c2.z, t.z]
 }
 
 fn from_parts(q: glam::Quat, stretch: glam::Mat3, t: Vec3) -> Mat {
@@ -779,10 +875,15 @@ mod tests {
             while t <= len + 1e-3 {
                 let pose = vm.pose(anim, t, false);
                 let mut canvas = Canvas::new(1290, 540);
+                // As in the game: the weapon this animation shows, and Dragonblade's lower camera.
+                canvas.parts = crate::arms_anim::parts_for(name);
+                if name.starts_with("blade_") {
+                    canvas.eye = EYE + Vec3::Z * crate::arms::BLADE_DROP;
+                }
                 draw(&vm, &pose, &mut canvas, 4);
                 write_png(&dir.join(format!("strip_{}_{k:02}.png", role.replace('#', "_v"))), &canvas, [120, 128, 140]);
                 k += 1;
-                t += 0.15;
+                t += std::env::var("GENJI_STRIP_STEP").ok().and_then(|v| v.parse().ok()).unwrap_or(0.15);
             }
         }
     }
@@ -797,14 +898,14 @@ mod tests {
         let vm = Viewmodel::load(dir).unwrap();
         let a = vm.pose(vm.find("idle").unwrap(), 0.0, false);
         let b = vm.pose(vm.find("throw").unwrap(), 0.3, false);
-        let mid = Viewmodel::blend(&a, &b, 0.5);
+        let mid = vm.blend(&a, &b, 0.5);
         // The volume each bone gives the mesh (the determinant) stays between the two poses': no squashing flat.
         let det = |m: &Mat| glam::Mat3::from_cols(Vec3::new(m[0], m[4], m[8]), Vec3::new(m[1], m[5], m[9]), Vec3::new(m[2], m[6], m[10])).determinant();
         for (m, (x0, y0)) in mid.iter().zip(a.iter().zip(&b)) {
             let (lo, hi) = (det(x0).min(det(y0)), det(x0).max(det(y0)));
             assert!(det(m) >= lo * 0.9 - 1e-3 && det(m) <= hi * 1.1 + 1e-3, "{} not within {lo}..{hi}", det(m));
         }
-        let end = Viewmodel::blend(&a, &b, 1.0);
+        let end = vm.blend(&a, &b, 1.0);
         let worst = end.iter().flatten().zip(b.iter().flatten()).map(|(p, q)| (p - q).abs()).fold(0.0, f32::max);
         assert!(worst < 1e-3, "blend at 1 differs from the pose by {worst}");
     }
@@ -851,6 +952,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Between two stored frames no point of the arms flies off: each lies no farther from the nearer of its two
+    /// frame positions than those are apart (a point turning around one joint stays within that), plus 3 cm for
+    /// points turned by several joints at once (2.6 cm at most, in the few frames where an animation turns a joint
+    /// very far). Your test of 2026-10-09 ("his fingers simply expand and twist for micro seconds"): turning whole skinning matrices
+    /// threw finger points tens of centimetres out; this prints the old way's worst next to the new one's.
+    #[test]
+    fn no_point_flies_off_between_frames() {
+        let dir = Path::new(DIR);
+        if !dir.join("bones.txt").is_file() {
+            return;
+        }
+        let vm = Viewmodel::load(dir).unwrap();
+        let m = &vm.model;
+        let verts: Vec<usize> = (0..m.pos.len()).filter(|&i| m.part[i] == 0).step_by(3).collect();
+        let skin = |pose: &[Mat], i: usize| -> Vec3 { (0..4).map(|k| apply(&pose[m.bones[i][k] as usize], m.pos[i]) * m.weights[i][k]).sum() };
+        let excess = |p: &[Mat], p0: &[Mat], p1: &[Mat]| -> f32 {
+            verts
+                .iter()
+                .map(|&i| {
+                    let (x, x0, x1) = (skin(p, i), skin(p0, i), skin(p1, i));
+                    x.distance(x0).min(x.distance(x1)) - x0.distance(x1)
+                })
+                .fold(f32::MIN, f32::max)
+        };
+        let (mut worst_old, mut worst_new) = ((0.0f32, String::new()), (0.0f32, String::new()));
+        for (i, a) in vm.anims.iter().enumerate() {
+            for f in 0..a.frames.saturating_sub(1) {
+                let (p0, p1) = (vm.pose(i, f as f32 / a.fps, false), vm.pose(i, (f + 1) as f32 / a.fps, false));
+                for frac in [0.25f32, 0.5, 0.75] {
+                    let p = vm.pose(i, (f as f32 + frac) / a.fps, false);
+                    let e = excess(&p, &p0, &p1);
+                    if e > worst_new.0 {
+                        worst_new = (e, format!("{} {} frame {f}+{frac}", a.role, a.id));
+                    }
+                    let old = blend_each(&p0, &p1, frac);
+                    let e = excess(&old, &p0, &p1);
+                    if e > worst_old.0 {
+                        worst_old = (e, format!("{} {} frame {f}+{frac}", a.role, a.id));
+                    }
+                }
+            }
+        }
+        println!("worst point off its path between frames: old way {:.1} cm ({}), now {:.1} cm ({})", worst_old.0 * 100.0, worst_old.1, worst_new.0 * 100.0, worst_new.1);
+        assert!(worst_new.0 < 0.03, "a point flies {:.1} cm off between frames ({})", worst_new.0 * 100.0, worst_new.1);
     }
 
     #[test]

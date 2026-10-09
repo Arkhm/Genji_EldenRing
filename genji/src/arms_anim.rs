@@ -122,6 +122,11 @@ impl Animator {
             if e != Event::BladeEnd && e != Event::BladeSwing && self.action.is_some_and(|a| a.role == "blade_draw") {
                 continue;
             }
+            // The sheathe plays whole too: only Swift Strike cuts it, and blade.rs lets that start only once the sword
+            // is in (you, 2026-10-09: "if you keep shooting with m1 or m2, he doesn't do the sheathe animation").
+            if e != Event::Dash && e != Event::BladeDraw && self.action.is_some_and(|a| a.role == "blade_end") {
+                continue;
+            }
             if let Some(role) = action_role(e, stance) {
                 let variants = lengths(role, 0).map_or(1, |(_, n)| n.max(1));
                 let turn = self.turns.entry(role).or_insert(0);
@@ -314,6 +319,19 @@ mod tests {
         run(&mut a, 1.0, Stance::Normal, 0.0);
         let p = a.update(DT, Stance::Normal, 0.0, &[Event::Jump], &lengths);
         assert_eq!(p.main.role, "jump");
+    }
+
+    #[test]
+    fn the_sheathe_is_cut_only_by_a_dash() {
+        let mut a = Animator::default();
+        a.update(DT, Stance::Normal, 0.0, &[Event::BladeEnd], &lengths);
+        run(&mut a, 0.1, Stance::Normal, 0.0);
+        for e in [Event::Throw, Event::Fan, Event::Reload, Event::Melee, Event::DeflectStart, Event::Jump] {
+            let p = a.update(DT, Stance::Normal, 0.0, &[e], &lengths);
+            assert_eq!(p.main.role, "blade_end", "{e:?} cut the sheathe");
+        }
+        let p = a.update(DT, Stance::Normal, 0.0, &[Event::Dash], &lengths);
+        assert_eq!(p.main.role, "dash");
     }
 
     #[test]

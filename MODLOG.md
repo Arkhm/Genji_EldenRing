@@ -3,6 +3,44 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: fingers no longer fly off between frames; Dragonblade draw and sheathe fixed
+
+**Changed:**
+- `viewmodel.rs`: between two frames, and in the blends between animations, each bone now turns relative to its
+  parent, around its own joint. New test `no_point_flies_off_between_frames`.
+- `tools/export_viewmodel.py`:
+  - writes the skeleton (`bones.txt`: each bone's parent and rest position) for that;
+  - flips rotation keys whose sign is opposite to the key before (`fix_quaternion_signs`).
+- `camera.rs`: a Dragonblade swing is noticed only when the swing count rises.
+- `blade.rs`: after Dragonblade, a 1.0 s sheathe (`SHEATHE`, the length of Overwatch's sheathe animation 34A2).
+  - Nothing else during it: no shuriken, quick melee, reload, Deflect or a new Dragonblade.
+  - Swift Strike pressed during it waits and dashes once the sword is in.
+  - `arms_anim.rs`: only a dash cuts the sheathe animation.
+- The strips test draws the weapon and Dragonblade's lower camera as in the game; `GENJI_STRIP_STEP` sets its spacing.
+**Why:** Your test:
+- "the fingers are still breaking. in every animation";
+- "dragonblade unsheathe animation is not working anymore, instead he does a swing";
+- "if you keep shooting with m1 or m2, he doesn't do the sheathe animation ... the only thing that can cancel that
+  animation, and that is only when the sword gets inside the sheath, is the dash".
+**Tested how:**
+- Fingers:
+  - The last fix turned each bone's whole matrix. That turns the bone around the model's origin at the feet,
+    1.5 m from the hand. The new test measures how far each point of the arms strays from its path between two
+    frames, over every animation. Old way: up to 97 cm (a Dragonblade swing). Now: 2.6 cm at most, in the few
+    frames where an animation turns a joint very far.
+  - The last entry said Blender's keys have no sign flips. That was wrong. Counted on every key this time: up to 150
+    flipped keys per animation (most in Dragonblade, Deflect, melee and dash). One-frame spikes in the export
+    (a bone turning far and straight back) went from 96 to 8. The 8 left are 50-100 degree flicks.
+- The swing: in your log, the second Dragonblade's draw and a swing started in the same frame (270.586). The count
+  had gone from 9 back to 0.
+- The sheathe: in your log, the blade ended at 265.111 and a throw cut its animation. Measured in the export: the
+  hand takes the sword back over the shoulder in the last frames (0.97-1.0 s).
+- `cargo test --release` passes (53 tests, new: the points test and `the_sheathe_is_cut_only_by_a_dash`).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** whether the in-game fingers now look right; the sheathe's lock time is a guess from
+the animation's length.
+**Next:** Your test.
+
 ## 2026-10-09 Shuriken held like in Overwatch: fanned between the fingers
 
 **Changed:**

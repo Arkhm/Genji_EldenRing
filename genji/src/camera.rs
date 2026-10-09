@@ -64,6 +64,8 @@ struct View {
     firing: Firing,
     swift: Swift,
     shift_was_down: bool,
+    /// Left Shift pressed during the sheathe after Dragonblade: the dash starts once the sword is in.
+    dash_queued: bool,
     /// Seconds until the next CAMERA sync report.
     sync_report: f32,
     f8_was_down: bool,
@@ -283,6 +285,12 @@ fn camera_step_inner(dt: f32) -> bool {
             let down = dinput::key_down(&keys, dik::LSHIFT);
             let pressed = down && !view.shift_was_down;
             view.shift_was_down = down;
+            // During the sheathe after Dragonblade the dash waits for the sword to be in (blade.rs, SHEATHE).
+            if pressed && view.blade.sheathing() && !view.dash_queued {
+                glog!("SWIFT", "waits for the sword to be sheathed");
+                view.dash_queued = true;
+            }
+            let pressed = if view.blade.sheathing() { false } else { pressed || std::mem::take(&mut view.dash_queued) };
             if pressed && !view.swift.ready() {
                 glog!("SWIFT", "not ready");
                 crate::sound::play("not_ready");
@@ -400,6 +408,8 @@ fn camera_step_inner(dt: f32) -> bool {
         crate::sound::play("blade_draw");
     }
     let blade = view.blade.active();
+    // Putting the sword away after Dragonblade: nothing else until it's in (blade.rs, SHEATHE).
+    let sheathing = view.blade.sheathing();
 
     // 5. Deflect (step 8a): E, while we drive, also during Dragonblade (Overwatch). No shuriken while deflecting.
     let e_down = dinput::key_down(&keys_now, dik::E);
@@ -412,7 +422,7 @@ fn camera_step_inner(dt: f32) -> bool {
     if e_pressed && driving && !view.deflect.active() && view.deflect.hud().1 > 0.0 {
         crate::sound::play("not_ready");
     }
-    let deflecting = view.deflect.tick(dt, e_pressed && !view.blade.unsheathing(), driving);
+    let deflecting = view.deflect.tick(dt, e_pressed && !view.blade.unsheathing() && !sheathing, driving);
     // Deflect: the start with its 2 s hum (your recording), cut short if Deflect ends early; the end.
     if deflecting && !view.sound.deflecting {
         crate::sound::play_on("deflect", "deflect_start");
@@ -431,11 +441,11 @@ fn camera_step_inner(dt: f32) -> bool {
     view.firing.set_meleeing(view.blade.meleeing());
     // R: reload (not during Dragonblade, when the shuriken are put away, nor during a quick melee: firing.rs).
     let r_down = dinput::key_down(&keys_now, dik::R);
-    if r_down && !view.r_was_down && driving && !blade {
+    if r_down && !view.r_was_down && driving && !blade && !sheathing {
         view.firing.reload();
     }
     view.r_was_down = r_down;
-    let throws = view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !busy);
+    let throws = view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !sheathing && !busy);
     if throws.iter().any(|a| *a != 0.0) {
         crate::sound::play("fan_throw"); // Fan of Blades: the three at once, sideways
     } else {
@@ -545,7 +555,8 @@ fn camera_step_inner(dt: f32) -> bool {
     if view.deflect.blocks() != w.blocks {
         events.push(Event::DeflectBlock);
     }
-    if view.blade.swings() != w.swings && blade_on {
+    // A rise only: a new Dragonblade sets the count back to 0, which played its draw as a swing (you, 2026-10-09).
+    if view.blade.swings() > w.swings && blade_on {
         events.push(Event::BladeSwing);
     }
     if view.mover.dash_started {

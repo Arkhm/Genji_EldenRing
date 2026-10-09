@@ -54,7 +54,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   Projectiles come back as themselves along your aim with their own damage (step 8b, tested 2026-10-08).
 - Dragonblade (Q when the ultimate is full; hold left click to swing; Corpse Piler hits with bleed and a Blood
   Blade crescent as the visible sweep; swings ignore shields; 30% lifesteal per swing and no dash or Deflect while
-  unsheathing, both **not tested** yet), ultimate charge, and quick melee on mouse 5 (breaks
+  unsheathing, both **not tested** yet; nothing but a waiting dash during the 1 s sheathe at the end, **not tested**),
+  ultimate charge, and quick melee on mouse 5 (breaks
   guards and stances in two hits) (step 9, tested 2026-10-08). Deflect also works during Dragonblade.
 - Swift Strike (step 7): Left Shift dashes about 15 m where you look, through enemies (50 damage each), stopped by
   walls; 8 s cooldown, reset by a kill (tested 2026-10-08). Each dash hit is a real game hit and makes the enemy bleed

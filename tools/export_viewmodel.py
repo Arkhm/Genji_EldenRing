@@ -18,6 +18,9 @@ Output (all little-endian):
   the same as plain lines ("role id fps frames offset"), which the mod reads.
 - albedo.png (2048x2048, from Overwatch's 4096) and emission.png (1024x1024, his green lights); each weapon's
   part<n>_albedo.png and part<n>_emission.png (1024x1024); parts.txt: "part albedo emission" per line ("-" if none).
+- bones.txt: per bone "index parent name" (parent -1 for none) and its rest matrix in world space (12 numbers, 3x4 by
+  rows), so the mod can blend each bone relative to its parent.
+- Rotation keys are sign-corrected before sampling (fix_quaternion_signs).
 - export_check.txt: on two frames of every animation, the largest distance between the mesh posed the mod's way
   (these matrices and weights) and Blender's own posed mesh. Should be well under a millimetre.
 """
@@ -120,6 +123,35 @@ def skin_matrices(arm):
     return out
 
 
+def fix_quaternion_signs(action):
+    """The importer turns each rotation key into a quaternion on its own, so two keys in a row can come out with
+    opposite signs (the same rotation, written negated). Blender mixes the four numbers in a straight line between
+    keys, so between such a pair the bone spins through a wild path: fingers and arms twisting for a moment (you,
+    2026-10-09). Flipping each key to the sign of the one before keeps every rotation and removes the spin.
+    Returns the number of keys flipped."""
+    fcurves = action.fcurves if hasattr(action, 'fcurves') else action.layers[0].strips[0].channelbags[0].fcurves
+    groups = {}
+    for fc in fcurves:
+        if fc.data_path.endswith('rotation_quaternion'):
+            groups.setdefault(fc.data_path, [None] * 4)[fc.array_index] = fc
+    flipped = 0
+    for fcs in groups.values():
+        if None in fcs:
+            continue
+        prev = None
+        for k in range(len(fcs[0].keyframe_points)):
+            q = [fc.keyframe_points[k].co[1] for fc in fcs]
+            if prev is not None and sum(a * b for a, b in zip(q, prev)) < 0:
+                q = [-v for v in q]
+                for fc, v in zip(fcs, q):
+                    fc.keyframe_points[k].co[1] = v
+                flipped += 1
+            prev = q
+        for fc in fcs:
+            fc.update()
+    return flipped
+
+
 def save_texture(path, name, size):
     img = bpy.data.images.load(path)
     img.scale(size, size)
@@ -211,6 +243,15 @@ def main():
     with open(os.path.join(OUT, 'parts.txt'), 'w', encoding='utf-8') as fh:
         fh.writelines(line + '\n' for line in parts)
     print(f'MODEL {len(verts)} vertices ({body_verts} the arms), {len(indices) // 3} triangles, {len(arm.data.bones)} bones')
+    # The skeleton: per bone its parent and its rest matrix in world space. Between two frames (and two clips) the mod
+    # turns each bone around its own joint, relative to its parent; the skinning matrices alone only allow turning
+    # around the model's origin at the feet, which threw the fingers out for a moment (you, 2026-10-09).
+    with open(os.path.join(OUT, 'bones.txt'), 'w', encoding='utf-8') as fh:
+        for i, b in enumerate(arm.data.bones):
+            rest = arm.matrix_world @ b.matrix_local
+            parent = bone_index[b.parent.name] if b.parent else -1
+            nums = ' '.join(f'{rest[r][c]:.7g}' for r in range(3) for c in range(4))
+            fh.write(f'{i} {parent} {b.name} {nums}\n')
 
     rest = np.array([v[:3] for v in verts[:body_verts]])
     bone_ids = np.array([v[8] for v in verts[:body_verts]])
@@ -228,6 +269,7 @@ def main():
                 bpy.context.view_layer.objects.active = arm
                 bpy.ops.import_mesh.overtools2_animmclip(directory=os.path.dirname(path) + os.sep, files=[{'name': os.path.basename(path)}])
                 act = arm.animation_data.action
+                flips = fix_quaternion_signs(act)
                 frames = list(range(int(act.frame_range[0]), int(act.frame_range[1]) + 1))
                 for k, fr in enumerate(frames):
                     scene.frame_set(fr)
@@ -246,7 +288,7 @@ def main():
                         check.append(f'{role} {short} frame {fr}: largest difference {err * 1000:.3f} mm')
                 index.append({'role': role, 'id': short, 'fps': clip_fps(path), 'frames': len(frames), 'offset': offset})
                 offset += len(frames)
-                print('ANIM', role, short, len(frames), 'frames')
+                print('ANIM', role, short, len(frames), 'frames,', flips, 'rotation keys flipped to the previous sign')
     with open(os.path.join(OUT, 'anims.json'), 'w', encoding='utf-8') as fh:
         json.dump({'bones': len(arm.data.bones), 'floats_per_bone': 12, 'anims': index}, fh, indent=1)
     # The same list as plain lines for the mod (no JSON reader there): role id fps frames offset.
@@ -275,6 +317,7 @@ def main():
                     o.select_set(o is target)
                 bpy.context.view_layer.objects.active = target
                 bpy.ops.import_mesh.overtools2_animmclip(directory=os.path.dirname(path) + os.sep, files=[{'name': os.path.basename(path)}])
+                fix_quaternion_signs(target.animation_data.action)
             act = arm.animation_data.action
             frames = list(range(int(act.frame_range[0]), int(act.frame_range[1]) + 1))
             for fr in frames:
