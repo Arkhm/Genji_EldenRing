@@ -11,12 +11,12 @@ Everything that changed and what was tested. Newest entry first. Template:
   - The alternatives: our own Direct3D 12 pass, or converting Genji into Elden Ring's own formats.
 - Step 11 is marked done in the plan table.
 - `tools/render_anim_previews.py`: `-- --all-1p` renders all 129 first-person animations from Genji's eye, with your
-  Overwatch field of view at your screen's shape (430x180), into `D:\GenjiBridgeAssetsnim_previews_eye`.
-- **New `tools/make_anim_picker.py`:** writes `D:\GenjiBridgeAssetsnim_picker\index.html`.
+  Overwatch field of view at your screen's shape (430x180), into `D:\GenjiBridgeAssets\anim_previews_eye`.
+- **New `tools/make_anim_picker.py`:** writes `D:\GenjiBridgeAssets\anim_picker\index.html`.
   - One card per animation: preview, length, folder, the sounds you tagged on it, and my guess.
   - Tags (idle, throw, fan, reload, Deflect, Dragonblade, melee, climb...) and notes.
   - Exports `anim_picks.json`.
-- Also fixed two broken characters in DESIGN.md: a `` that had turned into a control character, and a path.
+- Also fixed two broken characters in DESIGN.md: a `\01` that had turned into a control character, and a path.
 **Why:** You: "lets proceed". Step 10 needs to know which of the 129 animations is which; only the 20 that play sounds
 had previews.
 **Tested how:**
