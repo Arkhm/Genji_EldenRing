@@ -107,30 +107,33 @@ button:hover { border-color:var(--accent); cursor:pointer; }
 main { padding:12px 16px 80px; max-width:1200px; }
 h2 { font-size:15px; margin:22px 0 8px; color:var(--accent); }
 .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px 0;
-  display:grid; grid-template-columns: 210px 1fr 230px; gap:10px; align-items:center; }
+  display:grid; grid-template-columns: 210px 1fr 230px 220px; gap:10px; align-items:center; }
+.card.noted:not(.tagged), .voice-row.noted:not(.tagged) { background:#2b2a1c; }
+input.note { width:100%; }
 .card.tagged { background:var(--tagged); }
 .meta b { display:block; }
 .meta span { color:var(--dim); font-size:12px; }
 .takes { display:flex; flex-wrap:wrap; gap:4px; }
 .takes button { padding:3px 8px; font-size:12px; }
 .takes button.playing { border-color:var(--accent); color:var(--accent); }
-.voice-row { display:grid; grid-template-columns: 60px 1fr 230px; gap:10px; align-items:center; padding:4px 10px;
+.voice-row { display:grid; grid-template-columns: 60px 1fr 230px 220px; gap:10px; align-items:center; padding:4px 10px;
   border-bottom:1px solid var(--line); }
 .voice-row.tagged { background:var(--tagged); }
 .count { color:var(--dim); }
 textarea { width:100%; height:140px; background:#0c0e13; color:var(--text); border:1px solid var(--line); border-radius:6px; }
-@media (max-width: 760px) { .card, .voice-row { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .card, .voice-row { grid-template-columns: 1fr; } }
 </style></head><body>
 <header>
   <h1>Genji Sound Picker</h1>
   <p class="help">Click a take to hear it (the volume follows your browser). When a sound is one of Genji's, choose its
-  event on the right. Ability sounds are tagged per event (all takes together), voice lines one by one. Your tags are
+  event on the right, and/or type what it is in the box next to it (anything: "dash, the start", "maybe deflect"...).
+  Ability sounds are tagged per event (all takes together), voice lines one by one. Your tags and notes are
   remembered in this browser. When you're done, press <b>Export</b> and save the file as
   <b>D:\GenjiBridgeAssets\sound_picks.json</b> (or copy the text and paste it to me).</p>
   <div class="bar">
     <button id="stop">Stop</button>
     <label>Show <select id="filter"><option value="all">everything</option><option value="untagged">untagged only</option>
-      <option value="tagged">tagged only</option></select></label>
+      <option value="tagged">tagged or noted only</option></select></label>
     <input id="find" placeholder="find an id...">
     <span class="count" id="count"></span>
     <button id="export">Export</button>
@@ -142,7 +145,17 @@ const DATA = /*DATA*/;
 const KEY = 'genji-sound-picks-v1';
 let picks = {};
 try { picks = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { picks = {}; }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch (e) {} update(); };
+const NOTES = 'genji-sound-notes-v1';
+let notes = {};
+try { notes = JSON.parse(localStorage.getItem(NOTES) || '{}'); } catch (e) { notes = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(picks)); localStorage.setItem(NOTES, JSON.stringify(notes)); } catch (e) {} update(); };
+// A free text box: what you think the sound is.
+function noteBox(key, onchange) {
+  const box = document.createElement('input'); box.className = 'note'; box.placeholder = 'what is it? (optional)';
+  box.value = notes[key] || '';
+  box.oninput = () => { const v = box.value.trim(); if (v) notes[key] = box.value; else delete notes[key]; save(); onchange(); };
+  return box;
+}
 let audio = null, playingBtn = null;
 function play(src, btn) {
   if (audio) { audio.pause(); }
@@ -170,8 +183,8 @@ for (const ev of DATA.events) {
   ev.files.forEach((f, i) => { const b = document.createElement('button'); b.textContent = '\u25B6 ' + (i + 1);
     b.title = f; b.onclick = () => play(f, b); takes.appendChild(b); });
   const key = 'event:' + ev.id;
-  const mark = () => card.classList.toggle('tagged', !!picks[key]);
-  card.append(meta, takes, tagSelect(key, mark)); mark();
+  const mark = () => { card.classList.toggle('tagged', !!picks[key]); card.classList.toggle('noted', !!notes[key]); };
+  card.append(meta, takes, tagSelect(key, mark), noteBox(key, mark)); mark();
   main.appendChild(card); rows.push({ el: card, key, text: ev.id + ' ' + ev.seen.join(' ') });
 }
 section('Voice lines (by situation)');
@@ -182,8 +195,8 @@ for (const vf of DATA.voice) {
     const b = document.createElement('button'); b.textContent = '\u25B6 ' + (i + 1); b.onclick = () => play(f, b);
     const name = document.createElement('span'); name.className = 'count'; name.textContent = f.split('/').pop();
     const key = 'file:' + f;
-    const mark = () => row.classList.toggle('tagged', !!picks[key]);
-    row.append(b, name, tagSelect(key, mark)); mark();
+    const mark = () => { row.classList.toggle('tagged', !!picks[key]); row.classList.toggle('noted', !!notes[key]); };
+    row.append(b, name, tagSelect(key, mark), noteBox(key, mark)); mark();
     main.appendChild(row); rows.push({ el: row, key, text: vf.folder + ' ' + f });
   });
 }
@@ -191,10 +204,11 @@ function update() {
   const filter = document.getElementById('filter').value, find = document.getElementById('find').value.toLowerCase();
   let shown = 0;
   for (const r of rows) {
-    const ok = (filter === 'all' || (filter === 'tagged') === !!picks[r.key]) && (!find || r.text.toLowerCase().includes(find));
+    const done = !!picks[r.key] || !!notes[r.key];
+    const ok = (filter === 'all' || (filter === 'tagged') === done) && (!find || r.text.toLowerCase().includes(find) || (notes[r.key] || '').toLowerCase().includes(find));
     r.el.style.display = ok ? '' : 'none'; if (ok) shown++;
   }
-  document.getElementById('count').textContent = Object.keys(picks).length + ' tagged, ' + shown + ' shown';
+  document.getElementById('count').textContent = Object.keys(picks).length + ' tagged, ' + Object.keys(notes).length + ' noted, ' + shown + ' shown';
 }
 document.getElementById('filter').onchange = update;
 document.getElementById('find').oninput = update;
@@ -203,6 +217,13 @@ document.getElementById('export').onclick = () => {
   const out = {};
   for (const ev of DATA.events) { const t = picks['event:' + ev.id]; if (t) (out[t] = out[t] || []).push(...ev.files); }
   for (const [k, t] of Object.entries(picks)) if (k.startsWith('file:')) (out[t] = out[t] || []).push(k.slice(5));
+  // Your notes, with the files they're about (the tools skip this part; I read it).
+  const noted = {};
+  for (const [k, n] of Object.entries(notes)) {
+    const ev = k.startsWith('event:') ? DATA.events.find(e => 'event:' + e.id === k) : null;
+    noted[k] = { note: n, tag: picks[k] || '', files: ev ? ev.files : [k.slice(5)] };
+  }
+  if (Object.keys(noted).length) out._notes = noted;
   const text = JSON.stringify(out, null, 1);
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   a.download = 'sound_picks.json'; a.click();
