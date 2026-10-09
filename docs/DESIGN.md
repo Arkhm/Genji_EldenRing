@@ -660,7 +660,7 @@ first-person animations for each action, as in Overwatch.
   - You correct the tags and export them.
 - **10b. Export and a first picture:**
   - A Blender script writes the model (positions, normals, texture coordinates, bone weights), its textures, and
-    every picked animation baked as bone poses per frame, to `D:\GenjiBridgeAssetsiewmodel` (outside the
+    every picked animation baked as bone poses per frame, to `D:\GenjiBridgeAssets\viewmodel` (outside the
     repository).
   - The renderer draws the idle pose from Genji's eye with your field of view into a PNG at your screen size.
   - You compare it with Overwatch.
