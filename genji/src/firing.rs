@@ -5,6 +5,8 @@
 //! Overwatch rules (you, 2026-10-09): Swift Strike and quick melee stop shooting at once, so a dash or a melee cancels
 //! the rest of a burst (the shuriken not thrown aren't spent, so the ammo needn't be a multiple of 3); no shuriken
 //! during the dash or the melee; a burst or fan always throws 3 even with 1 or 2 left (it spends what's left).
+//! No reload during a quick melee or its recovery (you, 2026-10-09): R does nothing then, an empty magazine waits for
+//! the melee to end, and a melee cancels a reload in progress (as in Overwatch: you reload again after it).
 //!
 //! Values (2026-10-07): from a video measurement of Overwatch you passed on (another AI's analysis of 10 consecutive
 //! throws) plus Blizzard's patch notes (0.68 s recovery, 75 m/s): 0.10 s between burst shuriken, 0.687 s between
@@ -42,11 +44,13 @@ pub struct Firing {
     reload: Option<f32>,
     /// R pressed during a burst: the reload starts when the burst is over.
     reload_wanted: bool,
+    /// A quick melee (animation and recovery) is on: no reload.
+    meleeing: bool,
 }
 
 impl Default for Firing {
     fn default() -> Self {
-        Self { ammo: AMMO, recovery: 0.0, burst_left: 0, burst_timer: 0.0, reload: None, reload_wanted: false }
+        Self { ammo: AMMO, recovery: 0.0, burst_left: 0, burst_timer: 0.0, reload: None, reload_wanted: false, meleeing: false }
     }
 }
 
@@ -59,10 +63,26 @@ impl Firing {
     /// R (your request, 2026-10-09: "I want to reload using R"): reloads unless the magazine is full or a reload is
     /// already on. During a burst, the reload starts when the burst is over (the burst isn't cut short).
     pub fn reload(&mut self) {
+        if self.meleeing {
+            glog!("FIRE", "R: no reload during the quick melee");
+            return;
+        }
         if self.ammo < AMMO && self.reload.is_none() && !self.reload_wanted {
             self.reload_wanted = true;
             glog!("FIRE", "R: reload asked with {} left{}", self.ammo, if self.burst_left > 0 { " (after this burst)" } else { "" });
         }
+    }
+
+    /// Whether a quick melee (animation and recovery) is on, before `tick`. Starting one cancels a reload in progress
+    /// and a reload asked for during a burst.
+    pub fn set_meleeing(&mut self, on: bool) {
+        if on && !self.meleeing {
+            if self.reload.take().is_some() {
+                glog!("FIRE", "reload cancelled by the quick melee, ammo {}", self.ammo);
+            }
+            self.reload_wanted = false;
+        }
+        self.meleeing = on;
     }
 
     /// One frame. `primary`/`secondary`: left/right click held. `can_throw`: the controller drives this frame.
@@ -120,7 +140,7 @@ impl Firing {
             }
         }
 
-        if self.ammo == 0 && self.burst_left == 0 {
+        if self.ammo == 0 && self.burst_left == 0 && !self.meleeing {
             self.reload = Some(RELOAD_TIME);
             glog!("FIRE", "empty, reloading ({RELOAD_TIME} s)");
         }
@@ -243,6 +263,33 @@ mod tests {
         run(&mut f, 0.3, false, false);
         assert!(f.reload.is_none());
         assert_eq!(f.ammo, AMMO);
+    }
+
+    #[test]
+    fn no_reload_during_a_melee() {
+        // R during the melee does nothing.
+        let mut f = Firing { ammo: 10, ..Firing::default() };
+        f.set_meleeing(true);
+        f.reload();
+        run(&mut f, 0.1, false, false);
+        assert!(f.reload.is_none());
+        // A melee cancels a reload in progress; the ammo stays.
+        let mut f = Firing { ammo: 10, ..Firing::default() };
+        f.reload();
+        run(&mut f, 0.5, false, false);
+        assert!(f.reload.is_some());
+        f.set_meleeing(true);
+        run(&mut f, RELOAD_TIME, false, false);
+        assert!(f.reload.is_none());
+        assert_eq!(f.ammo, 10);
+        // Empty: the automatic reload waits for the melee to end.
+        let mut f = Firing { ammo: 0, ..Firing::default() };
+        f.set_meleeing(true);
+        run(&mut f, 0.3, false, false);
+        assert!(f.reload.is_none());
+        f.set_meleeing(false);
+        run(&mut f, DT, false, false);
+        assert!(f.reload.is_some());
     }
 
     #[test]

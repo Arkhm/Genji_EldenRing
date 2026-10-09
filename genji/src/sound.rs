@@ -71,6 +71,11 @@ pub fn play_on(channel: &'static str, event: &'static str) {
     send(Cmd::Play { event, gain: 1.0, delay: 0.0, channel: Some(channel) });
 }
 
+/// `play_on` after `delay` seconds (the channel can be stopped before it starts).
+pub fn play_on_after(channel: &'static str, event: &'static str, delay: f32) {
+    send(Cmd::Play { event, gain: 1.0, delay, channel: Some(channel) });
+}
+
 pub fn stop(channel: &'static str) {
     send(Cmd::Stop(channel));
 }

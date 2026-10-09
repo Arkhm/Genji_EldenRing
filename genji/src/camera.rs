@@ -375,7 +375,8 @@ fn camera_step_inner(dt: f32) -> bool {
     // Deflect, Dragonblade, Swift Strike's dash or a quick melee: a dash or a melee also cancels the rest of a burst,
     // so you throw 1 or 2 and dash or melee, Overwatch).
     let busy = view.mover.dashing() || view.blade.meleeing();
-    // R: reload (not during Dragonblade, when the shuriken are put away).
+    view.firing.set_meleeing(view.blade.meleeing());
+    // R: reload (not during Dragonblade, when the shuriken are put away, nor during a quick melee: firing.rs).
     let r_down = dinput::key_down(&keys_now, dik::R);
     if r_down && !view.r_was_down && driving && !blade {
         view.firing.reload();
@@ -397,10 +398,15 @@ fn camera_step_inner(dt: f32) -> bool {
     // files: estimated). Cooldowns coming back; the ultimate becoming ready.
     let reloading = view.firing.hud().2.is_some();
     if reloading && !view.sound.reloading {
-        crate::sound::play("reload_1");
-        crate::sound::play_after("reload_2", 0.35);
-        crate::sound::play_after("reload_3", 0.75);
-        crate::sound::play_after("reload_4", 1.1);
+        crate::sound::play_on("reload_1", "reload_1");
+        crate::sound::play_on_after("reload_2", "reload_2", 0.35);
+        crate::sound::play_on_after("reload_3", "reload_3", 0.75);
+        crate::sound::play_on_after("reload_4", "reload_4", 1.1);
+    } else if !reloading && view.sound.reloading && view.firing.hud().0 < view.firing.hud().1 {
+        // Ended without filling the magazine: cancelled by a quick melee. The clicks still to come are cut.
+        for channel in ["reload_1", "reload_2", "reload_3", "reload_4"] {
+            crate::sound::stop(channel);
+        }
     }
     view.sound.reloading = reloading;
     let (swift_cooling, deflect_cooling) = (!view.swift.ready(), view.deflect.hud().1 > 0.0);

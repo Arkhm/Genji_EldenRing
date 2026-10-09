@@ -3,6 +3,23 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 No reload during the quick melee
+
+**Changed:**
+- `genji/src/firing.rs`: `set_meleeing()`, called each frame from `camera.rs` with whether a quick melee (animation
+  plus recovery, 0.8 s) is on.
+  - R does nothing during it.
+  - An empty magazine waits for the melee to end before its automatic reload.
+  - Starting a melee cancels a reload in progress, and a reload asked for during a burst. The ammo stays where it was.
+- The reload's four clicks now play on their own channels, so a cancelled reload cuts the clicks still to come
+  (`sound::play_on_after`).
+- New test `no_reload_during_a_melee`.
+**Why:** You: "you shouldn't be able to reload in the melee animation or the recover."
+**Tested how:** `cargo build --release` and `cargo test --release` pass (37 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** The melee cancelling a reload is what I remember Overwatch doing, not verified.
+**Next:** 11b-2 sounds.
+
 ## 2026-10-09 R reloads
 
 **Changed:**

@@ -254,6 +254,9 @@ frame how many shuriken to throw and at which sideways angle; `shuriken.rs` thro
   mode.
   - Pressed during a burst, the reload starts when the burst ends.
   - R does nothing with a full magazine or during Dragonblade.
+- No reload during a quick melee or its 0.8 s recovery (2026-10-09):
+  - R does nothing then, and an empty magazine waits for the melee to end before reloading.
+  - A melee cancels a reload in progress, and its remaining clicks are cut (as in Overwatch).
 - Throws happen only while our movement controller drives (as in 6a); a burst still in progress is dropped
   otherwise. Timers keep running.
 - Values (updated 2026-10-07) from a measurement of an Overwatch video and Blizzard's notes, passed on by you; the
