@@ -3,6 +3,37 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Animation previews in the sound picker (Blender)
+
+**Changed:**
+- **Your idea:** "finding the animation we already find the sound". Overwatch files ability sounds under the
+  animation that plays them, so seeing the animation names its sounds.
+- **Blender and the importer:**
+  - With your OK, downloaded the DataTool team's Blender importer `io_scene_owm-3.3.1.zip` (280 KB, from
+    github.com/overtools/io_scene_owm releases) and unpacked it into `D:\GenjiBridgeAssets\tools`.
+  - It is loaded by our script only, never installed into Blender. It works with Steam's Blender 5.2.2 even though it
+    targets 4.2+.
+- **New `tools/render_anim_previews.py`** (runs inside Blender, in the background):
+  - It imports Genji's first-person model (`00000000DBA6`) and third-person model (`00000000DB92`), and plays every
+    animation that has sounds: 20 and 51.
+  - It renders every 2nd frame at 320x180, textured, into `D:\GenjiBridgeAssets\anim_previews\<1P|3P>_<id>\`.
+  - Each move is framed to fit: first person from just behind and above the eye, third person from the front.
+  - Animations already rendered are skipped.
+- **`tools/make_sound_picker.py`:** makes a looping GIF of each animation's frames and shows it above its sounds.
+**Why:** Seeing the move tells which sounds are which (and step 10 needs this setup anyway).
+**Tested how:**
+- Contact sheets of all 71 animations, checked by me. First-person arms and third-person moves read clearly, for
+  example a fall and death in `847`.
+- The picker's 71 GIFs exist, and its script passes a syntax check. Not opened in a browser by me.
+**What went wrong on the way (and was fixed):**
+- The first cameras faced the wrong way.
+- Genji's exact eye cuts the arms off at the screen's edge.
+- Blender collections don't take slice steps.
+**Still broken / not tested:**
+- First-person `957` and `3DC8` move their arms far, so they come out small.
+- The sword isn't in the first-person model, so sword-only motions show little.
+**Next:** You tag with the previews; then step 11b.
+
 ## 2026-10-09 Sound picker grouped by animation, with each animation's length
 
 **Changed:** `tools/make_sound_picker.py`:

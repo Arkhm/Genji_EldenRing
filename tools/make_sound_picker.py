@@ -7,6 +7,9 @@ each take is. Voice lines come from a second DataTool extraction with subtitles 
 `extract-hero-voice ... --subtitles-with-sounds` into D:\\GenjiBridgeAssets\\voice_subs), so each file name carries its
 words; the obvious ones are tagged in advance (you can change them).
 
+Animation previews: if tools\\render_anim_previews.py (run in Blender) has rendered an animation's frames into
+D:\\GenjiBridgeAssets\\anim_previews, they become a looping GIF shown at the top of that animation's group.
+
 Usage: python tools\\make_sound_picker.py   then open the page in your browser.
 """
 import json
@@ -18,6 +21,27 @@ RAW = r'D:\GenjiBridgeAssets\raw'
 SKIN = os.path.join(RAW, r'Heroes\Genji\Skin\Overwatch\Overwatch')
 VOICE = r'D:\GenjiBridgeAssets\voice_subs\HeroVoice\Genji'
 OUT = r'D:\GenjiBridgeAssets\sound_picker'
+PREVIEWS = r'D:\GenjiBridgeAssets\anim_previews'
+
+
+def make_preview(group):
+    """A looping GIF of an animation's rendered frames ("1P 000000002434" -> anim_previews\\1P_000000002434.gif), or
+    None if it wasn't rendered."""
+    from PIL import Image
+    name = group.replace(' ', '_')
+    frames_dir = os.path.join(PREVIEWS, name)
+    if not os.path.isfile(os.path.join(frames_dir, 'done')):
+        return None
+    gif = os.path.join(PREVIEWS, name + '.gif')
+    if not os.path.isfile(gif):
+        pngs = sorted(f for f in os.listdir(frames_dir) if f.endswith('.png'))
+        frames = [Image.open(os.path.join(frames_dir, f)).convert('RGB').quantize(colors=128) for f in pngs]
+        if not frames:
+            return None
+        # Every 2nd frame of a 30 fps animation: 66 ms each; a short pause at the end so the loop reads.
+        durations = [66] * (len(frames) - 1) + [600]
+        frames[0].save(gif, save_all=True, append_images=frames[1:], duration=durations, loop=0)
+    return rel(gif)
 # The first-person model's animations first (what you hear as Genji), then third person, then effects.
 SOURCES = [
     ('1P', os.path.join(SKIN, r'Models\00000000DBA6.00C\AnimationEffects')),
@@ -176,6 +200,7 @@ def main():
         'events': [{'id': k, 'files': v['files'], 'secs': v.get('secs', []), 'seen': v['seen']} for k, v in events.items()],
         'defaults': defaults,
         'anims': anims,
+        'previews': {g: make_preview(g) for g in anims if make_preview(g)},
         'voice': [{'folder': k, 'files': v} for k, v in voice.items()],
         'tags': TAGS,
     }
@@ -291,6 +316,13 @@ for (const ev of DATA.events) {
     g.textContent = (group.startsWith('1P') ? 'First-person animation ' : group.startsWith('3P') ? 'Third-person animation ' : '') +
       group.replace(/^(1P|3P) /, '') + (len ? ' \u00B7 ' + len[0] + ' s (' + len[1] + ' frames)' : '') + ' \u00B7 ' + count + ' sound(s)';
     main.appendChild(g); rows.push({ el: g, key: null, text: group });
+    const preview = (DATA.previews || {})[group];
+    if (preview) {
+      const img = document.createElement('img'); img.src = preview; img.loading = 'lazy';
+      img.style.cssText = 'display:block;width:320px;height:180px;border-radius:6px;border:1px solid #2d3344;margin:2px 0 6px';
+      img.title = 'Genji doing this animation (' + group + ')';
+      main.appendChild(img); rows.push({ el: img, key: null, text: group });
+    }
   }
   const card = document.createElement('div'); card.className = 'card';
   const meta = document.createElement('div'); meta.className = 'meta';

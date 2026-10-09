@@ -520,6 +520,14 @@ aw`.
   - This finds the ult line, "My ultimate is ready/charging", pain, death, eliminations, healing, respawn, and the
     "(Swift Strike)" shouts without listening.
   - Ability sounds have no subtitles; those stay "by ear".
+- **Animation previews** (2026-10-09, your idea: "finding the animation we already find the sound").
+  - Overwatch files ability sounds under the animation that plays them. `tools\render_anim_previews.py` runs in Steam's
+    Blender 5.2, in the background, with the DataTool team's importer add-on (io_scene_owm 3.3.1) loaded from
+    `D:\GenjiBridgeAssets\tools`, so nothing is installed into Blender.
+  - It renders every animation that plays sounds (20 first person, 51 third person) as small frames, and the picker
+    shows each as a looping GIF above its sounds.
+  - **For step 10:** the importer reads Genji's first-person model (`00000000DBA6`: arms, 88 bones, textures) and its
+    animations. His eye is about (0, 0.05, 1.65) in Blender's space, looking along -Y; the sword is a separate model.
 
 **11a. Sound picker (find the sounds):**
 - `tools\make_sound_picker.py` writes a local page, `D:\GenjiBridgeAssets\sound_picker\index.html`. It lists every
