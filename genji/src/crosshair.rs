@@ -71,6 +71,8 @@ struct ArmsTexture {
     /// A picture is in the texture.
     ready: bool,
     copies: u32,
+    /// Share of the picture copied, summed (for the average).
+    copy_share: f32,
     copy_time: std::time::Duration,
     copy_longest: std::time::Duration,
     report_at: Option<std::time::Instant>,
@@ -125,12 +127,17 @@ fn copy_arms(a: &mut ArmsTexture, render_context: &mut dyn RenderContext) {
     if !VISIBLE.load(Ordering::Relaxed) {
         return; // the texture keeps its picture for when first person shows again
     }
-    let Some((seq, rgba)) = crate::arms::latest(a.seq) else {
+    let Some((seq, rgba, rect)) = crate::arms::latest(a.seq) else {
         return;
     };
     a.seq = seq;
+    let Some(rect) = rect else {
+        a.ready = true; // nothing changed in the texture
+        return;
+    };
     let started = std::time::Instant::now();
-    match render_context.replace_texture(id, &rgba, a.size.0, a.size.1) {
+    // Only the area where the arms are or were (our fixed hudhook, tools/patch_hudhook.py).
+    match render_context.replace_texture_rect(id, &rgba, a.size.0, a.size.1, rect) {
         Ok(()) => a.ready = true,
         Err(e) => {
             glog!("ARMS", "texture copy failed ({e:?}); arms hidden for this session");
@@ -141,18 +148,20 @@ fn copy_arms(a: &mut ArmsTexture, render_context: &mut dyn RenderContext) {
     }
     let took = started.elapsed();
     a.copies += 1;
+    a.copy_share += ((rect[2] - rect[0]) * (rect[3] - rect[1])) as f32 / (a.size.0 * a.size.1) as f32;
     a.copy_time += took;
     a.copy_longest = a.copy_longest.max(took);
     let report_at = *a.report_at.get_or_insert_with(std::time::Instant::now);
     if report_at.elapsed().as_secs_f32() >= 5.0 {
         glog!(
             "ARMS",
-            "overlay: {} pictures copied to the texture, average {:.2} ms, longest {:.2} ms",
+            "overlay: {} pictures copied to the texture (only where the arms changed: {:.0}% of it on average), average {:.2} ms, longest {:.2} ms",
             a.copies,
+            100.0 * a.copy_share / a.copies as f32,
             a.copy_time.as_secs_f32() * 1000.0 / a.copies as f32,
             a.copy_longest.as_secs_f32() * 1000.0
         );
-        (a.copies, a.copy_time, a.copy_longest, a.report_at) = (0, Default::default(), Default::default(), None);
+        (a.copies, a.copy_share, a.copy_time, a.copy_longest, a.report_at) = (0, 0.0, Default::default(), Default::default(), None);
     }
 }
 

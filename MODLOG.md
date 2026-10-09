@@ -3,6 +3,27 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: copy only the area where they changed
+
+**Changed:**
+- `tools/patch_hudhook.py` (fix version 2): our fixed copy of the overlay library can copy just a rectangle of a
+  texture (`replace_texture_rect`). The upload buffer is still made once for the whole picture. `build.ps1` remakes
+  the copy when the version changes.
+- `viewmodel.rs`: each picture reports the area it drew in (`Stats.rect`, one pixel around for the edge colours).
+  The `previews` test checks that every drawn pixel lies inside it.
+- `arms.rs`: keeps the area that changed (old arms to clear and new ones) until the overlay takes a picture, so pictures
+  the overlay skips still get cleared.
+- `crosshair.rs`: copies only that area, and logs what share of the picture each copy covered.
+**Why:** Your log: the copy into the texture took 3-4 ms on almost every frame, inside the game's frame, with the frame
+rate at 34-50 in places.
+**Tested how:** `cargo build --release` and `cargo test --release` pass (49 tests). Areas at your recordings' screen
+shape:
+- resting pose: 1093x346 of 2580x1080, 14% of the picture;
+- Dragonblade: about 40%.
+**Result:** Built. **Not tested in game:** the copy time and the frame rate are logged (`ARMS overlay:` lines).
+**Still broken / not tested:** Whether a wrong area could leave bits of old arms on screen (the test says it can't).
+**Next:** Your test.
+
 ## 2026-10-09 Arms: jumps don't cut actions; the reload waits for the last throw; a crash looked at
 
 **Changed:**

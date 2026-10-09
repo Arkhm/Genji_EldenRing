@@ -222,6 +222,8 @@ pub struct Stats {
     pub triangles: usize,
     pub culled: usize,
     pub pixels: usize,
+    /// The area drawn in, [x0, y0, x1, y1) in pixels (with a pixel around for the edge colours), if any.
+    pub rect: Option<[u32; 4]>,
 }
 
 fn apply(m: &Mat, p: Vec3) -> Vec3 {
@@ -426,7 +428,16 @@ pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas, threads: usize) -
             .collect();
         jobs.into_iter().map(|j| j.join().unwrap_or(0)).sum()
     });
-    Stats { triangles: p.tris.len(), culled: p.culled, pixels }
+    let rect = p.tris.iter().fold(None, |acc: Option<[u32; 4]>, t| {
+        let r = [t.x0.saturating_sub(1) as u32, t.y0.saturating_sub(1) as u32, (t.x1 + 1).min(w) as u32, (t.y1 + 1).min(h) as u32];
+        Some(acc.map_or(r, |a| union(a, r)))
+    });
+    Stats { triangles: p.tris.len(), culled: p.culled, pixels, rect }
+}
+
+/// The smallest rectangle holding both.
+pub fn union(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+    [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]
 }
 
 /// Gives the empty pixels next to the drawing the drawing's colour (still fully see-through), so stretching the
@@ -496,6 +507,14 @@ mod tests {
                 let took = t.elapsed();
                 println!("{role} at {at} s, {w}x{h}: {took:?}, {stats:?}");
                 assert!(stats.pixels > 0, "{role}: nothing drawn");
+                // Every pixel drawn (and its edge colour) lies inside the reported area: the overlay copies only that.
+                let [x0, y0, x1, y1] = stats.rect.expect("an area").map(|v| v as usize);
+                for (i, px) in canvas.rgba.chunks_exact(4).enumerate() {
+                    let (x, y) = (i % w, i / w);
+                    if px[3] != 0 || px[0] != 0 {
+                        assert!(x >= x0 && x < x1 && y >= y0 && y < y1, "{role}: pixel ({x}, {y}) outside {:?}", stats.rect);
+                    }
+                }
                 write_png(&dir.join(format!("preview_{role}_{w}.png")), &canvas, [120, 128, 140]);
             }
         }

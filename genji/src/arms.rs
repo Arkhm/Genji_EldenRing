@@ -47,6 +47,9 @@ struct Shared {
     request: Option<Request>,
     frame: Option<Arc<Vec<u8>>>,
     seq: u64,
+    /// The area that changed since the overlay last took a picture (old arms to clear and new ones), so it copies
+    /// only that (None: nothing changed).
+    dirty: Option<[u32; 4]>,
 }
 
 /// F6 switches the arms off and on (a test switch: your test of 2026-10-09 saw the game's light flicker, to tell
@@ -62,7 +65,7 @@ pub fn shown() -> bool {
     SHOWN.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-static SHARED: Mutex<Shared> = Mutex::new(Shared { request: None, frame: None, seq: 0 });
+static SHARED: Mutex<Shared> = Mutex::new(Shared { request: None, frame: None, seq: 0, dirty: None });
 static WAKE: Condvar = Condvar::new();
 
 /// Starts the drawing thread for pictures of `w` x `h` (called once by the overlay).
@@ -81,10 +84,15 @@ pub fn request(pose: Pose, drop: f32) {
     WAKE.notify_one();
 }
 
-/// The newest finished picture, if newer than `seen` (overlay).
-pub fn latest(seen: u64) -> Option<(u64, Arc<Vec<u8>>)> {
-    let s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
-    (s.seq > seen).then(|| s.frame.clone().map(|f| (s.seq, f))).flatten()
+/// The newest finished picture if newer than `seen`, with the area to copy ([x0, y0, x1, y1); None: nothing)
+/// (overlay).
+pub fn latest(seen: u64) -> Option<(u64, Arc<Vec<u8>>, Option<[u32; 4]>)> {
+    let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+    if s.seq <= seen {
+        return None;
+    }
+    let dirty = s.dirty.take();
+    s.frame.clone().map(|f| (s.seq, f, dirty))
 }
 
 fn run(w: usize, h: usize) {
@@ -106,6 +114,8 @@ fn run(w: usize, h: usize) {
     let mut missing: Vec<&'static str> = Vec::new();
     let (mut drawn, mut total, mut longest, mut since) = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
     let mut first = true;
+    // Where the last picture had arms: they must be cleared from the texture when the next one is copied.
+    let mut last_rect: Option<[u32; 4]> = None;
     // The pose last drawn: the same pose again (a resting pose, every frame) is neither drawn nor copied again.
     let mut last: Option<Request> = None;
     loop {
@@ -145,10 +155,16 @@ fn run(w: usize, h: usize) {
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();
         last = Some(req);
+        let this_rect = stats.rect;
         {
             let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+            // The old arms' area and the new one, added to what the overlay hasn't taken yet.
+            for r in [last_rect, this_rect].into_iter().flatten() {
+                s.dirty = Some(s.dirty.map_or(r, |d| viewmodel::union(d, r)));
+            }
             s.frame = Some(frame);
             s.seq += 1;
+            last_rect = this_rect;
         }
         if first {
             first = false;

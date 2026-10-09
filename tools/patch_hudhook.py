@@ -20,6 +20,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST = os.path.join(ROOT, 'third_party', 'hudhook-0.9.3')
 MARK = os.path.join(DEST, 'GENJI_PATCHED')
+# Raised whenever the fixes below change, so an older fixed copy is made again.
+VERSION = 2
 
 EDITS = [
     # The texture remembers its upload buffer and whether it has been filled before.
@@ -82,12 +84,123 @@ EDITS = [
         to_copy.into_iter().for_each(util::drop_barrier);
         self.textures[texture_id.id()].uploaded = true;
 '''),
+    # Second fix (test of 2026-10-09): copy only a rectangle of the picture (where the arms changed), not all of it:
+    # the copy runs inside the game's frame (3-4 ms for 1720x720).
+    ('''    unsafe fn upload_texture(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<()> {''', '''    unsafe fn upload_texture(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<()> {
+        self.upload_texture_rect(texture_id, data, width, height, [0, 0, width, height])
+    }
+
+    // GenjiBridge fix: copies only the rectangle [x0, y0, x1, y1) of `data` (the whole picture, width x height).
+    unsafe fn upload_texture_rect(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        rect: [u32; 4],
+    ) -> Result<()> {'''),
+    ('''        let upload_row_size = width * 4;
+        let align = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+        let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes
+                                                                    // aligned
+        let upload_size = height * upload_pitch;''', '''        let [x0, y0, x1, y1] = [rect[0].min(width), rect[1].min(height), rect[2].min(width), rect[3].min(height)];
+        if x1 <= x0 || y1 <= y0 {
+            return Ok(());
+        }
+        let (rw, rh) = (x1 - x0, y1 - y0);
+        let upload_row_size = rw * 4;
+        let align = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+        let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes
+                                                                    // aligned
+        // The buffer is made once for the whole picture, so any rectangle fits.
+        let upload_size = height * (width * 4).div_ceil(align) * align;'''),
+    ('''        if upload_row_size == upload_pitch {
+            ptr::copy_nonoverlapping(data.as_ptr(), upload_buffer_ptr as *mut u8, data.len());
+        } else {
+            for y in 0..height {
+                let src = data.as_ptr().add((y * upload_row_size) as usize);
+                let dst = (upload_buffer_ptr as *mut u8).add((y * upload_pitch) as usize);
+                ptr::copy_nonoverlapping(src, dst, upload_row_size as usize);
+            }
+        }''', '''        for y in 0..rh {
+            let src = data.as_ptr().add((((y0 + y) * width + x0) * 4) as usize);
+            let dst = (upload_buffer_ptr as *mut u8).add((y * upload_pitch) as usize);
+            ptr::copy_nonoverlapping(src, dst, upload_row_size as usize);
+        }'''),
+    ('''                        Width: width,
+                        Height: height,''', '''                        Width: rw,
+                        Height: rh,'''),
+    ('''        self.command_list.CopyTextureRegion(&dst_location, 0, 0, 0, &src_location, None);''',
+     '''        self.command_list.CopyTextureRegion(&dst_location, x0, y0, 0, &src_location, None);'''),
+    ('''    ) -> Result<()> {
+        unsafe { self.texture_heap.upload_texture(texture_id, data, width, height) }
+    }
+}''', '''    ) -> Result<()> {
+        unsafe { self.texture_heap.upload_texture(texture_id, data, width, height) }
+    }
+
+    fn replace_texture_rect(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        rect: [u32; 4],
+    ) -> Result<()> {
+        unsafe { self.texture_heap.upload_texture_rect(texture_id, data, width, height, rect) }
+    }
+}'''),
+]
+
+# The trait gets the new method (other renderers copy the whole picture).
+LIB_EDITS = [
+    ('''    fn replace_texture(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), Error>;
+}''', '''    fn replace_texture(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), Error>;
+
+    /// GenjiBridge addition: like `replace_texture`, but only the rectangle [x0, y0, x1, y1) of `data` (the whole
+    /// picture, width x height) is copied. Renderers without it copy everything.
+    fn replace_texture_rect(
+        &mut self,
+        texture_id: TextureId,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        rect: [u32; 4],
+    ) -> Result<(), Error> {
+        let _ = rect;
+        self.replace_texture(texture_id, data, width, height)
+    }
+}'''),
 ]
 
 
 def main():
-    if os.path.isfile(MARK) and '--force' not in sys.argv:
-        print('third_party/hudhook-0.9.3: fixed copy already there')
+    if os.path.isfile(MARK) and f'version {VERSION}' in open(MARK).read() and '--force' not in sys.argv:
+        print(f'third_party/hudhook-0.9.3: fixed copy (version {VERSION}) already there')
         return
     home = os.path.expanduser('~')
     found = glob.glob(os.path.join(home, '.cargo', 'registry', 'src', '*', 'hudhook-0.9.3'))
@@ -103,7 +216,14 @@ def main():
             sys.exit(f'patch_hudhook: expected text found {src.count(old)} times in dx12.rs:\n{old[:200]}')
         src = src.replace(old, new)
     open(path, 'w', encoding='utf-8').write(src)
-    open(MARK, 'w').write('patched by tools/patch_hudhook.py\n')
+    lib = os.path.join(DEST, 'src', 'lib.rs')
+    src = open(lib, encoding='utf-8').read()
+    for old, new in LIB_EDITS:
+        if src.count(old) != 1:
+            sys.exit(f'patch_hudhook: expected text found {src.count(old)} times in lib.rs:\n{old[:200]}')
+        src = src.replace(old, new)
+    open(lib, 'w', encoding='utf-8').write(src)
+    open(MARK, 'w').write(f'patched by tools/patch_hudhook.py, version {VERSION}\n')
     print('third_party/hudhook-0.9.3: copied from', found[0], 'and fixed')
 
 
