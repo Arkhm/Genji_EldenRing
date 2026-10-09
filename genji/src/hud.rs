@@ -360,11 +360,12 @@ fn picture(draw: &DrawListMut, pic: Picture, center: [f32; 2], size: f32, angle:
     draw.add_image_quad(id, corner(-hw, -hh), corner(hw, -hh), corner(hw, hh), corner(-hw, hh)).col(col(tint)).build();
 }
 
-/// Kill skull (your Overwatch clip, 2026-10-09; 60 fps frames from the kill): a pink skull pops up over the crosshair
+/// Kill skull (your Overwatch clip, 2026-10-09; 60 fps frames from the kill): a red skull pops up over the crosshair
 /// big (2.6 times its final size by frame 3, fading in over 2 frames), holds to frame 6, snaps down to its final size
 /// (about 44 px at 1080p) by frame 8, then fades out by frame 32 (about half a second). Measured from the clip.
 const KILL_SKULL_W: f32 = 44.0;
-const KILL_PINK: [u8; 4] = [240, 112, 226, 255];
+/// Red like the enemy health bars (you, 2026-10-09: "I want it red"; Overwatch's is pink, the enemy colour there).
+const KILL_RED: [u8; 4] = [232, 48, 56, 255];
 const KILL_SCALE: [(f32, f32); 7] = [(0.0, 1.9), (1.0, 2.2), (2.0, 2.45), (3.0, 2.6), (6.0, 2.6), (7.0, 1.3), (8.0, 1.0)];
 const KILL_ALPHA: [(f32, f32); 9] =
     [(0.0, 0.35), (1.0, 0.75), (2.0, 1.0), (8.0, 1.0), (12.0, 0.72), (16.0, 0.47), (20.0, 0.28), (26.0, 0.12), (32.0, 0.0)];
@@ -390,7 +391,7 @@ pub fn draw_kill_skull(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     let k = height / REFERENCE_HEIGHT;
     let draw = ui.get_foreground_draw_list();
     let size = KILL_SKULL_W * k * key(frame, &KILL_SCALE);
-    picture(&draw, r.kill_skull, [width / 2.0, height / 2.0], size, 0.0, alpha(KILL_PINK, key(frame, &KILL_ALPHA)));
+    picture(&draw, r.kill_skull, [width / 2.0, height / 2.0], size, 0.0, alpha(KILL_RED, key(frame, &KILL_ALPHA)));
 }
 
 /// Draws the HUD (overlay render thread).

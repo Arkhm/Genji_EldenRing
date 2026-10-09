@@ -3,6 +3,16 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Kill skull in red
+
+**Changed:** `genji/src/hud.rs`: the kill skull is red (232, 48, 56), the same red as the enemy health bars. It was pink,
+as in Overwatch.
+**Why:** You: "yeah, I want it red."
+**Tested how:** `cargo build --release` and `cargo test --release` pass (35 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** The whole kill skull is still to be seen in game.
+**Next:** Your check, then 11b-2.
+
 ## 2026-10-09 Kills: no double count on a dead body, quieter elimination sound, kill skull at the crosshair
 
 **Changed:**
