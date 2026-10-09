@@ -24,6 +24,7 @@ mod movement;
 mod obstacles;
 mod scaling;
 mod shuriken;
+mod sound;
 mod swift;
 mod targets;
 mod ult;

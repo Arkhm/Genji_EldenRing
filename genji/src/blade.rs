@@ -31,6 +31,11 @@ const SWING_HALF_ANGLE: f32 = 90.0;
 const SWING_BLEED_SHARE: f32 = 0.34;
 /// Share of each swing's damage that heals you (your request, 2026-10-08: 30 % lifesteal on every slash).
 const LIFESTEAL: f32 = 0.3;
+/// The ending roar starts this long before Dragonblade ends (its file lasts 2.9 s; you: "it starts when the blade is
+/// about to end").
+const END_ROAR_BEFORE: f32 = 2.9;
+/// "My ultimate is charging" at most this often when Q is pressed early, seconds.
+const CHARGING_LINE_EVERY: f32 = 4.0;
 /// Overwatch quick melee: 40. Reach, cone and recovery are not verified.
 const MELEE_DAMAGE: f32 = 40.0;
 const MELEE_REACH: f32 = 2.5;
@@ -122,6 +127,10 @@ pub struct Blade {
     melee_hits: HashMap<usize, f32>,
     /// Lifesteal earned by swing hits, not applied yet (applied by the camera task, which can change the player).
     heal_owed: f32,
+    /// The ending roar played for this Dragonblade.
+    end_roar_played: bool,
+    /// Seconds until "My ultimate is charging" may play again.
+    charging_line_wait: f32,
 }
 
 impl Blade {
@@ -159,6 +168,7 @@ impl Blade {
     pub fn advance(&mut self, dt: f32) {
         self.swing_wait = (self.swing_wait - dt).max(0.0);
         self.melee_wait = (self.melee_wait - dt).max(0.0);
+        self.charging_line_wait = (self.charging_line_wait - dt).max(0.0);
         for age in self.melee_hits.values_mut() {
             *age += dt;
         }
@@ -172,8 +182,14 @@ impl Blade {
         }
         if let Some(left) = self.left {
             let left = left - dt;
+            if left <= END_ROAR_BEFORE && !self.end_roar_played {
+                self.end_roar_played = true;
+                crate::sound::play("blade_end_roar");
+            }
             if left <= 0.0 {
                 self.left = None;
+                crate::sound::play("blade_end");
+                crate::sound::play_after("blade_sheathe", 0.25);
                 glog!("BLADE", "Dragonblade #{} over after {} swings", self.uses, self.swings);
             } else {
                 self.left = Some(left);
@@ -192,10 +208,15 @@ impl Blade {
                 self.uses += 1;
                 self.swings = 0;
                 self.swing_wait = 0.0;
+                self.end_roar_played = false;
                 started = true;
                 glog!("BLADE", "Dragonblade #{} start: unsheathing {UNSHEATHE} s, then {DURATION} s", self.uses);
             } else {
                 glog!("BLADE", "ultimate not ready ({}%)", crate::ult::percent());
+                if self.charging_line_wait <= 0.0 {
+                    self.charging_line_wait = CHARGING_LINE_EVERY;
+                    crate::sound::voice("voice_ult_charging", false);
+                }
             }
         }
         if self.active() && self.unsheathe <= 0.0 && swing_held && self.swing_wait <= 0.0 {
@@ -216,6 +237,8 @@ impl Blade {
         let damage = crate::scaling::scaled(SWING_DAMAGE, player);
         let attack = (SWING_DAMAGE * crate::scaling::dex_multiplier(player)).round() as u16;
         glog!("BLADE", "swing #{}: {} in reach", self.swings, hit.len());
+        crate::sound::play("blade_swing");
+        crate::sound::play_gain("blade_roar", 0.7);
         let style = Style { from_front: false, guardable: false, stamina: self.saved.map(|s| s.piler_stam).unwrap_or(0), poise: self.saved.map(|s| s.piler_poise).unwrap_or(0.0) };
         for target in &hit {
             let bleed = bleed_share(target, SWING_BLEED_SHARE);
@@ -233,6 +256,8 @@ impl Blade {
 
     fn melee(&mut self, player: &PlayerIns, look: &Look, eye: Vec3) {
         let feet = eye - Vec3::Y * 1.6;
+        crate::sound::play("melee_swing");
+        crate::sound::voice("voice_melee", false);
         let mut hit = in_cone(player, feet, look.flat_forward(), MELEE_REACH, MELEE_HALF_ANGLE);
         hit.sort_by(|a, b| (a.feet - feet).length().total_cmp(&(b.feet - feet).length()));
         let Some(target) = hit.first() else {
@@ -353,6 +378,8 @@ impl Blade {
                 if p.kind == "swing" {
                     self.heal_owed += LIFESTEAL * game as f32;
                 }
+                // No Dragonblade hit sound was found in Overwatch's files: the melee hit stands in.
+                crate::sound::play_gain("melee_hit", if p.kind == "swing" { 0.8 } else { 1.0 });
             } else if data.hp <= 0 {
                 continue;
             } else if p.frames >= CONFIRM_FRAMES {

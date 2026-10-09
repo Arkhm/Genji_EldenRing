@@ -3,6 +3,45 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 11b-1: the mod plays Genji's sounds (abilities)
+
+**Changed:**
+- **New `genji/src/sound.rs`:** an audio thread of our own that plays the files in `D:\GenjiBridgeAssets\sound\<event>\`
+  through Windows' default output, using the `rodio` library (0.19, Ogg Vorbis and WAV only). Elden Ring's audio
+  isn't touched.
+  - Each event picks a random take, never the same twice in a row.
+  - Named channels can be stopped (Deflect's hum).
+  - Voice lines don't overlap: a new line is skipped while one plays, unless it's urgent.
+  - Volume: Elden Ring's sound effects setting (read once a second) times 0.8.
+  - A missing event is logged once.
+- **Hooks:**
+  - **Shuriken:** each throw; Fan of Blades once per fan.
+  - **Hits:** body and headshot sounds on confirmed hits; wall impacts quieter with distance, none past 40 m.
+  - **Reload:** its 4 sounds at 0, 0.35, 0.75 and 1.1 s (estimated).
+  - **Swift Strike:** your recorded dash plus a "(Swift Strike)" shout; body-hit sound on dash hits.
+  - **Deflect:** your recorded start with its hum on a channel, cut if Deflect ends early; then the end.
+  - **Not ready:** Shift or E pressed on cooldown.
+  - **Cooldown ready:** when Swift Strike's or Deflect's cooldown finishes.
+  - **Ult:** the ready sound and "My ultimate is ready"; "My ultimate is charging" when Q is pressed early (at most
+    every 4 s).
+  - **Dragonblade:** "Ryujin no ken wo kurae!" (cuts in) with the big roar and the draw at Q. Each swing gets a blade
+    swing plus a roar. Hits use the melee hit (no Dragonblade hit sound was found). The ending roar starts 2.9 s
+    before the end, then the blade ending and the sheathing.
+  - **Quick melee:** swing, a shout, and the hit sound on hits.
+  - **Kills:** Overwatch's elimination sound, and an elimination line on every third kill.
+**Why:** Step 11; your picks and recordings.
+**Tested how:**
+- The build passes, with 35 unit tests. A new test decodes all 373 sound files with the mod's own decoder, and none is
+  empty or silent.
+- Not run in game: whether the audio thread works inside Elden Ring, the levels, and the timings.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game.
+- Movement and other voice sounds (footsteps, wall climb, double jump, landing, pain, death, respawn, healing, low
+  health) are step 11b-2.
+- Elden Ring's own sounds for the same actions (the Throwing Dagger, the Tarnished's grunts) still play.
+**Next:** Your test; then 11b-2.
+
 ## 2026-10-09 Third sound export: your recordings in, Deflect block left out
 
 **Changed:** `tools/make_sounds.py`:

@@ -76,6 +76,19 @@ struct View {
     lock_cam_fov: Option<Vec<(u32, f32)>>,
     /// Enemy health bars (DESIGN.md 5i).
     enemy_bars: crate::enemy_bars::EnemyBars,
+    /// Sound (step 11b): what was true last frame, to play sounds when it changes.
+    sound: SoundWatch,
+}
+
+#[derive(Default)]
+struct SoundWatch {
+    reloading: bool,
+    deflecting: bool,
+    swift_cooling: bool,
+    deflect_cooling: bool,
+    ult_ready: bool,
+    volume_timer: f32,
+    kills: u32,
 }
 
 pub fn camera_step(dt: f32) {
@@ -107,7 +120,24 @@ fn camera_step_inner(dt: f32) -> bool {
 
     view.mover.watch_hp(player);
     view.thrower.tick(player, dt);
-    view.swift.tick(dt, crate::kills::tick(dt));
+    let eliminations = crate::kills::tick(dt);
+    view.swift.tick(dt, eliminations);
+    if eliminations > 0 {
+        // Overwatch's elimination sound; a line every third kill (Overwatch doesn't comment on every one).
+        crate::sound::play("kill");
+        view.sound.kills += eliminations;
+        if view.sound.kills % 3 == 1 {
+            crate::sound::voice("voice_elimination", false);
+        }
+    }
+    // Elden Ring's sound effects setting, about once a second.
+    view.sound.volume_timer += dt;
+    if view.sound.volume_timer >= 1.0 {
+        view.sound.volume_timer = 0.0;
+        if let Ok(game) = unsafe { eldenring::cs::GameDataMan::instance() } {
+            crate::sound::set_game_volume(game.game_settings.sfx_volume);
+        }
+    }
     view.blade.advance(dt);
     crate::ult::tick(dt, view.blade.active());
     let buttons = gamepad::mouse_buttons();
@@ -206,6 +236,7 @@ fn camera_step_inner(dt: f32) -> bool {
             view.shift_was_down = down;
             if pressed && !view.swift.ready() {
                 glog!("SWIFT", "not ready");
+                crate::sound::play("not_ready");
             }
             // Not while Dragonblade unsheathes (you, 2026-10-08).
             if pressed && view.blade.unsheathing() {
@@ -222,6 +253,8 @@ fn camera_step_inner(dt: f32) -> bool {
             driving = true;
             if view.mover.dash_started {
                 view.swift.started();
+                crate::sound::play("dash");
+                crate::sound::voice("voice_dash", false);
             }
             if let Some((from, to)) = view.mover.dash_segment {
                 view.swift.sweep(player, from, to);
@@ -307,6 +340,10 @@ fn camera_step_inner(dt: f32) -> bool {
     // No swings while Deflect is up (Deflect is allowed during Dragonblade, Overwatch).
     if driving && view.blade.act(q_pressed, left_down && !view.deflect.active(), melee_pressed, player, &look, eye) {
         view.swift.reset("Dragonblade");
+        // "Ryujin no ken wo kurae!" with the big roar, and the draw.
+        crate::sound::voice("voice_ult_activate", true);
+        crate::sound::play("blade_unsheathe");
+        crate::sound::play("blade_draw");
     }
     let blade = view.blade.active();
 
@@ -318,7 +355,18 @@ fn camera_step_inner(dt: f32) -> bool {
     if e_pressed && view.blade.unsheathing() {
         glog!("DEFLECT", "not while Dragonblade unsheathes");
     }
+    if e_pressed && driving && !view.deflect.active() && view.deflect.hud().1 > 0.0 {
+        crate::sound::play("not_ready");
+    }
     let deflecting = view.deflect.tick(dt, e_pressed && !view.blade.unsheathing(), driving);
+    // Deflect: the start with its 2 s hum (your recording), cut short if Deflect ends early; the end.
+    if deflecting && !view.sound.deflecting {
+        crate::sound::play_on("deflect", "deflect_start");
+    } else if !deflecting && view.sound.deflecting {
+        crate::sound::stop("deflect");
+        crate::sound::play("deflect_end");
+    }
+    view.sound.deflecting = deflecting;
     view.deflect.apply(player, feet, look.flat_forward());
     view.deflect.reflect(player, &look, eye);
 
@@ -326,9 +374,39 @@ fn camera_step_inner(dt: f32) -> bool {
     // Deflect, Dragonblade, Swift Strike's dash or a quick melee: a dash or a melee also cancels the rest of a burst,
     // so you throw 1 or 2 and dash or melee, Overwatch).
     let busy = view.mover.dashing() || view.blade.meleeing();
-    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !busy) {
+    let throws = view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !busy);
+    if throws.iter().any(|a| *a != 0.0) {
+        crate::sound::play("fan_throw"); // Fan of Blades: the three at once, sideways
+    } else {
+        for _ in &throws {
+            crate::sound::play("shuriken_throw");
+        }
+    }
+    for angle in throws {
         view.thrower.throw(player, &look, eye, angle);
     }
+
+    // Reload (1.5 s): its four sounds one after another, as in Overwatch's reload animation (exact times not in the
+    // files: estimated). Cooldowns coming back; the ultimate becoming ready.
+    let reloading = view.firing.hud().2.is_some();
+    if reloading && !view.sound.reloading {
+        crate::sound::play("reload_1");
+        crate::sound::play_after("reload_2", 0.35);
+        crate::sound::play_after("reload_3", 0.75);
+        crate::sound::play_after("reload_4", 1.1);
+    }
+    view.sound.reloading = reloading;
+    let (swift_cooling, deflect_cooling) = (!view.swift.ready(), view.deflect.hud().1 > 0.0);
+    if (view.sound.swift_cooling && !swift_cooling) || (view.sound.deflect_cooling && !deflect_cooling) {
+        crate::sound::play("cooldown_ready");
+    }
+    (view.sound.swift_cooling, view.sound.deflect_cooling) = (swift_cooling, deflect_cooling);
+    let ult_ready = crate::ult::percent() >= 100 && !view.blade.active();
+    if ult_ready && !view.sound.ult_ready && crate::ult::percent() >= 100 {
+        crate::sound::play("ult_ready_sfx");
+        crate::sound::voice("voice_ult_ready", false);
+    }
+    view.sound.ult_ready = ult_ready;
 
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
     let (enemies, enemy_count) =

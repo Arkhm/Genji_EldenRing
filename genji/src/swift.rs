@@ -361,12 +361,14 @@ impl Swift {
                     "HIT on character {:#x}: game dealt {game} (attack power {}), hp now {} / {} (after {} frames)",
                     s.chr, s.attack, data.hp, data.max_hp, s.frames
                 );
+                crate::sound::play("hit_body");
                 self.bleed(target, s.bleed);
                 crate::ult::add(DAMAGE as f32, "Swift Strike");
             } else if data.hp <= 0 {
                 continue; // died meanwhile (another hit)
             } else if s.frames >= CONFIRM_FRAMES {
                 self.direct(target, s.damage, &format!("the game registered no strike hit in {CONFIRM_FRAMES} frames"));
+                crate::sound::play("hit_body");
                 self.bleed(target, s.bleed);
                 crate::ult::add(DAMAGE as f32, "Swift Strike");
             } else {

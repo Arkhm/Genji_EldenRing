@@ -382,7 +382,8 @@ impl Thrower {
         };
         let current = self.bullet_id();
         let mut seen = std::collections::HashSet::new();
-        let mut impacts: Vec<(Vec3, Vec3, f32)> = Vec::new();
+        // (last fast position, velocity, age, slowed against something (true) or just ended in the air (false)).
+        let mut impacts: Vec<(Vec3, Vec3, f32, bool)> = Vec::new();
         let (mut live, mut stuck, mut sample_life) = (0u32, 0u32, None);
         for bullet in manager.bullets_mut() {
             let ids = [
@@ -421,7 +422,7 @@ impl Thrower {
                     entry.was_flying = true;
                 } else if entry.was_flying {
                     // Slowed sharply: it hit something between the last fast position and here.
-                    impacts.push((entry.pos, entry.vel, entry.age));
+                    impacts.push((entry.pos, entry.vel, entry.age, true));
                     entry.resolved = true;
                     self.impacts += 1;
                 }
@@ -448,7 +449,7 @@ impl Thrower {
         for shuriken in gone {
             self.ended += 1;
             if !shuriken.resolved && shuriken.was_flying {
-                impacts.push((shuriken.pos, shuriken.vel, shuriken.age));
+                impacts.push((shuriken.pos, shuriken.vel, shuriken.age, false));
             }
             if shuriken.pushed_down {
                 self.removed_after_push += 1;
@@ -476,8 +477,19 @@ impl Thrower {
         }
         let clock = self.clock;
         self.died_at.retain(|_, t| clock - *t <= KILLING_BLOW_WINDOW);
-        for (pos, vel, age) in impacts {
-            self.resolve(&everyone, pos, vel, age, dt, &engine_before_frame);
+        let me = {
+            let p = &player.chr_ins.modules.physics.position;
+            Vec3::new(p.0, p.1, p.2)
+        };
+        for (pos, vel, age, slowed) in impacts {
+            let hit_someone = self.resolve(&everyone, pos, vel, age, dt, &engine_before_frame);
+            if slowed && !hit_someone {
+                // Hit the world: quieter with distance (the sound isn't placed in 3D).
+                let distance = (pos - me).length();
+                if distance < 40.0 {
+                    crate::sound::play_gain("shuriken_hit_wall", 1.0 / (1.0 + distance / 6.0));
+                }
+            }
         }
         let living: Vec<&Target> = everyone.iter().filter(|t| unsafe { t.chr.as_ref() }.modules.data.hp > 0).collect();
         self.confirm(&living);
@@ -521,7 +533,7 @@ impl Thrower {
         age: f32,
         dt: f32,
         engine_before: &HashMap<usize, i64>,
-    ) {
+    ) -> bool {
         const SAMPLES: usize = 8;
         let reach = vel * (dt.max(1.0 / 60.0) * 1.5);
         let mut best: Option<(f32, Target, Vec3)> = None;
@@ -541,7 +553,7 @@ impl Thrower {
             }
         }
         let Some((_, target, pos)) = best else {
-            return;
+            return false;
         };
         let head = pos.y >= target.feet.y + HEAD_SHARE * target.height;
         let chr = target.chr.as_ptr() as usize;
@@ -556,7 +568,8 @@ impl Thrower {
                 "killing blow on character {chr:#x} (died {:.2} s before we matched the shuriken to it)",
                 self.clock - self.died_at.get(&chr).copied().unwrap_or(self.clock)
             );
-            return;
+            crate::sound::play(if head { "hit_head" } else { "hit_body" });
+            return true;
         }
         self.pending.push(Pending {
             chr,
@@ -566,6 +579,7 @@ impl Thrower {
             age,
             height_share: (pos.y - target.feet.y) / target.height,
         });
+        true
     }
 
     /// Logs pending hits once the game dealt its damage; a confirmed headshot gets the same damage again (Overwatch's
@@ -586,6 +600,7 @@ impl Thrower {
                     self.headshots += 1;
                 }
                 crate::ult::add(if p.head { HEAD_DAMAGE } else { BODY_DAMAGE }, "shuriken");
+                crate::sound::play(if p.head { "hit_head" } else { "hit_body" });
                 let data = &unsafe { target.chr.as_ref() }.modules.data;
                 glog!(
                     "HIT",
