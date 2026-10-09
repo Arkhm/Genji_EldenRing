@@ -7,6 +7,7 @@
 //! - Genji's own mouse look and movement (step 5).
 //! - Shuriken: the engine's own projectiles, thrown from the eye (step 6).
 
+mod arms;
 mod blade;
 mod camera;
 mod controls;

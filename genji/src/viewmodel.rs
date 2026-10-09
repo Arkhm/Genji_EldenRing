@@ -249,13 +249,27 @@ fn sample(t: &Texture, uv: Vec2) -> [f32; 3] {
     })
 }
 
-/// Draws the model posed with `pose` into `canvas` (which keeps what's there: clear it first).
-pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas) -> Stats {
+/// The mesh posed and moved into view space, and its visible triangles set up for drawing.
+struct Prepared {
+    nrm: Vec<Vec3>,
+    tris: Vec<Tri>,
+    culled: usize,
+}
+
+/// A triangle facing the eye, on screen: its corners (screen position, 1/depth) and where it covers.
+struct Tri {
+    v: [usize; 3],
+    s: [Vec2; 3],
+    iz: [f32; 3],
+    area: f32,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+}
+
+fn prepare(vm: &Viewmodel, pose: &[Mat], w: usize, h: usize) -> Prepared {
     let m = &vm.model;
-    let (w, h) = (canvas.w as f32, canvas.h as f32);
-    let focal = 1.0 / (vertical_fov() / 2.0).tan();
-    let aspect = w / h;
-    // Skin every vertex into view space.
     let mut view = Vec::with_capacity(m.pos.len());
     let mut nrm = Vec::with_capacity(m.pos.len());
     for i in 0..m.pos.len() {
@@ -272,71 +286,160 @@ pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas) -> Stats {
         let n = n.normalize_or_zero();
         nrm.push(Vec3::new(-n.x, n.z, -n.y));
     }
-    let screen = |v: Vec3| Vec2::new((v.x / v.z * focal / aspect * 0.5 + 0.5) * w, (0.5 - v.y / v.z * focal * 0.5) * h);
-    let light = LIGHT.normalize();
-    let mut stats = Stats::default();
+    let (wf, hf) = (w as f32, h as f32);
+    let focal = 1.0 / (vertical_fov() / 2.0).tan();
+    let aspect = wf / hf;
+    let screen = |v: Vec3| Vec2::new((v.x / v.z * focal / aspect * 0.5 + 0.5) * wf, (0.5 - v.y / v.z * focal * 0.5) * hf);
+    let (mut tris, mut culled) = (Vec::new(), 0);
     for tri in m.indices.chunks_exact(3) {
-        let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
-        let (va, vb, vc) = (view[a], view[b], view[c]);
+        let v = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
+        let (va, vb, vc) = (view[v[0]], view[v[1]], view[v[2]]);
         if va.z < NEAR || vb.z < NEAR || vc.z < NEAR {
-            stats.culled += 1;
+            culled += 1;
             continue;
         }
         // Back faces: the triangle's own normal, turned to agree with its vertex normals, facing away from the eye.
         let mut g = (vb - va).cross(vc - va);
-        if g.dot(nrm[a] + nrm[b] + nrm[c]) < 0.0 {
+        if g.dot(nrm[v[0]] + nrm[v[1]] + nrm[v[2]]) < 0.0 {
             g = -g;
         }
         if g.dot(va) >= 0.0 {
-            stats.culled += 1;
+            culled += 1;
             continue;
         }
-        let (sa, sb, sc) = (screen(va), screen(vb), screen(vc));
-        let area = (sb - sa).perp_dot(sc - sa);
+        let s = [screen(va), screen(vb), screen(vc)];
+        let area = (s[1] - s[0]).perp_dot(s[2] - s[0]);
         if area.abs() < 1e-6 {
             continue;
         }
-        let x0 = sa.x.min(sb.x).min(sc.x).floor().max(0.0) as usize;
-        let x1 = (sa.x.max(sb.x).max(sc.x).ceil() as usize).min(canvas.w);
-        let y0 = sa.y.min(sb.y).min(sc.y).floor().max(0.0) as usize;
-        let y1 = (sa.y.max(sb.y).max(sc.y).ceil() as usize).min(canvas.h);
-        if x0 >= x1 || y0 >= y1 {
-            continue;
+        let x0 = s[0].x.min(s[1].x).min(s[2].x).floor().max(0.0) as usize;
+        let x1 = (s[0].x.max(s[1].x).max(s[2].x).ceil().max(0.0) as usize).min(w);
+        let y0 = s[0].y.min(s[1].y).min(s[2].y).floor().max(0.0) as usize;
+        let y1 = (s[0].y.max(s[1].y).max(s[2].y).ceil().max(0.0) as usize).min(h);
+        if x0 < x1 && y0 < y1 {
+            tris.push(Tri { v, s, iz: [1.0 / va.z, 1.0 / vb.z, 1.0 / vc.z], area, x0, x1, y0, y1 });
         }
-        stats.triangles += 1;
-        let (iza, izb, izc) = (1.0 / va.z, 1.0 / vb.z, 1.0 / vc.z);
-        for y in y0..y1 {
-            for x in x0..x1 {
-                let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
-                let wa = (sb - p).perp_dot(sc - p) / area;
-                let wb = (sc - p).perp_dot(sa - p) / area;
+    }
+    Prepared { nrm, tris, culled }
+}
+
+/// One horizontal band of the picture: its rows, and its part of the colour and depth buffers.
+struct Band<'a> {
+    rows: std::ops::Range<usize>,
+    rgba: &'a mut [u8],
+    depth: &'a mut [f32],
+    /// Triangles that reach into these rows.
+    tris: Vec<u32>,
+}
+
+fn raster(vm: &Viewmodel, p: &Prepared, w: usize, band: &mut Band) -> usize {
+    let m = &vm.model;
+    let light = LIGHT.normalize();
+    let mut pixels = 0;
+    for &ti in &band.tris {
+        let t = &p.tris[ti as usize];
+        let [a, b, c] = t.v;
+        let [sa, sb, sc] = t.s;
+        let [iza, izb, izc] = t.iz;
+        for y in t.y0.max(band.rows.start)..t.y1.min(band.rows.end) {
+            for x in t.x0..t.x1 {
+                let q = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
+                let wa = (sb - q).perp_dot(sc - q) / t.area;
+                let wb = (sc - q).perp_dot(sa - q) / t.area;
                 let wc = 1.0 - wa - wb;
                 if wa < 0.0 || wb < 0.0 || wc < 0.0 {
                     continue;
                 }
                 let iz = wa * iza + wb * izb + wc * izc;
-                let at = y * canvas.w + x;
-                if iz <= canvas.depth[at] {
+                let at = (y - band.rows.start) * w + x;
+                if iz <= band.depth[at] {
                     continue;
                 }
-                canvas.depth[at] = iz;
+                band.depth[at] = iz;
                 // Perspective-correct weights.
                 let (pa, pb, pc) = (wa * iza / iz, wb * izb / iz, wc * izc / iz);
                 let uv = m.uv[a] * pa + m.uv[b] * pb + m.uv[c] * pc;
-                let n = (nrm[a] * pa + nrm[b] * pb + nrm[c] * pc).normalize_or_zero();
+                let n = (p.nrm[a] * pa + p.nrm[b] * pb + p.nrm[c] * pc).normalize_or_zero();
                 let albedo = sample(&vm.albedo, uv);
                 let glow = sample(&vm.emission, uv);
                 let lit = AMBIENT + DIFFUSE * n.dot(light).max(0.0);
-                let px = &mut canvas.rgba[at * 4..at * 4 + 4];
+                let px = &mut band.rgba[at * 4..at * 4 + 4];
                 for k in 0..3 {
                     px[k] = ((albedo[k] * lit + glow[k]).min(1.0) * 255.0) as u8;
                 }
                 px[3] = 255;
-                stats.pixels += 1;
+                pixels += 1;
             }
         }
     }
-    stats
+    if pixels > 0 {
+        pad_edges(band.rgba, w, band.rows.len());
+    }
+    pixels
+}
+
+/// Rows per band: thin bands, handed out in turn, share the work evenly even though the arms sit low on the screen.
+const BAND_ROWS: usize = 32;
+
+/// Draws the model posed with `pose` into `canvas` (which keeps what's there: clear it first), on `threads`
+/// threads at once.
+pub fn draw(vm: &Viewmodel, pose: &[Mat], canvas: &mut Canvas, threads: usize) -> Stats {
+    let (w, h) = (canvas.w, canvas.h);
+    let p = prepare(vm, pose, w, h);
+    let mut bands: Vec<Band> = canvas
+        .rgba
+        .chunks_mut(BAND_ROWS * w * 4)
+        .zip(canvas.depth.chunks_mut(BAND_ROWS * w))
+        .enumerate()
+        .map(|(i, (rgba, depth))| Band { rows: i * BAND_ROWS..((i + 1) * BAND_ROWS).min(h), rgba, depth, tris: Vec::new() })
+        .collect();
+    let count = bands.len();
+    for (ti, t) in p.tris.iter().enumerate() {
+        for band in &mut bands[t.y0 / BAND_ROWS..t.y1.div_ceil(BAND_ROWS).min(count)] {
+            band.tris.push(ti as u32);
+        }
+    }
+    let threads = threads.max(1);
+    let mut per_thread: Vec<Vec<Band>> = (0..threads).map(|_| Vec::new()).collect();
+    for (i, band) in bands.into_iter().enumerate() {
+        per_thread[i % threads].push(band);
+    }
+    let p = &p;
+    let pixels: usize = std::thread::scope(|scope| {
+        let jobs: Vec<_> = per_thread
+            .into_iter()
+            .map(|mut mine| scope.spawn(move || mine.iter_mut().map(|band| raster(vm, p, w, band)).sum::<usize>()))
+            .collect();
+        jobs.into_iter().map(|j| j.join().unwrap_or(0)).sum()
+    });
+    Stats { triangles: p.tris.len(), culled: p.culled, pixels }
+}
+
+/// Gives the empty pixels next to the drawing the drawing's colour (still fully see-through), so stretching the
+/// picture on the graphics card blends the edges with the arm's colour instead of black (no dark outline). Within
+/// one band (`rows` rows of `w`).
+fn pad_edges(rgba: &mut [u8], w: usize, rows: usize) {
+    let alpha: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
+    for y in 0..rows {
+        for x in 0..w {
+            let i = y * w + x;
+            if alpha[i] != 0 {
+                continue;
+            }
+            let near = [
+                (x > 0).then(|| i - 1),
+                (x + 1 < w).then(|| i + 1),
+                (y > 0).then(|| i - w),
+                (y + 1 < rows).then(|| i + w),
+            ];
+            if let Some(n) = near.into_iter().flatten().find(|&n| alpha[n] != 0) {
+                let (dst, src) = (i * 4, n * 4);
+                for k in 0..3 {
+                    rgba[dst + k] = rgba[src + k];
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -375,13 +478,35 @@ mod tests {
             for (w, h) in [(2580, 1080), (1290, 540)] {
                 let mut canvas = Canvas::new(w, h);
                 let t = std::time::Instant::now();
-                let stats = draw(&vm, &pose, &mut canvas);
+                let stats = draw(&vm, &pose, &mut canvas, 4);
                 let took = t.elapsed();
                 println!("{role} at {at} s, {w}x{h}: {took:?}, {stats:?}");
                 assert!(stats.pixels > 0, "{role}: nothing drawn");
                 write_png(&dir.join(format!("preview_{role}_{w}.png")), &canvas, [120, 128, 140]);
             }
         }
+    }
+
+    /// Drawn in 4 bands at once, the picture is the same as in one; and the timings of both.
+    #[test]
+    fn bands_draw_the_same_picture() {
+        let dir = Path::new(DIR);
+        if !dir.join("model.bin").is_file() {
+            return;
+        }
+        let vm = Viewmodel::load(dir).unwrap();
+        let pose = vm.pose(vm.find("blade_idle").unwrap(), 0.0, false);
+        let mut one = Canvas::new(1290, 540);
+        let mut four = Canvas::new(1290, 540);
+        let t = std::time::Instant::now();
+        draw(&vm, &pose, &mut one, 1);
+        let t1 = t.elapsed();
+        let t = std::time::Instant::now();
+        draw(&vm, &pose, &mut four, 4);
+        let t4 = t.elapsed();
+        println!("blade_idle 1290x540: 1 thread {t1:?}, 4 threads {t4:?}");
+        let alpha = |c: &Canvas| c.rgba.chunks_exact(4).map(|p| p[3]).collect::<Vec<_>>();
+        assert_eq!(alpha(&one), alpha(&four));
     }
 
     #[test]

@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 10c: Genji's arms in game (resting poses)
+
+**Changed:**
+- `genji/src/viewmodel.rs`: draws on several cores.
+  - The mesh is posed once and its visible triangles are sorted into bands of 32 rows.
+  - The bands are handed out in turn to the threads (the arms sit low on the screen, so equal halves would leave one
+    core doing most of the work).
+  - Empty pixels next to the arms get the arm's colour, still see-through, so the stretched picture has no dark
+    outline.
+  - New test: 4 threads give the same picture as 1.
+- **New `genji/src/arms.rs`:** our own drawing thread, "genji-arms". It loads the export once, then draws whatever pose
+  the game thread last asked for, on 4 cores. It logs drawing times every 5 s (`ARMS` lines).
+- `crosshair.rs` (the overlay):
+  - creates a texture half the screen's size;
+  - each frame copies the newest picture into it (copy time logged every 5 s);
+  - draws it over the whole screen, under everything else of ours, while first person shows;
+  - a failure in the copy only hides the arms.
+- `camera.rs`: asks for each stance's resting pose: normal, Dragonblade or Deflect.
+**Why:** You: "yes, continue 10c". Plan in DESIGN.md 5k.
+**Tested how:**
+- `cargo build --release` and `cargo test --release` pass (44 tests).
+- Drawing times outside the game, 1290x540, 4 cores: Dragonblade 10-12 ms (was 23 ms on one core), idle 4 ms,
+  Deflect 5 ms, reload 5 ms.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Whether the texture copy is fast enough inside the game, and whether the game's own frame rate drops: both logged.
+- The arms don't move yet: no walking sway, no actions (10d), no sword.
+- Edges are a little soft (half resolution).
+**Next:** Your test. Then 10d (actions play their animations).
+
 ## 2026-10-09 Step 10b: model export and the first pictures of Genji's arms
 
 **Changed:**

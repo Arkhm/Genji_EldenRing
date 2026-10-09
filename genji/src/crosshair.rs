@@ -38,7 +38,12 @@ pub fn set_visible(on: bool) {
 /// Hooks the game's Direct3D 12 frame presentation. Call once, after the game has started.
 pub fn install() {
     let result = hudhook::Hudhook::builder()
-        .with::<hudhook::hooks::dx12::ImguiDx12Hooks>(Overlay { frames: 0, failed: false, hud: crate::hud::Resources::default() })
+        .with::<hudhook::hooks::dx12::ImguiDx12Hooks>(Overlay {
+            frames: 0,
+            failed: false,
+            hud: crate::hud::Resources::default(),
+            arms: ArmsTexture::default(),
+        })
         .build()
         .apply();
     match result {
@@ -52,6 +57,23 @@ struct Overlay {
     failed: bool,
     /// The HUD's images and fonts (step 12).
     hud: crate::hud::Resources,
+    /// Genji's arms (step 10c, arms.rs): the picture the drawing thread made, copied into a texture.
+    arms: ArmsTexture,
+}
+
+/// The arms' texture, half the screen's size, stretched over it when drawn.
+#[derive(Default)]
+struct ArmsTexture {
+    id: Option<imgui::TextureId>,
+    size: (u32, u32),
+    /// The last picture copied in (arms.rs numbers them).
+    seq: u64,
+    /// A picture is in the texture and first person is showing.
+    ready: bool,
+    copies: u32,
+    copy_time: std::time::Duration,
+    copy_longest: std::time::Duration,
+    report_at: Option<std::time::Instant>,
 }
 
 impl ImguiRenderLoop for Overlay {
@@ -62,6 +84,27 @@ impl ImguiRenderLoop for Overlay {
         // Never let ImGui change or show the mouse cursor, or take mouse/keyboard focus from the game.
         ctx.io_mut().config_flags |= imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE | imgui::ConfigFlags::NO_MOUSE;
         self.hud = crate::hud::Resources::load(ctx, render_context);
+        // The arms: drawn at half the screen's size (DESIGN.md 5k), on their own thread.
+        let [w, h] = ctx.io().display_size;
+        let (w, h) = (((w / 2.0).round() as u32).max(1), ((h / 2.0).round() as u32).max(1));
+        match render_context.load_texture(&vec![0u8; (w * h * 4) as usize], w, h) {
+            Ok(id) => {
+                self.arms.id = Some(id);
+                self.arms.size = (w, h);
+                crate::arms::start(w as usize, h as usize);
+            }
+            Err(e) => glog!("ARMS", "texture not created ({e:?}); no arms this session"),
+        }
+    }
+
+    fn before_render<'a>(&'a mut self, _ctx: &mut Context, render_context: &'a mut dyn RenderContext) {
+        // Inside the game's frame presentation too: a bug here hides the arms, never takes the game down.
+        let arms = &mut self.arms;
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| copy_arms(arms, render_context))).is_err() {
+            glog!("ERROR", "arms texture copy panicked; arms hidden for this session");
+            self.arms.id = None;
+            self.arms.ready = false;
+        }
     }
 
     fn render(&mut self, ui: &mut Ui) {
@@ -71,6 +114,46 @@ impl ImguiRenderLoop for Overlay {
             set_visible(false);
             self.failed = true;
         }
+    }
+}
+
+/// Copies the newest picture of the arms (arms.rs) into their texture, and logs how long copies take.
+fn copy_arms(a: &mut ArmsTexture, render_context: &mut dyn RenderContext) {
+    let Some(id) = a.id else {
+        return;
+    };
+    if !VISIBLE.load(Ordering::Relaxed) {
+        a.ready = false;
+        return;
+    }
+    let Some((seq, rgba)) = crate::arms::latest(a.seq) else {
+        return;
+    };
+    a.seq = seq;
+    let started = std::time::Instant::now();
+    match render_context.replace_texture(id, &rgba, a.size.0, a.size.1) {
+        Ok(()) => a.ready = true,
+        Err(e) => {
+            glog!("ARMS", "texture copy failed ({e:?}); arms hidden for this session");
+            a.id = None;
+            a.ready = false;
+            return;
+        }
+    }
+    let took = started.elapsed();
+    a.copies += 1;
+    a.copy_time += took;
+    a.copy_longest = a.copy_longest.max(took);
+    let report_at = *a.report_at.get_or_insert_with(std::time::Instant::now);
+    if report_at.elapsed().as_secs_f32() >= 5.0 {
+        glog!(
+            "ARMS",
+            "overlay: {} pictures copied to the texture, average {:.2} ms, longest {:.2} ms",
+            a.copies,
+            a.copy_time.as_secs_f32() * 1000.0 / a.copies as f32,
+            a.copy_longest.as_secs_f32() * 1000.0
+        );
+        (a.copies, a.copy_time, a.copy_longest, a.report_at) = (0, Default::default(), Default::default(), None);
     }
 }
 
@@ -86,6 +169,10 @@ impl Overlay {
         self.frames += 1;
         if !VISIBLE.load(Ordering::Relaxed) {
             return;
+        }
+        // Genji's arms, stretched over the whole screen, under everything else we draw.
+        if let (Some(id), true) = (self.arms.id, self.arms.ready) {
+            ui.get_foreground_draw_list().add_image(id, [0.0, 0.0], [width, height]).build();
         }
         crate::hud::draw_kill_skull(ui, &mut self.hud, width, height);
         {

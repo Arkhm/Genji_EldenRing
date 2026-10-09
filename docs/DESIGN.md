@@ -635,7 +635,7 @@ first-person animations for each action, as in Overwatch.
   still unnamed.
 - The sword is a separate model.
 
-**How to draw it** (my recommendation; your call before step 10c):
+**How to draw it** (A chosen: you agreed 2026-10-09, "yes, continue 10c"):
 - **A. Our own small software renderer (recommended).**
   - The DLL draws the arms itself, on the CPU, into a picture the size of the screen's lower part: triangles, a
     depth buffer, Genji's textures, simple lighting.
@@ -665,6 +665,16 @@ first-person animations for each action, as in Overwatch.
   - The renderer draws the idle pose from Genji's eye with your field of view into a PNG at your screen size.
   - You compare it with Overwatch.
 - **10c. In game, idle only:** the arms drawn over the game; drawing and copy times logged.
+  - Built 2026-10-09 (`arms.rs`, `crosshair.rs`). The overlay creates a texture half the screen's size (1290x540 on
+    your screen) and starts a thread of ours, "genji-arms".
+  - Each frame the game thread asks for a pose: each stance's resting pose for now (normal, Dragonblade, Deflect).
+  - The thread draws it with `viewmodel.rs` (option A), split over 4 cores in bands of 32 rows handed out in turn. The game
+    thread never waits for it.
+  - Each frame the overlay copies the newest picture into the texture and stretches it over the screen, under the
+    enemy bars, the kill skull, the crosshair and the HUD.
+  - Empty pixels next to the arms take the arm's colour (still see-through), so the stretched edges don't get a dark
+    outline.
+  - Measured outside the game at 1290x540 on 4 cores: 4-12 ms per picture (Dragonblade is the heaviest).
 - **10d. Actions play their animations:** throws, fan, reload, dash, Deflect, melee, Dragonblade (with the sword), jump
   and climb; idle and walk blend by speed.
 - **10e. Polish:** sway when turning, bob when walking, lighting closer to Overwatch's look.

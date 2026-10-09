@@ -447,6 +447,16 @@ fn camera_step_inner(dt: f32) -> bool {
     }
     view.sound.ult_ready = ult_ready;
 
+    // 6b. Genji's arms (step 10c, arms.rs): each stance's resting pose for now; actions come in 10d.
+    let stance = if view.deflect.active() {
+        "deflect_idle"
+    } else if view.blade.active() {
+        "blade_idle"
+    } else {
+        "idle"
+    };
+    crate::arms::request(stance, 0.0, false);
+
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
     let (enemies, enemy_count) =
         view.enemy_bars.update(player, &look, eye, camera.pers_cam_1.fov, camera.pers_cam_1.aspect_ratio, dt);
