@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Arms: jumps don't cut actions; the reload waits for the last throw; a crash looked at
+
+**Changed:**
+- `arms_anim.rs`: jumps, the wall climb and the arms coming up no longer cut into a throw, fan, melee, reload, dash,
+  block or swing. They play only when nothing else is playing. New test.
+- `firing.rs`: the automatic reload, and R pressed during a throw, start once the last throw's recovery is over (up to
+  0.88 s after a burst started, 0.68 s after a fan). The throw animation finishes first, and the reload sounds and
+  the HUD follow the same timing. Tests adjusted to the new timing.
+**Why:** Your test of 10d:
+- "when you jump, sometimes you cancel the animation of throwing shurikens, m1 or m2, or melee. that can't be
+  happening";
+- "when you spent all the ammo, he doesn't finish the throwing animation, and do the reload animation";
+- "the game crashed".
+**Tested how:** `cargo build --release` and `cargo test --release` pass (49 tests).
+- **The crash:** the log just stops at 130.8 s, 0.13 s after a Swift Strike killed an enemy (bleed 9999 applied on
+  the hit). Windows kept a dump (`CrashDumps\eldenring.exe.15660.dmp`), which I read with a small script:
+  - the game's own code wrote to address 0 at `eldenring.exe+0x1c995cd`, on a game thread;
+  - no `genji.dll` code was on that thread's stack, so it wasn't our drawing, our overlay or the new animation code
+    (which only reads game state).
+- The other dumps today (`0x80000003` at `eldenring.exe+0xc58db6`) are the game's normal break on closing. The
+  `D3D12Core.dll` one was the memory leak fixed earlier.
+- The arms in that session: about 30 pictures a second, 8-10 ms each on our thread, copies 3-4 ms. The frame rate was
+  34-50 in places.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The crash's cause isn't known. A guess: Swift Strike's bleed applied to an enemy as it dies. Watch whether it comes
+  back after dash kills.
+- The cost of the copy every frame (the frame rate) is next to work on.
+**Next:** Your test; the copy cost; the sword.
+
 ## 2026-10-09 Step 10d: the arms play Genji's animations
 
 **Changed:**

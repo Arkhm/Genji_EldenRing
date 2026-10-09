@@ -250,6 +250,8 @@ frame how many shuriken to throw and at which sideways angle; `shuriken.rs` thro
   view's up axis), every 0.68 s while held. Shuriken fly at 75 m/s.
 - Both share one recovery: no fan during a burst, no burst right after a fan.
 - 30 shuriken, one used per throw; at 0 the reload starts by itself and takes 1.5 s.
+  - It starts once the last throw's recovery is over (2026-10-09), so the throw's animation finishes first. The same
+    goes for R pressed during a throw.
 - R reloads too (2026-10-09). You moved Elden Ring's "use item" to Z for this, and R is hidden from the game in Genji
   mode.
   - Pressed during a burst, the reload starts when the burst ends.
@@ -689,6 +691,8 @@ and the field of view are right.
     draw, swings and end, the Deflect start, block and end, jumps, the wall climb (start, top, letting go), and the
     arms coming up after menus or loading. Each plays once, and a new action cuts in.
   - Clips with several versions take turns (swings, fans, blocks, jumps).
+  - Jumps, the climb and the arms coming up never cut into a combat action (2026-10-09). They play only when
+    nothing else is playing.
   - **Blends:** 0.08 s into an action, 0.25 s back to the base.
   - Checked against your recordings: the throw has the same wind-up and release as clip2 at 13.1 s. The Dragonblade draw
     (12E6) has the same course as clip1 at 2.2 s (up, slash down, both hands on the hilt), but it's hard to judge

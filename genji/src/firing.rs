@@ -101,7 +101,9 @@ impl Firing {
             return shots;
         }
 
-        if self.reload_wanted && self.burst_left == 0 {
+        // A reload starts once the last throw's recovery is over, so its animation finishes first (you, 2026-10-09:
+        // "when you spent all the ammo, he doesn't finish the throwing animation").
+        if self.reload_wanted && self.burst_left == 0 && self.recovery <= 0.0 {
             self.reload_wanted = false;
             if self.ammo < AMMO {
                 self.reload = Some(RELOAD_TIME);
@@ -140,7 +142,7 @@ impl Firing {
             }
         }
 
-        if self.ammo == 0 && self.burst_left == 0 && !self.meleeing {
+        if self.ammo == 0 && self.burst_left == 0 && !self.meleeing && self.recovery <= 0.0 {
             self.reload = Some(RELOAD_TIME);
             glog!("FIRE", "empty, reloading ({RELOAD_TIME} s)");
         }
@@ -230,9 +232,12 @@ mod tests {
             let mut f = Firing { ammo: left, ..Firing::default() };
             assert_eq!(run(&mut f, 0.5, true, false).len(), 3, "burst with {left} left");
             assert_eq!(f.ammo, 0);
+            assert!(f.reload.is_none(), "no reload before the burst's recovery is over");
+            run(&mut f, BURST_CYCLE - 0.5 + 0.05, false, false);
             assert!(f.reload.is_some());
             let mut f = Firing { ammo: left, ..Firing::default() };
             assert_eq!(run(&mut f, 0.1, false, true).len(), 3, "fan with {left} left");
+            run(&mut f, FAN_CYCLE, false, false);
             assert!(f.reload.is_some());
         }
     }
@@ -255,12 +260,14 @@ mod tests {
         assert!(!f.reload_wanted && f.reload.is_none(), "full magazine: no reload");
         assert_eq!(f.tick(DT, true, false, true).len(), 1);
         f.reload();
-        // The rest of the burst is still thrown, then the reload starts.
+        // The rest of the burst is still thrown, then the reload starts when the burst's recovery is over.
         assert_eq!(run(&mut f, 0.3, false, false).len(), 2);
+        assert!(f.reload.is_none());
+        run(&mut f, BURST_CYCLE - 0.3, false, false);
         assert!(f.reload.is_some());
         assert_eq!(f.ammo, AMMO - 3);
         assert!(run(&mut f, RELOAD_TIME - 0.3, true, false).is_empty(), "no throws while reloading");
-        run(&mut f, 0.3, false, false);
+        run(&mut f, 0.4, false, false);
         assert!(f.reload.is_none());
         assert_eq!(f.ammo, AMMO);
     }

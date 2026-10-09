@@ -91,6 +91,11 @@ impl Animator {
         let before = self.current();
         let mut started = false;
         for &e in events {
+            // Movement (jumps, the climb, the arms coming up) never cuts into a combat action (you, 2026-10-09: "when
+            // you jump, sometimes you cancel the animation of throwing shurikens ... that can't be happening").
+            if minor(e) && self.action.is_some_and(|a| !minor_role(a.role)) {
+                continue;
+            }
             if let Some(role) = action_role(e, stance) {
                 let variants = lengths(role, 0).map_or(1, |(_, n)| n.max(1));
                 let turn = self.turns.entry(role).or_insert(0);
@@ -147,6 +152,20 @@ impl Animator {
     fn current(&self) -> Option<Clip> {
         self.action.or(self.base)
     }
+}
+
+/// Events that only play when no combat action is playing.
+fn minor(e: Event) -> bool {
+    matches!(e, Event::Spawn | Event::Jump | Event::DoubleJump | Event::ClimbStart | Event::ClimbLedge | Event::ClimbEnd)
+}
+
+/// The roles those events play.
+fn minor_role(role: &str) -> bool {
+    matches!(
+        role,
+        "spawn" | "jump" | "double_jump" | "blade_jump" | "blade_double_jump" | "deflect_jump" | "wall_climb" | "wall_climb_ledge"
+            | "wall_climb_end" | "blade_wall_climb" | "blade_wall_climb_end"
+    )
 }
 
 /// Roles whose variants take turns (the others always play their first).
@@ -254,6 +273,20 @@ mod tests {
         let p = a.update(DT, Stance::Blade, 0.0, &[Event::Dash], &lengths);
         assert_eq!(p.main.role, "blade_dash");
         assert_eq!(p.from.map(|c| c.role), Some("blade_swing"));
+    }
+
+    #[test]
+    fn a_jump_does_not_cut_a_throw_but_plays_after_it() {
+        let mut a = Animator::default();
+        a.update(DT, Stance::Normal, 0.0, &[Event::Throw], &lengths);
+        run(&mut a, 0.2, Stance::Normal, 0.0);
+        let p = a.update(DT, Stance::Normal, 0.0, &[Event::Jump], &lengths);
+        assert_eq!(p.main.role, "throw");
+        let p = a.update(DT, Stance::Normal, 0.0, &[Event::Melee], &lengths);
+        assert_eq!(p.main.role, "melee", "a combat action still cuts in");
+        run(&mut a, 1.0, Stance::Normal, 0.0);
+        let p = a.update(DT, Stance::Normal, 0.0, &[Event::Jump], &lengths);
+        assert_eq!(p.main.role, "jump");
     }
 
     #[test]
