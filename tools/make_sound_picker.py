@@ -10,6 +10,9 @@ words; the obvious ones are tagged in advance (you can change them).
 Animation previews: if tools\\render_anim_previews.py (run in Blender) has rendered an animation's frames into
 D:\\GenjiBridgeAssets\\anim_previews, they become a looping GIF shown at the top of that animation's group.
 
+Recorded sounds: if tools\\cut_recordings.py has cut your Practice Range clips (recordings\\cuts.json), they get their own
+section, one row per sound with a frame of the video, tagged in advance with what the video suggests.
+
 Usage: python tools\\make_sound_picker.py   then open the page in your browser.
 """
 import json
@@ -81,6 +84,7 @@ TAGS = OrderedDict([
     ('Quick melee', ['melee_swing', 'melee_hit']),
     ('Movement', ['jump', 'double_jump', 'wall_climb', 'land', 'footstep']),
     ('Ultimate', ['ult_ready_sfx']),
+    ('Interface', ['cooldown_ready', 'kill', 'not_ready', 'low_health']),
     ('Voice', ['voice_ult_activate', 'voice_ult_ready', 'voice_ult_charging', 'voice_pain', 'voice_death',
                'voice_elimination', 'voice_healing', 'voice_jump', 'voice_respawn', 'voice_dash', 'voice_melee']),
 ])
@@ -196,6 +200,14 @@ def main():
                         break
         if files:
             voice[folder] = files
+    recorded = []
+    cuts_json = os.path.join(os.path.dirname(OUT), 'recordings', 'cuts.json')
+    if os.path.isfile(cuts_json):
+        for c in json.load(open(cuts_json, encoding='utf-8')):
+            base = os.path.join(os.path.dirname(cuts_json), 'cuts', c['name'])
+            recorded.append({**c, 'path': rel(base + '.wav'), 'thumb': rel(base + '.jpg')})
+            if c.get('guess'):
+                defaults['rec:' + c['name']] = c['guess']
     data = {
         'events': [{'id': k, 'files': v['files'], 'secs': v.get('secs', []), 'seen': v['seen']} for k, v in events.items()],
         'defaults': defaults,
@@ -203,6 +215,7 @@ def main():
         'previews': {g: make_preview(g) for g in anims if make_preview(g)},
         'voice': [{'folder': k, 'files': v} for k, v in voice.items()],
         'tags': TAGS,
+        'recorded': recorded,
     }
     html = PAGE.replace('/*DATA*/', json.dumps(data))
     with open(os.path.join(OUT, 'index.html'), 'w', encoding='utf-8') as fh:
@@ -336,6 +349,26 @@ for (const ev of DATA.events) {
   card.append(meta, takes, tagSelect(key, mark), noteBox(key, mark)); mark();
   main.appendChild(card); rows.push({ el: card, key, text: ev.id + ' ' + ev.seen.join(' ') });
 }
+if ((DATA.recorded || []).length) {
+  section('Recorded from Overwatch (your Practice Range clips; my guesses from the video are tagged, fix them by ear)');
+  let lastRec = null;
+  for (const c of DATA.recorded) {
+    if (c.rec !== lastRec) {
+      lastRec = c.rec;
+      const h = document.createElement('h2'); h.style.color = '#ff9f6b'; h.style.fontSize = '14px';
+      h.textContent = 'Clip rec' + c.rec; main.appendChild(h); rows.push({ el: h, key: null, text: 'rec' + c.rec });
+    }
+    const row = document.createElement('div'); row.className = 'voice-row';
+    row.style.gridTemplateColumns = '172px 90px 1fr 230px 220px';
+    const img = document.createElement('img'); img.src = c.thumb; img.loading = 'lazy'; img.style.cssText = 'width:172px;height:72px;border-radius:4px';
+    const b = document.createElement('button'); b.textContent = '\u25B6 ' + c.secs + 's'; b.onclick = () => play(c.path, b);
+    const label = document.createElement('span'); label.className = 'count'; label.textContent = 'rec' + c.rec + ' at ' + c.at + ' s';
+    const key = 'rec:' + c.name;
+    const mark = () => { row.classList.toggle('tagged', !!picks[key]); row.classList.toggle('noted', !!notes[key]); };
+    row.append(img, b, label, tagSelect(key, mark), noteBox(key, mark)); mark();
+    main.appendChild(row); rows.push({ el: row, key, text: 'rec' + c.rec + ' ' + c.at });
+  }
+}
 section('Voice lines (with their words; the obvious ones are tagged already)');
 for (const vf of DATA.voice) {
   const h = document.createElement('h2'); h.style.color = '#ffd36b'; h.textContent = vf.folder + ' (' + vf.files.length + ')'; main.appendChild(h);
@@ -371,11 +404,13 @@ document.getElementById('export').onclick = () => {
   const out = {};
   for (const ev of DATA.events) { const t = picks['event:' + ev.id]; if (t) (out[t] = out[t] || []).push(...ev.files); }
   for (const [k, t] of Object.entries(picks)) if (k.startsWith('file:')) (out[t] = out[t] || []).push(k.slice(5));
+  for (const c of DATA.recorded || []) { const t = picks['rec:' + c.name]; if (t) (out[t] = out[t] || []).push(c.path); }
   // Your notes, with the files they're about (the tools skip this part; I read it).
   const noted = {};
   for (const [k, n] of Object.entries(notes)) {
     const ev = k.startsWith('event:') ? DATA.events.find(e => 'event:' + e.id === k) : null;
-    noted[k] = { note: n, tag: picks[k] || '', files: ev ? ev.files : [k.slice(5)] };
+    const rc = k.startsWith('rec:') ? (DATA.recorded || []).find(c => 'rec:' + c.name === k) : null;
+    noted[k] = { note: n, tag: picks[k] || '', files: ev ? ev.files : rc ? [rc.path] : [k.slice(5)] };
   }
   if (Object.keys(noted).length) out._notes = noted;
   const text = JSON.stringify(out, null, 1);

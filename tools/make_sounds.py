@@ -4,6 +4,7 @@ the folder the mod plays from. Outside the repository.
 Inputs:
 - D:\\GenjiBridgeAssets\\sound_picks.json: your export from the sound picker (tags, and notes per sound group).
 - D:\\GenjiBridgeAssets\\sound_picker\\index.html: the picker itself, for the take numbers exactly as you saw them.
+- Your recorded sounds (tools\\cut_recordings.py): copied as .wav under whatever tag you gave them.
 
 Your notes (2026-10-09) were read by hand into ABILITY below. A note of only numbers ("1 3 4 5 7 8", "3-7") lists the
 right takes (the others belong to other skins); a note describing parts ("1-3, 8, 9 melee hit / 4-7 and 10 melee swing")
@@ -109,6 +110,10 @@ def main():
             chosen = range(1, len(group) + 1) if takes is None else takes
             files += [group[t - 1] for t in chosen if 1 <= t <= len(group)]
         out[event] = files
+    # Your recorded sounds (tools/cut_recordings.py), whatever their tag.
+    for tag, files in picks.items():
+        out.setdefault(tag, [])
+        out[tag] += [f for f in files if '/recordings/cuts/' in f]
     # Voice: your tags, minus "dont use"; folders you named in notes.
     skip = {k[5:] for k, n in notes.items() if k.startswith('file:') and 'dont use' in n['note'].lower()}
     for tag, files in picks.items():
@@ -138,9 +143,10 @@ def main():
         index[event] = []
         for i, f in enumerate(files, 1):
             src = os.path.normpath(os.path.join(picker_dir, f))
-            dst = os.path.join(OUT, event, f'{i:02d}.ogg')
+            ext = os.path.splitext(src)[1].lower()  # .ogg from Overwatch's files, .wav from your recordings
+            dst = os.path.join(OUT, event, f'{i:02d}{ext}')
             shutil.copyfile(src, dst)
-            index[event].append({'file': f'{i:02d}.ogg', 'from': os.path.relpath(src, ASSETS)})
+            index[event].append({'file': f'{i:02d}{ext}', 'from': os.path.relpath(src, ASSETS)})
         print(f'{event:20s} {len(files):3d}')
     with open(os.path.join(OUT, 'index.json'), 'w', encoding='utf-8') as fh:
         json.dump(index, fh, indent=1, ensure_ascii=False)

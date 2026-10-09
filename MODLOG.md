@@ -3,6 +3,33 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Your Overwatch recordings cut into single sounds, in the picker
+
+**Changed:**
+- New `tools/cut_recordings.py`. It reads your 6 Practice Range clips (`D:\GenjiBridgeAssets\recordings\clips.txt`,
+  rec1-rec6 in recording order) and extracts their audio with CapCut's ffmpeg.
+- **Finding the sounds:** each sound's start comes from the loudness (a rise of 10 dB within 30 ms, above -45 dB).
+  Each sound is cut from just before its start to the next one (at most 2.5 s), with 5 ms fades, into
+  `D:\GenjiBridgeAssets\recordings\cuts`, plus a frame of the video at that moment. That gives 86 cuts.
+- **Guesses tagged in advance (36),** from what the video shows:
+  - rec5 1.12 s: ult ready (the bottom centre lights up);
+  - rec4 0.86/4.71 s: Deflect start (2 s with the sword up); rec4 3.03/6.88 s: Deflect end;
+  - rec4 3.64/7.49 s and rec3 3.92 s: cooldown ready (the tile's ready flash);
+  - rec3 2.92 s: Swift Strike (green trail);
+  - rec2: footsteps (walking in the empty room);
+  - rec1: Deflect blocks (bots shooting into Deflect).
+- `tools/make_sound_picker.py`: a "Recorded" section with frame, play button, tag and note per cut, and a new
+  "Interface" tag group (cooldown ready, kill, not ready, low health).
+- `tools/make_sounds.py`: copies recorded sounds (.wav) under their tags too.
+**Why:** You recorded the sounds DataTool can't reach (dash, Deflect, footsteps, ult ready, cooldown ready).
+**Tested how:**
+- The cuts were made, and the page has all 86 cuts with frames, its script passing a syntax check.
+- `make_sounds.py` still gives the same 50 events with your current picks.
+- I can't hear: the guesses come from the video and need your ears.
+**Result:** Ready for you to check.
+**Still broken / not tested:** The guesses. rec1 has steady map noise behind the sounds.
+**Next:** You check the "Recorded" section and export; then step 11b.
+
 ## 2026-10-09 Second sound export; Swift Strike, Deflect block and Dragonblade hit aren't in the extraction
 
 **Changed:**
