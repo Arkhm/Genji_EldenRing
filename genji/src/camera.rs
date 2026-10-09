@@ -71,6 +71,7 @@ struct View {
     e_was_down: bool,
     blade: Blade,
     q_was_down: bool,
+    r_was_down: bool,
     melee_was_down: bool,
     /// LockCamParam field of view of every row, saved while ours is applied (STATUS.md option B).
     lock_cam_fov: Option<Vec<(u32, f32)>>,
@@ -374,6 +375,12 @@ fn camera_step_inner(dt: f32) -> bool {
     // Deflect, Dragonblade, Swift Strike's dash or a quick melee: a dash or a melee also cancels the rest of a burst,
     // so you throw 1 or 2 and dash or melee, Overwatch).
     let busy = view.mover.dashing() || view.blade.meleeing();
+    // R: reload (not during Dragonblade, when the shuriken are put away).
+    let r_down = dinput::key_down(&keys_now, dik::R);
+    if r_down && !view.r_was_down && driving && !blade {
+        view.firing.reload();
+    }
+    view.r_was_down = r_down;
     let throws = view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !busy);
     if throws.iter().any(|a| *a != 0.0) {
         crate::sound::play("fan_throw"); // Fan of Blades: the three at once, sideways

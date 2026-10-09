@@ -249,8 +249,11 @@ frame how many shuriken to throw and at which sideways angle; `shuriken.rs` thro
 - Hold right click: Fan of Blades, 3 at once (centre and 4.5 degrees to each side, 9 in total, turned around the
   view's up axis), every 0.68 s while held. Shuriken fly at 75 m/s.
 - Both share one recovery: no fan during a burst, no burst right after a fan.
-- 30 shuriken, one used per throw; at 0 the reload starts by itself and takes 1.5 s. No reload key: Elden Ring
-  uses R for items, which you use in Genji mode.
+- 30 shuriken, one used per throw; at 0 the reload starts by itself and takes 1.5 s.
+- R reloads too (2026-10-09). You moved Elden Ring's "use item" to Z for this, and R is hidden from the game in Genji
+  mode.
+  - Pressed during a burst, the reload starts when the burst ends.
+  - R does nothing with a full magazine or during Dragonblade.
 - Throws happen only while our movement controller drives (as in 6a); a burst still in progress is dropped
   otherwise. Timers keep running.
 - Values (updated 2026-10-07) from a measurement of an Overwatch video and Blizzard's notes, passed on by you; the

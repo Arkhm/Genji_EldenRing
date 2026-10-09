@@ -1,5 +1,5 @@
 //! Shuriken timing (step 6b): Overwatch's burst of 3 on left click, Fan of Blades on right click, 30 shuriken and
-//! the automatic reload. Pure logic, no game access: `tick` says which throws to make this frame, and
+//! the reload (automatic when empty, or R). Pure logic, no game access: `tick` says which throws to make this frame, and
 //! `shuriken.rs` makes them.
 //!
 //! Overwatch rules (you, 2026-10-09): Swift Strike and quick melee stop shooting at once, so a dash or a melee cancels
@@ -27,7 +27,7 @@ const FAN_CYCLE: f32 = 0.68;
 /// Sideways angle of the fan's outer shuriken, degrees: Genji's fan is 9 degrees in total, 4.5 to each side. With the
 /// Overwatch field of view in first person (camera.rs, 2026-10-08) it also looks as wide as in Overwatch. Was 9.0.
 const FAN_ANGLE: f32 = 4.5;
-/// Automatic reload when empty, seconds.
+/// Reload time, seconds (automatic when empty, or R).
 const RELOAD_TIME: f32 = 1.5;
 
 #[derive(Debug)]
@@ -40,11 +40,13 @@ pub struct Firing {
     burst_timer: f32,
     /// Seconds left of a reload in progress.
     reload: Option<f32>,
+    /// R pressed during a burst: the reload starts when the burst is over.
+    reload_wanted: bool,
 }
 
 impl Default for Firing {
     fn default() -> Self {
-        Self { ammo: AMMO, recovery: 0.0, burst_left: 0, burst_timer: 0.0, reload: None }
+        Self { ammo: AMMO, recovery: 0.0, burst_left: 0, burst_timer: 0.0, reload: None, reload_wanted: false }
     }
 }
 
@@ -52,6 +54,15 @@ impl Firing {
     /// For the HUD: shuriken left, the magazine size, and the share of a reload done (while reloading).
     pub fn hud(&self) -> (u32, u32, Option<f32>) {
         (self.ammo, AMMO, self.reload.map(|left| 1.0 - left / RELOAD_TIME))
+    }
+
+    /// R (your request, 2026-10-09: "I want to reload using R"): reloads unless the magazine is full or a reload is
+    /// already on. During a burst, the reload starts when the burst is over (the burst isn't cut short).
+    pub fn reload(&mut self) {
+        if self.ammo < AMMO && self.reload.is_none() && !self.reload_wanted {
+            self.reload_wanted = true;
+            glog!("FIRE", "R: reload asked with {} left{}", self.ammo, if self.burst_left > 0 { " (after this burst)" } else { "" });
+        }
     }
 
     /// One frame. `primary`/`secondary`: left/right click held. `can_throw`: the controller drives this frame.
@@ -68,6 +79,15 @@ impl Firing {
                 glog!("FIRE", "reload done, ammo {}", self.ammo);
             }
             return shots;
+        }
+
+        if self.reload_wanted && self.burst_left == 0 {
+            self.reload_wanted = false;
+            if self.ammo < AMMO {
+                self.reload = Some(RELOAD_TIME);
+                glog!("FIRE", "reloading by R ({RELOAD_TIME} s), {} left", self.ammo);
+                return shots;
+            }
         }
 
         if self.burst_left > 0 {
@@ -206,6 +226,23 @@ mod tests {
         assert_eq!(during, 0);
         assert_eq!(f.ammo, AMMO - 1);
         assert_eq!(f.burst_left, 0);
+    }
+
+    #[test]
+    fn r_reloads_after_the_burst_and_not_when_full() {
+        let mut f = Firing::default();
+        f.reload();
+        assert!(!f.reload_wanted && f.reload.is_none(), "full magazine: no reload");
+        assert_eq!(f.tick(DT, true, false, true).len(), 1);
+        f.reload();
+        // The rest of the burst is still thrown, then the reload starts.
+        assert_eq!(run(&mut f, 0.3, false, false).len(), 2);
+        assert!(f.reload.is_some());
+        assert_eq!(f.ammo, AMMO - 3);
+        assert!(run(&mut f, RELOAD_TIME - 0.3, true, false).is_empty(), "no throws while reloading");
+        run(&mut f, 0.3, false, false);
+        assert!(f.reload.is_none());
+        assert_eq!(f.ammo, AMMO);
     }
 
     #[test]

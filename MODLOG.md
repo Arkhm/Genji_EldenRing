@@ -3,6 +3,24 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 R reloads
+
+**Changed:**
+- `genji/src/firing.rs`: `reload()`, a manual reload.
+  - Nothing happens with a full magazine or a reload already on.
+  - Pressed during a burst, the reload starts once the burst's last shuriken is out.
+- `camera.rs`: R calls it while the controller drives, except during Dragonblade.
+- `dinput.rs`: R is hidden from the game in Genji mode, like E, Q, Left Shift and F, so it never uses an item even with
+  the default keys.
+- The reload sounds and the HUD's "RELOADING" follow the reload as before.
+- New test `r_reloads_after_the_burst_and_not_when_full`.
+**Why:** You: "I changed the use item from R to Z because I want to reload using R."
+**Tested how:** `cargo build --release` and `cargo test --release` pass (36 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:** Whether Overwatch lets you reload in the middle of a burst isn't verified. Here the burst
+finishes first.
+**Next:** Your check, then 11b-2.
+
 ## 2026-10-09 Genji mode works again after the key change (UI state 0x0b)
 
 **Changed:** `genji/src/controls.rs`: UI state 0x0b added to the states seen during play (`GAMEPLAY_UI_STATES`).

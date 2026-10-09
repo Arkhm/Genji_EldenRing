@@ -33,6 +33,7 @@ pub mod dik {
     pub const D: usize = 0x20;
     pub const Q: usize = 0x10;
     pub const E: usize = 0x12;
+    pub const R: usize = 0x13;
     pub const F: usize = 0x21;
     pub const LSHIFT: usize = 0x2A;
     pub const SPACE: usize = 0x39;
@@ -42,7 +43,9 @@ pub mod dik {
 }
 
 /// Keys the game must not see while Genji mode is active.
-const BLOCKED_KEYS: [usize; 4] = [dik::E, dik::Q, dik::LSHIFT, dik::F];
+/// R (reload): Elden Ring's default "use item" key (you moved it to Z, 2026-10-09); hidden too, so it never uses an
+/// item in Genji mode even with the default keys.
+const BLOCKED_KEYS: [usize; 5] = [dik::E, dik::Q, dik::R, dik::LSHIFT, dik::F];
 /// Pressing REMAP_FROM makes the game see REMAP_TO (F does Elden Ring's E "interact").
 const REMAP_FROM: usize = dik::F;
 const REMAP_TO: usize = dik::E;
