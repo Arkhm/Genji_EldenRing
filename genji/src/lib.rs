@@ -30,6 +30,7 @@ mod sound;
 mod swift;
 mod targets;
 mod ult;
+mod viewmodel;
 mod ultrawide;
 
 use std::ffi::c_void;

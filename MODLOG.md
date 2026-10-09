@@ -3,6 +3,45 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 10b: model export and the first pictures of Genji's arms
+
+**Changed:**
+- **New `tools/export_viewmodel.py`** (runs in Blender). It writes to `D:/GenjiBridgeAssets/viewmodel`:
+  - the first-person mesh: 17,026 vertices, 26,608 triangles, 88 bones, 4 bone weights each;
+  - its colour texture (2048) and glow texture (1024);
+  - the 49 animations of `tools/viewmodel_anims.py`, baked as one matrix per bone per frame (940 frames, 4 MB).
+  - It checks its own output: the mesh posed the mod's way against Blender's posed mesh, on two frames of every
+    animation.
+- **New `genji/src/viewmodel.rs`:** loads that export, poses the mesh for any animation time (blending between
+  frames, holding or looping) and draws it into an RGBA picture.
+  - The drawing uses a depth buffer, perspective-correct texture coordinates, Genji's colour texture with his green
+    glow, and one light plus ambient.
+  - Two tests: preview pictures of 5 poses at 2580x1080 and 1290x540, with timings; and holding and looping.
+- `hud.rs`: `decode_png` shared with it.
+**Why:** Step 10b of DESIGN.md 5k: check the arms outside the game first.
+**Tested how:**
+- Export check: largest difference 0.000 mm on all 49 animations.
+- The preview pictures were compared with Blender rendering the same poses from the same eye with the same field of
+  view (idle 240E and Dragonblade idle 124B): same position and shape.
+- `cargo test --release` passes.
+- Drawing times, on one processor core:
+
+| Pose | 2580x1080 | 1290x540 |
+|---|---|---|
+| Idle | 28 ms | 9 ms |
+| Dragonblade (both arms close) | 83 ms | 23 ms |
+| Deflect | 33 ms | 11 ms |
+| Reload | 31 ms | 9 ms |
+
+**Result:** The first picture came out mirrored left to right: looking along -Y with Z up, right is -X. Fixed, now it
+matches Blender.
+**Still broken / not tested:**
+- Nothing in the game yet.
+- Too slow to draw on the game's own thread at full size. 10c: draw at half size on a thread of its own (and split
+  across cores if needed), then have the graphics card stretch it to the screen.
+- Lighting is simple (no normal map yet), and the sword isn't exported yet.
+**Next:** Your look at the pictures, then 10c (in game, idle only).
+
 ## 2026-10-09 Animation list agreed; Deflect-block sounds taken out of the quick melee
 
 **Changed:**

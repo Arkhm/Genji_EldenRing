@@ -306,7 +306,7 @@ impl Resources {
     }
 }
 
-fn decode_png(path: &Path) -> Result<(Vec<u8>, u32, u32), String> {
+pub(crate) fn decode_png(path: &Path) -> Result<(Vec<u8>, u32, u32), String> {
     let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let mut decoder = png::Decoder::new(std::io::BufReader::new(file));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);

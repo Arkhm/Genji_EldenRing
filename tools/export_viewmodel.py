@@ -11,7 +11,8 @@ Output (all little-endian):
   looking along -Y, his eye at about (0, 0.05, 1.65).
 - anims.bin: for every frame of every animation, one 3x4 matrix (12 f32, by rows) per bone that takes a vertex from
   its rest position to its posed position (skinning matrices), in Blender's space.
-- anims.json: per animation its role, id, frames per second, frame count and first frame in anims.bin.
+- anims.json: per animation its role, id, frames per second, frame count and first frame in anims.bin; anims.txt:
+  the same as plain lines ("role id fps frames offset"), which the mod reads.
 - albedo.png (2048x2048, from Overwatch's 4096) and emission.png (1024x1024, his green lights).
 - export_check.txt: on two frames of every animation, the largest distance between the mesh posed the mod's way
   (these matrices and weights) and Blender's own posed mesh. Should be well under a millimetre.
@@ -158,6 +159,9 @@ def main():
                 print('ANIM', role, short, len(frames), 'frames')
     with open(os.path.join(OUT, 'anims.json'), 'w', encoding='utf-8') as fh:
         json.dump({'bones': len(arm.data.bones), 'floats_per_bone': 12, 'anims': index}, fh, indent=1)
+    # The same list as plain lines for the mod (no JSON reader there): role id fps frames offset.
+    with open(os.path.join(OUT, 'anims.txt'), 'w', encoding='utf-8') as fh:
+        fh.writelines(f"{a['role']} {a['id']} {a['fps']} {a['frames']} {a['offset']}\n" for a in index)
     with open(os.path.join(OUT, 'export_check.txt'), 'w', encoding='utf-8') as fh:
         fh.write(f'worst {worst * 1000:.3f} mm\n' + '\n'.join(check) + '\n')
     print(f'EXPORT DONE {len(index)} animations, worst difference {worst * 1000:.3f} mm')
