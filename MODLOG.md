@@ -3,6 +3,36 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 10a: animation picker for Genji's first-person animations
+
+**Changed:**
+- `docs/DESIGN.md` 5k: the plan for step 10 (first-person arms).
+  - Recommended: our own small software renderer, drawn through the overlay.
+  - The alternatives: our own Direct3D 12 pass, or converting Genji into Elden Ring's own formats.
+- Step 11 is marked done in the plan table.
+- `tools/render_anim_previews.py`: `-- --all-1p` renders all 129 first-person animations from Genji's eye, with your
+  Overwatch field of view at your screen's shape (430x180), into `D:\GenjiBridgeAssetsnim_previews_eye`.
+- **New `tools/make_anim_picker.py`:** writes `D:\GenjiBridgeAssetsnim_picker\index.html`.
+  - One card per animation: preview, length, folder, the sounds you tagged on it, and my guess.
+  - Tags (idle, throw, fan, reload, Deflect, Dragonblade, melee, climb...) and notes.
+  - Exports `anim_picks.json`.
+- Also fixed two broken characters in DESIGN.md: a `` that had turned into a control character, and a path.
+**Why:** You: "lets proceed". Step 10 needs to know which of the 129 animations is which; only the 20 that play sounds
+had previews.
+**Tested how:**
+- Blender rendered all 129 without errors (4 minutes), and the picker lists all 129 with previews.
+- I looked at the previews, as contact sheets:
+  - From the eye they look like Overwatch: the right hand forward at rest, both hands on the hilt over the right
+    shoulder for Dragonblade, both palms up for Deflect.
+  - 15 guesses, where the picture and your sound tags agree.
+- The page itself wasn't opened (it's like the sound picker).
+**Result:** The framed previews (the first try) were too hard to tell apart; the eye view works.
+**Still broken / not tested:**
+- About 70 animations in Overwatch's folder `4/...` show nothing alone. They seem to be layers (walking sway, climbing,
+  etc.) that move only part of the arms on top of a base pose, so they need a base pose under them to be seen.
+- The renderer choice (5k, A) waits for your OK before 10c.
+**Next:** You tag the animations. Then 10b: the export and a first picture of the arms at your screen size.
+
 ## 2026-10-09 Silence only the Tarnished, not NPCs and enemies
 
 **Changed:** `genji/src/game_voice.rs` now renames only the player's rows of `PlayerVoiceType` (ids below 50).

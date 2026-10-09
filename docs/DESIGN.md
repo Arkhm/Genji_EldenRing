@@ -546,7 +546,7 @@ aw`.
   group with a play button for each sound (your browser plays Ogg from the files on D:).
 - You tag sounds with the events below; the page remembers your tags in the browser.
 - The page exports the tags as a small JSON file, which you save as `D:\GenjiBridgeAssets\sound_picks.json`.
-- `tools\make_sounds.py` copies the tagged files into `D:\GenjiBridgeAssets\sound\<event>.ogg`, `02.ogg` and so
+- `tools\make_sounds.py` copies the tagged files into `D:\GenjiBridgeAssets\sound\<event>\01.ogg`, `02.ogg` and so
   on.
 - Nothing is copied into the repository.
 
