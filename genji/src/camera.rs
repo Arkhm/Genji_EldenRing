@@ -432,6 +432,7 @@ fn camera_step_inner(dt: f32) -> bool {
         blade_duration: view.blade.duration(),
         enemies,
         enemy_count,
+        kills: view.sound.kills,
     });
     true
 }

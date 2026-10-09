@@ -35,16 +35,23 @@ struct State {
     last_hp: HashMap<usize, i32>,
     /// Deaths not (yet) counted as ours: seconds since.
     unjudged: HashMap<usize, f32>,
-    /// Deaths counted as ours (so a late one isn't logged as not ours).
+    /// Deaths counted as ours (so a late one isn't logged as not ours, and hitting the body doesn't count again).
     credited: HashSet<usize>,
+    /// Deaths judged not ours (hitting the body afterwards doesn't make them ours).
+    not_ours: HashSet<usize>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 
-/// Remember that we just damaged this character.
+/// Remember that we just damaged this character. Not a body already dead (test of 2026-10-09: the rest of a burst
+/// hitting a body killed by the first shuriken counted it again, with the elimination sound each time).
 pub fn damaged(chr: usize) {
     let mut guard = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let state = guard.get_or_insert_with(State::default);
+    // (A body that just died isn't refused here: a one-shot kill by the game's own hit is seen a frame before this.)
+    if state.credited.contains(&chr) || state.not_ours.contains(&chr) {
+        return;
+    }
     state.damaged.insert(chr, 0.0);
     state.remembered.insert(chr, 0.0);
 }
@@ -75,12 +82,14 @@ pub fn tick(dt: f32) -> u32 {
             }
         } else {
             state.credited.remove(&id); // alive again (respawned)
+            state.not_ours.remove(&id);
         }
         state.last_hp.insert(id, hp);
     }
     let judged: Vec<usize> = state.unjudged.iter().filter(|(_, age)| **age >= JUDGE_AFTER).map(|(id, _)| *id).collect();
     for id in judged {
         state.unjudged.remove(&id);
+        state.not_ours.insert(id);
         match state.remembered.get(&id) {
             Some(age) => glog!(
                 "KILL",

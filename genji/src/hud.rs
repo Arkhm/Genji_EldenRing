@@ -105,6 +105,8 @@ pub struct State {
     pub blade_duration: f32,
     pub enemies: [EnemyBar; ENEMY_BARS],
     pub enemy_count: usize,
+    /// Eliminations so far, to play the kill skull when it goes up.
+    pub kills: u32,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -126,6 +128,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     blade_duration: 0.0,
     enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false, name: [0; NAME_BYTES], name_len: 0 }; ENEMY_BARS],
     enemy_count: 0,
+    kills: 0,
 });
 
 pub fn update(state: State) {
@@ -144,6 +147,7 @@ pub struct Resources {
     portrait: Picture,
     plus: Picture,
     skull: Picture,
+    kill_skull: Picture,
     swift: Picture,
     deflect: Picture,
     blade: Picture,
@@ -197,6 +201,9 @@ struct Anim {
     last_now: f32,
     blade_was_on: bool,
     ult_pressed_at: Option<f32>,
+    /// Kill count last seen, and when the kill skull last started.
+    kills: Option<u32>,
+    kill_at: Option<f32>,
 }
 
 // SAFETY: font ids are pointers into ImGui's font atlas; they are created and used only on the overlay's render
@@ -227,6 +234,7 @@ impl Resources {
         r.portrait = load(HUD_ART, "portrait_hex.png");
         r.plus = load(HUD_ART, "plus.png");
         r.skull = load(HUD_ART, "skull.png");
+        r.kill_skull = load(HUD_ART, "kill_skull.png");
         r.glow_ring = load(HUD_ART, "glow_ring.png");
         r.dash_ring = load(HUD_ART, "dash_ring.png");
         r.flare = load(HUD_ART, "flare.png");
@@ -350,6 +358,39 @@ fn picture(draw: &DrawListMut, pic: Picture, center: [f32; 2], size: f32, angle:
     let (s, c) = angle.sin_cos();
     let corner = |x: f32, y: f32| [center[0] + x * c - y * s, center[1] + x * s + y * c];
     draw.add_image_quad(id, corner(-hw, -hh), corner(hw, -hh), corner(hw, hh), corner(-hw, hh)).col(col(tint)).build();
+}
+
+/// Kill skull (your Overwatch clip, 2026-10-09; 60 fps frames from the kill): a pink skull pops up over the crosshair
+/// big (2.6 times its final size by frame 3, fading in over 2 frames), holds to frame 6, snaps down to its final size
+/// (about 44 px at 1080p) by frame 8, then fades out by frame 32 (about half a second). Measured from the clip.
+const KILL_SKULL_W: f32 = 44.0;
+const KILL_PINK: [u8; 4] = [240, 112, 226, 255];
+const KILL_SCALE: [(f32, f32); 7] = [(0.0, 1.9), (1.0, 2.2), (2.0, 2.45), (3.0, 2.6), (6.0, 2.6), (7.0, 1.3), (8.0, 1.0)];
+const KILL_ALPHA: [(f32, f32); 9] =
+    [(0.0, 0.35), (1.0, 0.75), (2.0, 1.0), (8.0, 1.0), (12.0, 0.72), (16.0, 0.47), (20.0, 0.28), (26.0, 0.12), (32.0, 0.0)];
+
+/// The kill skull, drawn before the crosshair so the crosshair stays on top of it (as in Overwatch). A new kill
+/// restarts it.
+pub fn draw_kill_skull(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
+    let s = *STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let now = ui.time() as f32;
+    if s.visible && r.anim.kills.is_some_and(|k| s.kills > k) {
+        glog!("HUD", "kill skull (kill {})", s.kills);
+        r.anim.kill_at = Some(now);
+    }
+    r.anim.kills = Some(s.kills);
+    let Some(at) = r.anim.kill_at.filter(|_| s.visible) else {
+        return;
+    };
+    let frame = (now - at) * 60.0;
+    if frame > KILL_ALPHA[KILL_ALPHA.len() - 1].0 {
+        r.anim.kill_at = None;
+        return;
+    }
+    let k = height / REFERENCE_HEIGHT;
+    let draw = ui.get_foreground_draw_list();
+    let size = KILL_SKULL_W * k * key(frame, &KILL_SCALE);
+    picture(&draw, r.kill_skull, [width / 2.0, height / 2.0], size, 0.0, alpha(KILL_PINK, key(frame, &KILL_ALPHA)));
 }
 
 /// Draws the HUD (overlay render thread).

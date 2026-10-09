@@ -462,6 +462,12 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
       the visor 39% of the way down, the face at 88% of the width. The body fills the inside.
     - A soft blue glow rises behind the head.
     - Built by `tools\make_hud_art.py` from `D:\GenjiBridgeAssets\hud\portrait_source.png`.
+  - **Kill skull** (your clip, 2026-10-09): on each elimination, Overwatch's skull in pink pops up over the crosshair.
+    - Timing, in 60 fps frames: 2.6 times its size by frame 3, held to frame 6, down to about 44 px at 1080p by frame
+      8, faded out by frame 32 (about half a second).
+    - Drawn before the crosshair, so the crosshair stays on top. A new kill restarts it.
+    - The picture is the hole in the boss badge's skull-in-a-diamond, cut out by `tools\make_hud_art.py`
+      (`kill_skull.png`).
   - **Not recorded:** a kill resetting Swift Strike early, and the ultimate becoming full. The reset reuses the
     cooldown-finished flash, and the ult's full moment keeps a short burst. Both are guesses.
 

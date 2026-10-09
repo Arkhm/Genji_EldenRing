@@ -7,13 +7,15 @@ outputs stay on D:, outside the repository. Needs Pillow; the SVG icon needs res
   ult_disc.png      Overwatch's dark disc with its ring, behind the ultimate number
   plus.png          the health "+" icon
   skull.png         Overwatch's skull-in-a-diamond badge, for the boss bars
+  kill_skull.png    the skull alone (white), for the kill skull at the crosshair: the hole in that badge
   glow_ring.png, dash_ring.png, flare.png, glow_dot.png   Overwatch's UI effect pictures for the HUD animations
 """
 import io
 import os
+import re
 import sys
 
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 RAW = r'D:\GenjiBridgeAssets\raw'
 UI = r'D:\GenjiBridgeAssets\ui-textures\UITextureDump'
@@ -113,10 +115,55 @@ def main():
         Image.open(io.BytesIO(bytes(png))).convert('RGBA').save(os.path.join(OUT, 'skull.png'))
     except Exception as e:
         print('plus.png / skull.png skipped:', e)
+    kill_skull()
 
     for f in sorted(os.listdir(OUT)):
         print(f, Image.open(os.path.join(OUT, f)).size)
 
 
+def kill_skull(width=128):
+    """The skull alone: the badge's SVG is a soup of triangles with the skull left out, so fill the badge's outline
+    (the convex hull of its points), take away the triangles, and what's left is the skull. Drawn at 2048 px, cleaned
+    of hairline seams between triangles, cropped and scaled down. No resvg needed."""
+    s = open(SKULL_SVG, encoding='utf-8').read()
+    vb = [float(v) for v in re.search(r'viewBox="([^"]+)"', s).group(1).split()]
+    scale = 2048 / vb[2]
+    tris = []
+    for d in re.findall(r' d="([^"]+)"', s):
+        for sub in re.findall(r'M([^Z]+)Z', d):
+            tris.append([tuple(float(c) * scale for c in p.split(',')) for p in re.findall(r'-?[\d.]+,-?[\d.]+', sub)])
+    size = (int(vb[2] * scale) + 1, int(vb[3] * scale) + 1)
+    shape = Image.new('L', size, 0)
+    draw = ImageDraw.Draw(shape)
+    for t in tris:
+        draw.polygon(t, fill=255)
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    points = sorted({p for t in tris for p in t})
+    lower, upper = [], []
+    for p in points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    for p in reversed(points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    badge = Image.new('L', size, 0)
+    ImageDraw.Draw(badge).polygon(lower[:-1] + upper[:-1], fill=255)
+    skull = ImageChops.subtract(badge, shape).filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))
+    x0, y0, x1, y1 = skull.getbbox()
+    pad = 8
+    skull = skull.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
+    skull = skull.resize((width, round(width * skull.size[1] / skull.size[0])), Image.LANCZOS)
+    out = Image.new('RGBA', skull.size, (255, 255, 255, 0))
+    out.putalpha(skull)
+    out.save(os.path.join(OUT, 'kill_skull.png'))
+
+
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--kill-skull']:
+        kill_skull()  # just this one (the others need the extracted files and resvg)
+    else:
+        main()

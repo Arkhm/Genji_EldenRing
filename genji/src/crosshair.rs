@@ -87,6 +87,7 @@ impl Overlay {
         if !VISIBLE.load(Ordering::Relaxed) {
             return;
         }
+        crate::hud::draw_kill_skull(ui, &mut self.hud, width, height);
         {
             // ImGui allows one draw list in use at a time: this one ends before the HUD takes its own.
             let draw = ui.get_foreground_draw_list();

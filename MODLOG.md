@@ -3,6 +3,34 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Kills: no double count on a dead body, quieter elimination sound, kill skull at the crosshair
+
+**Changed:**
+- `genji/src/kills.rs`: hitting a body that is already dead no longer marks it as "damaged by us".
+  - This covers bodies counted as our kill and deaths judged "not ours".
+  - A body that died this very frame is still accepted, so a one-shot kill by the game's own hit keeps its credit.
+- `genji/src/sound.rs`: the elimination sound is at 0.5, about 6 dB quieter.
+- `genji/src/hud.rs` and `crosshair.rs`: the kill skull. A pink skull pops up big over the crosshair, snaps down to
+  about 44 px and fades out in about half a second. It is drawn under the crosshair, and each new kill restarts it.
+- `camera.rs` passes the kill count to the HUD.
+- `tools/make_hud_art.py`: `kill_skull.png`, the skull cut out of the boss badge's vector (00000000082C). Run just this
+  part with `--kill-skull`.
+**Why:** Your play test and clip (`MedalTVOverwatch20261009103728341-trim-...mp4`):
+- "the elimination sound is kinda loud".
+- A burst whose first shuriken kills played the sound again for the other two.
+- "add this animation of the skull when you kill an enemy".
+**Tested how:**
+- The double count: the rest of the burst called `kills::damaged` on the dead body, so the next frame counted it as a new
+  death "ours". Found by reading the code; not reproduced in game.
+- The skull timing was measured frame by frame from your clip (60 fps), from the size of the pink pixels and their
+  brightness against the background. The picture was checked by eye against the clip.
+- `cargo build --release` and `cargo test --release` pass (35 tests).
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- The skull is pink like the clip; the enemy bars are red at your request. Say if it should be red too.
+- The skull's colour and fade come from a compressed video with bloom, so they're close, not exact.
+**Next:** Your check, then 11b-2.
+
 ## 2026-10-09 Sound levels and the Dragonblade sheathe timing
 
 **Changed:**
