@@ -397,12 +397,21 @@ Overwatch screenshot, sizes scaled from 1080p to your screen height:
   `D:\Videos\edits_hyper\Overwatch_HUD_reference_20261008\Overwatch_HUD_Agent_Pack`, with its written spec
   (`HUD_ANIMATION_SPEC.txt`). Its frames are at 1080 lines, so sizes, colours and timings were measured on them
   directly. Frames and comparison sheets are in `D:\GenjiBridgeAssets\hud_ref`, extracted with CapCut's ffmpeg.
-  - **Ultimate ready:** halo, a blue fire band, fine arcs, pale ring, thick cyan ring, white disc with the emblem,
-    side markers and a filled Q.
-    - The fire band flickers in tongues around the ring.
-    - Quick flame-tongue flashes appear at changing places: two bright cyan edges with a faint fill between them.
-    - Both are drawn as continuous soft strips, made of textured quads that share their corners, so there are no
-      seams or visible rectangles.
+  - **Ultimate ready** (rebuilt from your second analysis, the "ULT FULL" spec; U = the white disc's radius, 40 px):
+    - **Static layers:** halo; faint hairline ring at 1.9 U; thin pale ring at 1.4 U with gaps at 3 and 9 o'clock;
+      blue glow; thick cyan ring; navy outline; white disc; glyph; inward triangles; Q cap. None of them move or
+      pulse. The halo flickers by about 4%.
+    - **Boiling aura:** soft blue flame tongues rising and falling in place, drifting 2° a second. It is the only smooth
+      animation.
+    - **Flare bursts:** every 1.25-1.49 s, drawn like a flipbook. Each pose is held for 4-6 frames and cuts straight to
+      the next:
+      - BUILD: a small, thin pair, a hooked loop and a spike on opposite sides;
+      - PEAK: the same pair about 40% bigger and brighter, filled, and the disc's half on the spike's side tinted;
+      - blank;
+      - SECOND: a smaller, dimmer flare at a new angle;
+      - TENDRIL: a jagged thread that fades and breaks up.
+    - A new direction each burst, at least 60° from the last.
+    - **Roll back:** the earlier smooth version is saved as the git tag `hud-ult-flames-v1`.
   - **Ultimate pressed (0.4 s):** the ring expands and fades, and the emblem gives way to the empty meter with its
     "0". Q becomes outlined.
   - **During Dragonblade:** the meter shows the charge, as in the clip. The draining ring with seconds is gone.

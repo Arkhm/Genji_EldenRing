@@ -48,8 +48,6 @@ const COOLDOWN_ENTRY: f32 = 0.17;
 /// 64 px), within PRESS_IN seconds.
 const PRESS_DEPTH: f32 = 0.16;
 const PRESS_IN: f32 = 0.12;
-/// Electric flame tongues around the ready ultimate (slots; each shows one for part of its cycle).
-const ULT_WISPS: u32 = 3;
 /// Pieces of the blue fire band around the ready ultimate.
 const AURA_PIECES: usize = 120;
 
@@ -210,7 +208,7 @@ impl Resources {
             let t = smooth(1.0 - (2.0 * u - 1.0).abs());
             [255, 255, 255, (255.0 * t) as u8]
         });
-        r.fade = make(4, 64, &|_, v| [255, 255, 255, (255.0 * (1.0 - v).powf(1.6)) as u8]);
+        r.fade = make(4, 64, &|_, v| [255, 255, 255, (255.0 * (1.0 - v).powf(1.1)) as u8]);
         r.bar = make(32, 128, &|u, v| {
             let across = (1.0 - (2.0 * u - 1.0).abs()).powf(0.3);
             let up = smooth((v / 0.3).min(1.0));
@@ -462,30 +460,51 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
         digits([cx, cy], r.italic_ult, a, &percent.to_string());
     };
     if ult_ready {
-        // Clip part 1, back to front: soft blue halo (brightest near the rim, breathing and flickering), blue flames,
-        // fine arcs with wandering highlights, pale ring, bright cyan ring, white disc with the dark emblem, side
-        // markers, short electric ribbons appearing at changing places on the rim, Q badge.
-        let breathe = 0.5 + 0.5 * (now * 1.6).sin();
-        let flicker = 0.85 + 0.15 * (now * 13.0).sin() * (now * 7.3).cos();
-        picture(&draw, r.glow_dot, [cx, cy], 205.0 * k * (1.0 + 0.06 * breathe), 0.0, alpha([60, 140, 255, 255], (0.6 + 0.25 * breathe) * flicker));
-        picture(&draw, r.glow_dot, [cx, cy], 150.0 * k, 0.0, alpha([90, 190, 255, 255], 0.75 + 0.25 * breathe));
-        ult_aura(&draw, r.fade, [cx, cy], now, k);
-        for i in 0..4 {
-            let f = i as f32;
-            let start = now * (0.35 + 0.1 * f) * if i % 2 == 0 { 1.0 } else { -1.0 } + f * 1.7;
-            let len = 0.9 + 0.5 * (now * 0.9 + f).sin();
-            arc_at(&draw, [cx, cy], (61.0 + 2.5 * f) * k, start, len, col(alpha([170, 230, 255, 255], 0.35 + 0.25 * breathe)), 1.3 * k);
+        // Ready (your second analysis of the clip, ULT FULL spec, 2026-10-08). Back to front: a static glow halo with
+        // a slight irregular flicker; a soft blue flame aura boiling in place; the static badge (faint hairline ring,
+        // thin bright ring with gaps at 3 and 9 o'clock, blue glow, thick cyan ring, navy outline, white disc, glyph,
+        // inward triangles); every ~1.37 s a burst of stepped, flipbook-style flares (BUILD, PEAK, blank, SECOND,
+        // TENDRIL), with the disc's half on the peak side tinted during PEAK; the Q cap on top.
+        let u = 40.0 * k;
+        let flicker = 1.0 + 0.04 * (0.6 * (now * 7.1).sin() + 0.4 * (now * 12.7 + 1.0).sin() * (now * 3.3).cos());
+        picture(&draw, r.glow_dot, [cx, cy], 5.0 * u, 0.0, alpha([45, 104, 186, 255], 0.85 * flicker));
+        picture(&draw, r.glow_dot, [cx, cy], 3.8 * u, 0.0, alpha([45, 127, 225, 255], 0.85 * flicker));
+        picture(&draw, r.glow_dot, [cx, cy], 2.9 * u, 0.0, alpha([55, 160, 247, 255], 0.9 * flicker));
+        ult_aura(&draw, r.fade, [cx, cy], now, u);
+        draw.add_circle([cx, cy], 1.91 * u, col([168, 234, 255, 70])).thickness(1.0 * k).num_segments(128).build();
+        let gap = 11f32.to_radians();
+        for start in [gap, PI + gap] {
+            arc_at(&draw, [cx, cy], 1.4 * u, start, PI - 2.0 * gap, col([168, 234, 255, 255]), 2.0 * k);
         }
-        draw.add_circle([cx, cy], 56.0 * k, col(alpha([190, 245, 255, 255], 0.7 + 0.3 * flicker))).thickness(2.5 * k).num_segments(96).build();
-        draw.add_circle([cx, cy], 52.0 * k, col([55, 181, 247, 255])).thickness(3.0 * k).num_segments(96).build();
-        draw.add_circle([cx, cy], 46.5 * k, col([50, 255, 252, 255])).thickness(8.0 * k).num_segments(96).build();
-        draw.add_circle([cx, cy], 41.5 * k, col([40, 100, 165, 255])).thickness(3.0 * k).num_segments(96).build();
-        draw.add_circle([cx, cy], 39.5 * k, col([233, 233, 242, 255])).filled(true).num_segments(96).build();
-        picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, ICON_DARK);
-        ult_wisps(&draw, r.ribbon, r.white, [cx, cy], now, k);
+        draw.add_circle([cx, cy], 1.31 * u, col([64, 182, 245, 255])).thickness(0.13 * u).num_segments(96).build();
+        draw.add_circle([cx, cy], 1.1625 * u, col([52, 214, 247, 255])).thickness(0.175 * u).num_segments(96).build();
+        draw.add_circle([cx, cy], 1.1625 * u, col([50, 255, 252, 255])).thickness(0.09 * u).num_segments(96).build();
+        draw.add_circle([cx, cy], 1.025 * u, col([48, 85, 150, 255])).thickness(0.05 * u).num_segments(96).build();
+        draw.add_circle([cx, cy], 1.0 * u, col([233, 234, 244, 255])).filled(true).num_segments(96).build();
+        picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, [29, 29, 48, 255]);
+        let burst = Burst::at(now);
+        // PEAK flash: the disc's half on the big flare's side goes pale cyan and the glyph teal there.
+        if let Some(b) = burst.filter(|b| b.step() == Step::Peak) {
+            let a = b.spike_dir();
+            let (ca, sa) = (a.cos(), a.sin());
+            let (min, max) = if ca.abs() >= sa.abs() {
+                if ca > 0.0 { ([cx, cy - u], [cx + u, cy + u]) } else { ([cx - u, cy - u], [cx, cy + u]) }
+            } else if sa > 0.0 {
+                ([cx - u, cy], [cx + u, cy + u])
+            } else {
+                ([cx - u, cy - u], [cx + u, cy])
+            };
+            draw.with_clip_rect_intersect(min, max, || {
+                draw.add_circle([cx, cy], 1.0 * u, col([232, 241, 249, 255])).filled(true).num_segments(96).build();
+                picture(&draw, r.blade, [cx, cy], 52.0 * k, 0.0, [37, 90, 114, 255]);
+            });
+        }
+        if let Some(b) = burst {
+            b.draw(&draw, r, [cx, cy], u, k);
+        }
         for side in [-1.0f32, 1.0] {
-            let x = cx + side * 60.0 * k;
-            draw.add_triangle([x, cy - 4.5 * k], [x, cy + 4.5 * k], [x - side * 6.0 * k, cy], col(WHITE)).filled(true).build();
+            let (tip, base) = (cx + side * 1.40 * u, cx + side * 1.52 * u);
+            draw.add_triangle([base, cy - 3.0 * k], [base, cy + 3.0 * k], [tip, cy], col(WHITE)).filled(true).build();
         }
         if let Some(t0) = r.anim.ult_ready_at {
             let p = (now - t0) / FLASH;
@@ -674,35 +693,6 @@ fn hash(n: u32) -> f32 {
     (x & 0xFFFF) as f32 / 65536.0
 }
 
-/// Blue fire around the ready ultimate (clip part 1): a band from the ring outward whose outer edge flickers in
-/// tongues, fading outward; a deep blue wide band and a brighter, closer one. Made of quads sharing their corners,
-/// so there are no seams.
-fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, k: f32) {
-    let Some((id, _)) = fade else {
-        return;
-    };
-    for (inner, reach, amp, color, strength, speed) in [
-        (50.0, 40.0, 16.0, [35, 105, 255, 255], 0.85, 1.0),
-        (52.0, 18.0, 10.0, [80, 200, 255, 255], 0.8, 1.5),
-    ] {
-        let swirl = now * 0.35 * speed;
-        let outer = |th: f32| -> f32 {
-            let a = th + swirl;
-            let n = 0.5 * (3.0 * a + 1.3 * now * speed).sin()
-                + 0.3 * (7.0 * a - 2.1 * now * speed + 1.0).sin()
-                + 0.2 * (13.0 * a + 3.7 * now * speed + 2.0).sin();
-            (inner + reach + amp * n.max(-0.4)) * k
-        };
-        let at = |th: f32, r: f32| [c[0] + r * th.cos(), c[1] + r * th.sin()];
-        for i in 0..AURA_PIECES {
-            let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
-            draw.add_image_quad(id, at(t0, inner * k), at(t1, inner * k), at(t1, outer(t1)), at(t0, outer(t0)))
-                .col(col(alpha(color, strength)))
-                .build();
-        }
-    }
-}
-
 /// A soft strip along `pts`, `width(i)` wide and `strength(i)` strong at each point (the texture is bright in the
 /// middle and clear at both edges). Neighbouring quads share their corners, so it is one smooth ribbon.
 fn strip(draw: &DrawListMut, tex: Picture, pts: &[[f32; 2]], width: &dyn Fn(usize) -> f32, strength: &dyn Fn(usize) -> f32, color: [u8; 4]) {
@@ -731,63 +721,232 @@ fn strip(draw: &DrawListMut, tex: Picture, pts: &[[f32; 2]], width: &dyn Fn(usiz
     }
 }
 
-/// Electric flame tongues (clip part 1): quick flashes shaped like a flame tongue: two bright glowing edges meeting at
-/// both ends with a faint fill between, growing along the ring and curling outward, then fading; each slot shows one
-/// for part of its cycle, at a new place each time.
-fn ult_wisps(draw: &DrawListMut, ribbon: Picture, white: Picture, c: [f32; 2], now: f32, k: f32) {
-    const POINTS: usize = 32;
-    for i in 0..ULT_WISPS {
-        let period = 0.9 + 0.7 * hash(i * 13 + 1);
-        let t = now / period + hash(i * 13 + 2);
-        let (cycle, u) = (t.floor() as u32, t.fract());
-        let seed = i * 7919 + cycle * 271;
-        let window = 0.3 + 0.15 * hash(seed + 5);
-        if u > window {
-            continue;
+/// Soft blue flame aura of the ready ultimate (ULT FULL spec 3.3): wispy tongues licking outward from the thick
+/// ring, densest against it and gone by about 2.2 U, churning in place (standing waves that rise and fall, plus a
+/// drift of 2 degrees a second clockwise; it does not spin). Quads sharing their corners, fading outward.
+fn ult_aura(draw: &DrawListMut, fade: Picture, c: [f32; 2], now: f32, u: f32) {
+    let Some((id, _)) = fade else {
+        return;
+    };
+    let drift = now * 2f32.to_radians();
+    for (reach, amp, color, strength, seed) in [(0.75, 0.4, [60, 170, 250, 255], 0.9, 0.0), (0.45, 0.25, [45, 127, 225, 255], 0.7, 3.0)] {
+        let outer = |th: f32| -> f32 {
+            let a = th - drift;
+            let n = 0.45 * (5.0 * a + seed).sin() * (1.7 * now + seed).sin()
+                + 0.3 * (9.0 * a + 1.0 + seed).sin() * (2.9 * now + 2.0).sin()
+                + 0.2 * (14.0 * a + 2.0).sin() * (4.3 * now + 1.0 + seed).sin()
+                + 0.25 * (3.0 * a + 4.0 + seed).sin() * (1.1 * now + 3.0).sin();
+            (1.25 + reach + amp * n.max(-0.5)) * u
+        };
+        let at = |th: f32, rr: f32| [c[0] + rr * th.cos(), c[1] + rr * th.sin()];
+        for i in 0..AURA_PIECES {
+            let (t0, t1) = (TAU * i as f32 / AURA_PIECES as f32, TAU * (i + 1) as f32 / AURA_PIECES as f32);
+            draw.add_image_quad(id, at(t0, 1.25 * u), at(t1, 1.25 * u), at(t1, outer(t1)), at(t0, outer(t0)))
+                .col(col(alpha(color, strength)))
+                .build();
         }
-        let v = u / window;
-        let life = (PI * v).sin().powf(0.6) * (0.85 + 0.15 * (now * 37.0 + i as f32).sin());
-        let grow = smooth((v / 0.4).min(1.0));
-        let dir = if hash(seed + 1) < 0.5 { -1.0 } else { 1.0 };
-        let start = TAU * hash(seed);
-        let sweep = 0.9 + 0.8 * hash(seed + 2);
-        let outward = hash(seed + 6);
-        let bulge = (12.0 + 14.0 * hash(seed + 3)) * k;
-        let phase = hash(seed + 4) * 20.0;
-        let f_at = |j: usize| j as f32 / (POINTS - 1) as f32;
-        // The edge nearer the ring, then the outer edge bulging away from it (they meet at both ends).
-        let inner: Vec<[f32; 2]> = (0..POINTS)
-            .map(|j| {
-                let f = f_at(j);
-                let a = start + dir * sweep * f * grow;
-                let rr = 55.0 * k + (10.0 + 40.0 * outward) * k * f.powf(1.6) * grow + 3.0 * k * (f * 5.0 + now * 4.0 + phase).sin() * f;
-                [c[0] + rr * a.cos(), c[1] + rr * a.sin()]
-            })
-            .collect();
-        let outer: Vec<[f32; 2]> = inner
-            .iter()
-            .enumerate()
-            .map(|(j, p)| {
-                let (dx, dy) = (p[0] - c[0], p[1] - c[1]);
-                let len = (dx * dx + dy * dy).sqrt().max(1e-3);
-                let f = f_at(j);
-                // Ragged: the outer edge waves quickly.
-                let b = bulge * (PI * f).sin().powf(0.8) * grow * (1.0 + 0.35 * (f * 13.0 + now * 20.0 + phase).sin());
-                [p[0] + dx / len * b, p[1] + dy / len * b]
-            })
-            .collect();
-        if let Some((id, _)) = white {
-            for j in 0..POINTS - 1 {
-                draw.add_image_quad(id, inner[j], outer[j], outer[j + 1], inner[j + 1])
-                    .col(col(alpha([60, 190, 255, 255], 0.35 * life)))
-                    .build();
+    }
+}
+
+/// Average time from one flare burst to the next (spec 4.1: 1.25-1.48 s, 1.37 s on average).
+const BURST_EVERY: f32 = 1.37;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Step {
+    Build,
+    Peak,
+    Blank,
+    Second,
+    Tendril,
+}
+
+#[derive(Clone, Copy)]
+enum Shape {
+    /// A tongue of fire hugging the ring, then curling into a hooked loop (a "6"), hollow in the middle.
+    Loop,
+    /// The same tongue stretched into a long pointed blade with two small barbs, like a dragon fin.
+    Spike,
+}
+
+/// One flare burst of the ready ultimate (spec 4): a pair of flares on opposite sides (a loop and a spike), drawn
+/// as held poses that cut from one to the next with no blending, at about 12-15 drawings a second.
+#[derive(Clone, Copy)]
+struct Burst {
+    /// 60 fps frames since the burst started (0-24).
+    frame: u32,
+    seed: u32,
+    /// Direction of the loop (the spike is opposite), radians, 0 = 3 o'clock, clockwise.
+    dir: f32,
+    /// Mirror of the drawings (+1 or -1).
+    side: f32,
+}
+
+impl Burst {
+    /// The burst on screen at `now`, if any: one per 1.37 s slot, starting 0-0.12 s into it.
+    fn at(now: f32) -> Option<Burst> {
+        let slot = (now / BURST_EVERY).floor();
+        let seed = (slot as i64).rem_euclid(1 << 30) as u32;
+        let start = slot * BURST_EVERY + 0.12 * hash(seed * 31 + 1);
+        let frame = ((now - start) * 60.0).floor();
+        if !(0.0..25.0).contains(&frame) {
+            return None;
+        }
+        // A new direction each burst, at least 60 degrees from the last one.
+        let angle = |s: u32| TAU * hash(s * 31 + 2);
+        let mut dir = angle(seed);
+        let diff = (dir - angle(seed.wrapping_sub(1))).rem_euclid(TAU);
+        if diff.min(TAU - diff) < 60f32.to_radians() {
+            dir += 120f32.to_radians();
+        }
+        let side = if hash(seed * 31 + 4) < 0.5 { 1.0 } else { -1.0 };
+        Some(Burst { frame: frame as u32, seed, dir, side })
+    }
+
+    /// Spec 4.2: BUILD 4 frames, PEAK 5, blank 5, SECOND 5, TENDRIL 6.
+    fn step(&self) -> Step {
+        match self.frame {
+            0..=3 => Step::Build,
+            4..=8 => Step::Peak,
+            9..=13 => Step::Blank,
+            14..=18 => Step::Second,
+            _ => Step::Tendril,
+        }
+    }
+
+    fn spike_dir(&self) -> f32 {
+        self.dir + PI
+    }
+
+    fn draw(&self, draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32) {
+        let h = |n: u32| hash(self.seed * 31 + n);
+        let (loop_len, spike_len) = (0.9 + 0.15 * h(6), 0.92 + 0.1 * h(5));
+        let second_dir = TAU * h(7);
+        match self.step() {
+            // Small and thin: hollow outlines, medium brightness.
+            Step::Build => {
+                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, 0.62 * loop_len, 0.65, 0.12, 0.7);
+                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, 0.62 * spike_len, 0.65, 0.12, 0.7);
+            }
+            // The same pair redrawn about 40 % bigger, thicker and brighter, with the translucent fill.
+            Step::Peak => {
+                flare(draw, r, c, u, k, self.dir, self.side, Shape::Loop, loop_len, 1.0, 0.45, 1.3);
+                flare(draw, r, c, u, k, self.spike_dir(), -self.side, Shape::Spike, spike_len, 1.0, 0.45, 1.3);
+            }
+            Step::Blank => {}
+            // One smaller, dimmer flare at a new angle; sometimes a small one opposite.
+            Step::Second => {
+                flare(draw, r, c, u, k, second_dir, self.side, Shape::Loop, 0.5, 0.6, 0.15, 0.8);
+                if h(8) > 0.6 {
+                    flare(draw, r, c, u, k, second_dir + PI, -self.side, Shape::Loop, 0.35, 0.5, 0.1, 0.7);
+                }
+            }
+            // A thin jagged electric thread, fading out and breaking into pieces (the only fade).
+            Step::Tendril => {
+                let t = (self.frame - 19) as f32 / 6.0;
+                let dir = if h(9) < 0.4 { second_dir } else { TAU * h(10) };
+                tendril(draw, r.ribbon, c, u, k, dir, 3.0 + 0.8 * h(11), self.seed, 1.0 - t, t);
             }
         }
-        let taper = |j: usize| (PI * f_at(j)).sin().powf(0.5).max(0.15);
-        for edge in [&inner, &outer] {
-            strip(draw, ribbon, edge, &|j| 14.0 * k * taper(j), &|_| 0.6 * life, [50, 140, 255, 255]);
-            strip(draw, ribbon, edge, &|j| 4.5 * k * taper(j), &|_| life, [120, 240, 255, 255]);
+    }
+}
+
+/// A point on a Catmull-Rom curve through `ctrl`, at `f` (0-1 along it).
+fn catmull(ctrl: &[(f32, f32)], f: f32) -> (f32, f32) {
+    let n = ctrl.len();
+    let s = f.clamp(0.0, 1.0) * (n - 1) as f32;
+    let i = (s.floor() as usize).min(n - 2);
+    let t = s - i as f32;
+    let (p0, p1, p2, p3) = (ctrl[i.saturating_sub(1)], ctrl[i], ctrl[i + 1], ctrl[(i + 2).min(n - 1)]);
+    let cr = |a: f32, b: f32, c: f32, d: f32| {
+        0.5 * (2.0 * b + (c - a) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t * t + (3.0 * b - a - 3.0 * c + d) * t * t * t)
+    };
+    (cr(p0.0, p1.0, p2.0, p3.0), cr(p0.1, p1.1, p2.1, p3.1))
+}
+
+/// One flare drawing (spec 4.4), rooted on the outer edge of the thick ring at angle `dir`, mirrored by `side`.
+/// `reach`: 1 = PEAK size (the part beyond the ring scales); `bright`: outline strength; `fill`: strength of the
+/// translucent body; `line`: outline thickness factor. Body and outline are strips of quads sharing their corners.
+#[allow(clippy::too_many_arguments)]
+fn flare(draw: &DrawListMut, r: &Resources, c: [f32; 2], u: f32, k: f32, dir: f32, side: f32, shape: Shape, reach: f32, bright: f32, fill: f32, line: f32) {
+    // Centreline (radius in U, angle from `dir` in radians) and half-widths in U on each side.
+    const LOOP: [(f32, f32); 10] = [
+        (1.25, -0.6), (1.35, -0.35), (1.6, -0.12), (1.95, 0.05), (2.3, 0.25),
+        (2.45, 0.5), (2.3, 0.72), (2.0, 0.78), (1.75, 0.65), (1.68, 0.45),
+    ];
+    const SPIKE: [(f32, f32); 6] = [(1.25, -0.4), (1.33, -0.15), (1.6, 0.0), (2.2, 0.04), (2.9, 0.05), (3.7, 0.04)];
+    const N: usize = 40;
+    let ctrl: &[(f32, f32)] = match shape {
+        Shape::Loop => &LOOP,
+        Shape::Spike => &SPIKE,
+    };
+    let thick = 0.6 + 0.4 * reach.min(1.0);
+    let widths = |f: f32| -> (f32, f32) {
+        match shape {
+            Shape::Loop => {
+                let w = 0.3 * (PI * f.powf(0.8)).sin().max(0.0).powf(0.6);
+                (w * thick, w * thick)
+            }
+            Shape::Spike => {
+                let w = 0.28 * (1.0 - f).max(0.0).powf(0.9) * (f * 5.0).min(1.0);
+                // Barbs on one edge: each rises along the blade and drops sharply.
+                let barb = |at: f32, size: f32| if f > at - 0.07 && f <= at { size * (f - (at - 0.07)) / 0.07 } else { 0.0 };
+                (w * thick, (w + barb(0.55, 0.12) + barb(0.72, 0.09)) * thick)
+            }
         }
+    };
+    let center: Vec<[f32; 2]> = (0..N)
+        .map(|j| {
+            let (rr, a) = catmull(ctrl, j as f32 / (N - 1) as f32);
+            let rr = 1.25 + (rr - 1.25) * reach;
+            let ang = dir + side * a;
+            [c[0] + rr * u * ang.cos(), c[1] + rr * u * ang.sin()]
+        })
+        .collect();
+    let mut left = Vec::with_capacity(N);
+    let mut right = Vec::with_capacity(N);
+    for j in 0..N {
+        let (a, b) = (center[j.saturating_sub(1)], center[(j + 1).min(N - 1)]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+        let (nx, ny) = (-dy / len, dx / len);
+        let (wl, wr) = widths(j as f32 / (N - 1) as f32);
+        left.push([center[j][0] + nx * wl * u, center[j][1] + ny * wl * u]);
+        right.push([center[j][0] - nx * wr * u, center[j][1] - ny * wr * u]);
+    }
+    if let Some((id, _)) = r.white {
+        for j in 0..N - 1 {
+            draw.add_image_quad(id, left[j], right[j], right[j + 1], left[j + 1]).col(col(alpha([47, 184, 255, 255], fill))).build();
+        }
+    }
+    for edge in [&left, &right] {
+        strip(draw, r.ribbon, edge, &|_| 7.0 * k * line, &|_| 0.5 * bright, [56, 255, 255, 255]);
+        strip(draw, r.ribbon, edge, &|_| 1.8 * k * line, &|_| 0.95 * bright, [224, 255, 255, 255]);
+    }
+}
+
+/// The TENDRIL step (spec 4.5): a thin jagged crackle from 1.5 U out to `len` U, mostly radial, sometimes with a
+/// hook at the end; fading by `a` and breaking into pieces as `broken` goes from 0 to 1.
+#[allow(clippy::too_many_arguments)]
+fn tendril(draw: &DrawListMut, ribbon: Picture, c: [f32; 2], u: f32, k: f32, dir: f32, len: f32, seed: u32, a: f32, broken: f32) {
+    const SEG: usize = 12;
+    let hook = hash(seed * 31 + 50) > 0.5;
+    let pts: Vec<[f32; 2]> = (0..=SEG)
+        .map(|j| {
+            let f = j as f32 / SEG as f32;
+            let rr = 1.5 + (len - 1.5) * f;
+            let off = if j == 0 { 0.0 } else { (hash(seed * 31 + 60 + j as u32) - 0.5) * 0.18 };
+            let ang = dir + if hook && j >= SEG - 1 { 0.12 * (j + 2 - SEG) as f32 } else { 0.0 };
+            let (s, co) = ang.sin_cos();
+            [c[0] + rr * u * co - off * u * s, c[1] + rr * u * s + off * u * co]
+        })
+        .collect();
+    for j in 0..SEG {
+        if hash(seed * 31 + 100 + j as u32) < broken * 0.7 {
+            continue;
+        }
+        let piece = [pts[j], pts[j + 1]];
+        strip(draw, ribbon, &piece, &|_| 4.0 * k, &|_| 0.5 * a, [111, 216, 255, 255]);
+        strip(draw, ribbon, &piece, &|_| 1.6 * k, &|_| a, [200, 240, 255, 255]);
     }
 }
 
@@ -885,4 +1044,40 @@ fn ready_flash(draw: &DrawListMut, r: &Resources, c: [f32; 2], size: f32, t: f32
 
 fn smooth(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Spec 4.1-4.2: a burst every 1.25-1.49 s, its poses in order BUILD, PEAK, blank, SECOND, TENDRIL, 25 frames.
+    #[test]
+    fn bursts_follow_the_spec() {
+        let mut starts = Vec::new();
+        let mut last: Option<Burst> = None;
+        for i in 0..(60 * 30) {
+            let now = i as f32 / 60.0;
+            let b = Burst::at(now);
+            if let Some(b) = b {
+                if last.is_none() {
+                    assert_eq!(b.frame, 0, "a burst starts at its first frame (t = {now})");
+                    starts.push(now);
+                }
+                let expected = match b.frame {
+                    0..=3 => Step::Build,
+                    4..=8 => Step::Peak,
+                    9..=13 => Step::Blank,
+                    14..=18 => Step::Second,
+                    _ => Step::Tendril,
+                };
+                assert!(b.step() == expected);
+            }
+            last = b;
+        }
+        assert!(starts.len() >= 20);
+        for w in starts.windows(2) {
+            let gap = w[1] - w[0];
+            assert!((1.2..1.52).contains(&gap), "burst gap {gap}");
+        }
+    }
 }

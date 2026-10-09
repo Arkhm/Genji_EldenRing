@@ -3,6 +3,47 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 HUD: ready ultimate rebuilt from the "ULT FULL" spec (flipbook flare bursts)
+
+**Changed:**
+- The previous version is saved as the git tag `hud-ult-flames-v1` (commit 90ddd1d), as you asked.
+- `genji/src/hud.rs`, the ready ultimate, following your second agent's spec:
+  - **Static:** the rings, sizes and colours from the spec's table, in units of the disc radius:
+    - a faint hairline ring at 1.9 U;
+    - the thin pale ring at 1.4 U, with gaps at 3 and 9 o'clock where the triangles sit;
+    - blue glow between the rings, then the thick cyan ring (#32FFFC core);
+    - a navy outline, the disc (#E9EAF4) and the glyph (#1D1D30);
+    - triangles from 1.40 to 1.52 U.
+    The old breathing, the wandering arcs and the earlier flame tongues are gone (the spec: nothing rotates, pulses or
+    sprays).
+  - **Halo:** the spec's colours, flickering about 4%, irregularly.
+  - **Boiling aura:** standing waves of soft blue flame from 1.25 to about 2.2 U that rise and fall in place, drifting
+    2° a second clockwise.
+  - **Flare bursts** (`Burst`, `flare`, `tendril`):
+    - Timing: one every 1.37 s slot, starting 0-0.12 s into it, so 1.25-1.49 s apart.
+    - Poses, in 60 fps frames: BUILD 4, PEAK 5, blank 5, SECOND 5, TENDRIL 6. Each pose is held, then hard-cut.
+    - BUILD: a small, thin pair, a hooked loop and a spike opposite it.
+    - PEAK: the same pair about 40% longer, thicker and brighter, filled. The disc's half on the spike's side goes pale
+      cyan and the glyph teal (#255A72), drawn clipped to that half.
+    - SECOND: one smaller, dimmer loop at a new angle, sometimes with a small one opposite.
+    - TENDRIL: a jagged thread from 1.5 U to 3.0-3.8 U that fades and breaks into pieces.
+    - Each burst takes a new direction and a mirror, at least 60° from the last.
+  - **Shapes:** each flare is a centreline through control points (polar, in U) with widths on each side. The spike
+    has two barbs. Each is drawn as a filled body plus glowing outlines, from quads sharing their corners.
+  - A unit test checks the burst timing and the pose order against the spec.
+**Why:** You: "save this one... and lets try with this one", with the spec and its frame sheets.
+**Tested how:**
+- A mock-up drawn the way ImGui draws, from the same formulas, compared pose by pose with the clip's cycle f236-f261:
+  `D:\GenjiBridgeAssets\hud_ref\mock11b_ult.png`. It was tuned twice: wider, bigger-curled flames; a denser aura.
+- The build and the 30 unit tests pass.
+**Result:** The mock-up's poses look like the clip's. Its glow is weaker than in game, where the glow texture is
+brighter. Not tested in game.
+**Still broken / not tested:**
+- In game.
+- The spec says Overwatch adds light (additive blending). ImGui blends normally, so very bright overlaps are slightly
+  less bright here.
+**Next:** Your test. If it's worse, roll back to the tag `hud-ult-flames-v1`.
+
 ## 2026-10-08 HUD: ultimate flames redone as smooth blue fire and flame-tongue flashes
 
 **Changed (`genji/src/hud.rs`):**
