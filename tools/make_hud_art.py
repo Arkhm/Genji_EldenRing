@@ -6,6 +6,7 @@ outputs stay on D:, outside the repository. Needs Pillow; the SVG icon needs res
   portrait_hex.png  Genji's portrait in Overwatch's hexagon: the bust inside, the helmet rising out over the top edge
   ult_disc.png      Overwatch's dark disc with its ring, behind the ultimate number
   plus.png          the health "+" icon
+  skull.png         Overwatch's skull-in-a-diamond badge, for the boss bars
   glow_ring.png, dash_ring.png, flare.png, glow_dot.png   Overwatch's UI effect pictures for the HUD animations
 """
 import io
@@ -30,6 +31,7 @@ HEX_FILL = os.path.join(UI, '000000039E89.png')     # 100x120 filled hexagon
 HEX_OUTLINE = os.path.join(UI, '000000027AB5.png')  # 120x144 hexagon outline
 ULT_DISC = os.path.join(UI, '000000021660.png')     # 120x120 dark disc with ring
 PLUS_SVG = os.path.join(VEC, '000000000022.svg')    # "+" icon
+SKULL_SVG = os.path.join(VEC, '00000000082C.svg')   # skull in a diamond (your pick from the vector contact sheet, 2026-10-08)
 # Effects (found on the "blue" contact sheets, 2026-10-08): glow ring, ring of dashes, light flare, soft glow.
 EFFECTS = {
     'glow_ring.png': '00000002915D.png',
@@ -107,8 +109,10 @@ def main():
         import resvg_py
         png = resvg_py.svg_to_bytes(svg_path=PLUS_SVG, width=96)
         Image.open(io.BytesIO(bytes(png))).convert('RGBA').save(os.path.join(OUT, 'plus.png'))
+        png = resvg_py.svg_to_bytes(svg_path=SKULL_SVG, width=96)
+        Image.open(io.BytesIO(bytes(png))).convert('RGBA').save(os.path.join(OUT, 'skull.png'))
     except Exception as e:
-        print('plus.png skipped:', e)
+        print('plus.png / skull.png skipped:', e)
 
     for f in sorted(os.listdir(OUT)):
         print(f, Image.open(os.path.join(OUT, f)).size)

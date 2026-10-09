@@ -329,7 +329,7 @@ fn camera_step_inner(dt: f32) -> bool {
     }
 
     // 7. HUD (step 12), with the enemy health bars (DESIGN.md 5i).
-    let (enemies, enemy_count, boss) =
+    let (enemies, enemy_count) =
         view.enemy_bars.update(player, &look, eye, camera.pers_cam_1.fov, camera.pers_cam_1.aspect_ratio, dt);
     let (ammo, ammo_max, reloading) = view.firing.hud();
     let (deflect_left, deflect_cooldown) = view.deflect.hud();
@@ -352,7 +352,6 @@ fn camera_step_inner(dt: f32) -> bool {
         blade_duration: view.blade.duration(),
         enemies,
         enemy_count,
-        boss,
     });
     true
 }

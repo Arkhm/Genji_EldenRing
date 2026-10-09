@@ -9,11 +9,13 @@ use fromsoftware_shared::FromStatic;
 use glam::Vec3;
 
 use crate::glog;
-use crate::hud::{BossBar, EnemyBar, ENEMY_BARS};
+use crate::hud::{EnemyBar, ENEMY_BARS};
 use crate::look::Look;
 
-/// Bars only for characters this close, metres (the game's line-of-sight check isn't available to us).
+/// Bars only for characters this close, metres (the game's line-of-sight check isn't available to us); bosses
+/// further.
 const RANGE: f32 = 50.0;
+const BOSS_RANGE: f32 = 80.0;
 /// A bar shows this long after the character last lost health, seconds.
 const SHOW_FOR: f32 = 30.0;
 /// Health just lost stays lit lighter this long, then drains (seconds; share of max health per second).
@@ -40,9 +42,9 @@ pub struct EnemyBars {
 }
 
 impl EnemyBars {
-    /// Tracks health drops, then returns the bars to draw (nearest first) and the boss bar. `fov` is the vertical
+    /// Tracks health drops, then returns the bars to draw (bosses first, then nearest first). `fov` is the vertical
     /// field of view (radians) and `aspect` the width/height ratio of the camera we draw from at `eye`.
-    pub fn update(&mut self, player: &PlayerIns, look: &Look, eye: Vec3, fov: f32, aspect: f32, dt: f32) -> ([EnemyBar; ENEMY_BARS], usize, Option<BossBar>) {
+    pub fn update(&mut self, player: &PlayerIns, look: &Look, eye: Vec3, fov: f32, aspect: f32, dt: f32) -> ([EnemyBar; ENEMY_BARS], usize) {
         let targets = crate::targets::living(player);
         for track in self.tracks.values_mut() {
             track.seen = false;
@@ -93,48 +95,48 @@ impl EnemyBars {
             ((hp as f32 / max as f32).clamp(0.0, 1.0), (trail / max as f32).clamp(0.0, 1.0))
         };
 
-        let mut shown: Vec<(f32, EnemyBar)> = Vec::new();
+        // Bosses: the game's own boss list (set by its events, also for field bosses) names the characters.
+        let fe = unsafe { CSFeManImp::instance() }.ok();
+        let bosses: Vec<usize> = fe
+            .map(|fe| {
+                fe.boss_health_displays
+                    .iter()
+                    .filter(|b| !b.field_ins_handle.is_empty())
+                    .filter_map(|b| targets.iter().find(|t| unsafe { t.chr.as_ref() }.field_ins_handle == b.field_ins_handle))
+                    .map(|t| t.chr.as_ptr() as usize)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if bosses.first() != self.logged_boss.as_ref() {
+            if let Some(id) = bosses.first() {
+                glog!("BARS", "boss: character {id:#x} gets the skull bar above its head");
+            }
+            self.logged_boss = bosses.first().copied();
+        }
+
+        let mut shown: Vec<(bool, f32, EnemyBar)> = Vec::new();
         for t in &targets {
             let id = t.chr.as_ptr() as usize;
             let data = &unsafe { t.chr.as_ref() }.modules.data;
             let (hp, max) = (data.hp, data.max_hp.max(1));
+            let boss = bosses.contains(&id);
             let recent = self.tracks.get(&id).is_some_and(|tr| tr.since_hit <= SHOW_FOR);
             let dist = (t.feet - eye).length();
-            if !recent || hp >= max || dist > RANGE {
+            // A boss's bar shows the whole fight; others only after losing health.
+            let wanted = if boss { dist <= BOSS_RANGE } else { recent && hp < max && dist <= RANGE };
+            if !wanted {
                 continue;
             }
             if let Some((x, y)) = project(t.feet + Vec3::Y * (t.height + ABOVE_HEAD)) {
                 let (hp_share, trail_share) = share(id, hp, max);
-                shown.push((dist, EnemyBar { x, y, hp: hp_share, trail: trail_share }));
+                shown.push((boss, dist, EnemyBar { x, y, hp: hp_share, trail: trail_share, boss }));
             }
         }
-        shown.sort_by(|a, b| a.0.total_cmp(&b.0));
+        shown.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.total_cmp(&b.1)));
         let mut bars = [EnemyBar::default(); ENEMY_BARS];
         let count = shown.len().min(ENEMY_BARS);
-        for (slot, (_, bar)) in bars.iter_mut().zip(shown) {
+        for (slot, (_, _, bar)) in bars.iter_mut().zip(shown) {
             *slot = bar;
-        }
-
-        // The boss: the game's own boss list (set by its events) names the character.
-        let fe = unsafe { CSFeManImp::instance() }.ok();
-        let mut boss = None;
-        if let Some(fe) = fe {
-            for entry in fe.boss_health_displays.iter().filter(|b| !b.field_ins_handle.is_empty()) {
-                if let Some(t) = targets.iter().find(|t| unsafe { t.chr.as_ref() }.field_ins_handle == entry.field_ins_handle) {
-                    let id = t.chr.as_ptr() as usize;
-                    let data = &unsafe { t.chr.as_ref() }.modules.data;
-                    let (hp_share, trail_share) = share(id, data.hp, data.max_hp.max(1));
-                    boss = Some(BossBar { hp: hp_share, trail: trail_share });
-                    if self.logged_boss != Some(id) {
-                        glog!("BARS", "boss bar: character {id:#x} (name message {}), hp {} / {}", entry.fmg_id, data.hp, data.max_hp);
-                        self.logged_boss = Some(id);
-                    }
-                    break;
-                }
-            }
-        }
-        if boss.is_none() {
-            self.logged_boss = None;
         }
 
         // Diagnostics: what the game itself keeps in its enemy-tag and boss tables while its HUD is off.
@@ -150,10 +152,10 @@ impl EnemyBars {
                     .collect();
                 let bosses = fe.boss_health_displays.iter().filter(|b| !b.field_ins_handle.is_empty()).count();
                 if !tags.is_empty() || bosses > 0 || count > 0 {
-                    glog!("BARS", "ours: {count} bar(s){} | game tags: [{}] | game boss entries: {bosses}", if boss.is_some() { " + boss" } else { "" }, tags.join("; "));
+                    glog!("BARS", "ours: {count} bar(s) | game tags: [{}] | game boss entries: {bosses}", tags.join("; "));
                 }
             }
         }
-        (bars, count, boss)
+        (bars, count)
     }
 }

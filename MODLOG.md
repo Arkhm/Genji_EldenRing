@@ -3,6 +3,38 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-08 Boss bars above the boss with a skull badge; boss fights no longer leave Genji mode
+
+**Changed:**
+- **Boss fights handed the camera back** (`controls.rs`).
+  - The cause, from your log: UI state 0x03 appeared for 8 s in the middle of the Margit fight (228.9-240.4 s) while
+    you moved, fought and took hits. It cleared when you died.
+  - The rule counts every unknown state as a menu, so Genji mode let go. That's what looked like a cutscene taking
+    over.
+  - 0x03 now counts as gameplay. What the game uses it for is unknown; it showed only during that fight.
+  - Real cutscenes and menus still release Genji mode, which comes back by itself afterwards.
+- **Boss bar** (`enemy_bars.rs`, `hud.rs`):
+  - The top-of-screen bar is gone.
+  - Bosses named in the game's boss list get a bar above their head instead: 20 thin segments, shown the whole fight
+    within 80 m, before any other bar.
+  - The game fills its boss list with its HUD off; your log showed 1 entry during Margit.
+- **Skull badge:** Overwatch's skull-in-a-diamond (vector `00082C`, your pick), tinted red, over a small light yellow
+  diamond that shows through the skull. `tools/make_hud_art.py` builds it into
+  `D:\GenjiBridgeAssets\hud\skull.png`.
+**Why:** You: "cutscenes in the boss fight takes me out of genji mode", "remove the top bar... only the one above the
+boss head", "add a skull logo".
+**Tested how:**
+- The build and the 31 unit tests pass.
+- A mock-up of the boss bar (`D:\GenjiBridgeAssets\hud_ref\mock15_boss.png`). The badge was moved 4 px left so it
+  doesn't cover the first segment.
+**Result:** Not tested in game.
+**Still broken / not tested:**
+- In game.
+- Bosses with an intro cutscene: the cutscene releases Genji mode as a menu would, which is expected. Not tested
+  whether it comes back on its own afterwards (it should, like after menus).
+- Bosses or named enemies without a game boss bar don't get the skull bar. The game doesn't list them.
+**Next:** Your test, then step 11 (sound).
+
 ## 2026-10-08 Dragonblade lifesteal, no dash/Deflect while unsheathing, Overwatch-style enemy health bars
 
 **Changed:**

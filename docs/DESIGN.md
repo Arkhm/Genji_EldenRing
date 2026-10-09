@@ -484,9 +484,12 @@ You chose to keep Elden Ring's HUD off and draw our own bars, in Overwatch's sty
   - no damage numbers (Overwatch shows none).
 - **Names:** Overwatch shows the name under the bar. Our library has no lookup for the game's text (enemy names live
   in its message files), so names are left out for now.
-- **Boss:** the game's boss list (`CSFeManImp.boss_health_displays`, set by the game's events) names the boss
-  character. If the game fills it while its HUD is off, a long 20-segment bar is drawn at the top centre (the
-  bottom centre is the ultimate's). This is logged to check.
+- **Boss** (changed 2026-10-08, your request):
+  - **Which characters:** the game's boss list (`CSFeManImp.boss_health_displays`, set by its events, also for field
+    bosses) names them. It is filled while the HUD is off (tested on Margit).
+  - **Bar:** above the boss's head, not at the top of the screen: 20 thin segments, shown the whole fight within
+    80 m.
+  - **Badge:** Overwatch's skull-in-a-diamond (vector `00082C`, your pick) on its left, red with a yellow skull.
 - **Diagnostics:** every 2 s, the game's own enemy-tag and boss tables are logged (filled or not, visible, screen
   position). If they turn out to be filled with the HUD off, the game's own visibility could be used later.
 - **Code:** `enemy_bars.rs` (game thread: tracking, projection, which bars) feeds `hud::State`; `hud.rs` draws.

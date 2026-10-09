@@ -75,7 +75,10 @@ const HUD_UI_STATE: u32 = 0x07;
 /// Present in every gameplay set of UI states in your logs (and in menus); absent on loading screens.
 const WORLD_UI_STATE: u32 = 0x08;
 /// UI states seen during play (pop-ups, item pickups, prompts included), from your logs of 2026-10-07/08.
-const GAMEPLAY_UI_STATES: [u32; 11] = [0x04, 0x05, 0x07, 0x08, 0x09, 0x0f, 0x11, 0x12, 0x13, 0x17, 0x1a];
+/// 0x03 (2026-10-08): shown for 8 s in the middle of your Margit fight while you moved, fought and took hits (and
+/// gone when you died); counted as a menu, it handed the camera back mid-fight ("cutscenes take me out of Genji
+/// mode"). What the game uses it for is not known; your log shows it only during that boss fight.
+const GAMEPLAY_UI_STATES: [u32; 12] = [0x03, 0x04, 0x05, 0x07, 0x08, 0x09, 0x0f, 0x11, 0x12, 0x13, 0x17, 0x1a];
 /// Gameplay must hold this long before capture switches on (release is instant). Going back from a menu tab
 /// to the Esc menu shows the HUD one frame before the Esc menu's own state, which flicked capture on for a frame.
 const CAPTURE_DELAY: f32 = 0.1;

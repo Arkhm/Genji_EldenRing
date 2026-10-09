@@ -60,21 +60,15 @@ const AURA_PIECES: usize = 120;
 /// Enemy health bars drawn at most (DESIGN.md 5i).
 pub const ENEMY_BARS: usize = 8;
 
-/// One enemy's health bar: where (screen, -1 to 1 from the centre, y up) and how full (health, and health just
-/// lost still lit lighter).
+/// One enemy's health bar: where (screen, -1 to 1 from the centre, y up), how full (health, and health just lost
+/// still lit lighter), and whether it's a boss (the long bar with the skull badge).
 #[derive(Clone, Copy, Default)]
 pub struct EnemyBar {
     pub x: f32,
     pub y: f32,
     pub hp: f32,
     pub trail: f32,
-}
-
-/// The boss's health bar (top centre).
-#[derive(Clone, Copy, Default)]
-pub struct BossBar {
-    pub hp: f32,
-    pub trail: f32,
+    pub boss: bool,
 }
 
 /// Everything the HUD shows, written by the game thread each frame.
@@ -100,7 +94,6 @@ pub struct State {
     pub blade_duration: f32,
     pub enemies: [EnemyBar; ENEMY_BARS],
     pub enemy_count: usize,
-    pub boss: Option<BossBar>,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -120,9 +113,8 @@ static STATE: Mutex<State> = Mutex::new(State {
     ult_percent: 0,
     blade_left: None,
     blade_duration: 0.0,
-    enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0 }; ENEMY_BARS],
+    enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false }; ENEMY_BARS],
     enemy_count: 0,
-    boss: None,
 });
 
 pub fn update(state: State) {
@@ -140,6 +132,7 @@ type Picture = Option<(TextureId, [f32; 2])>;
 pub struct Resources {
     portrait: Picture,
     plus: Picture,
+    skull: Picture,
     swift: Picture,
     deflect: Picture,
     blade: Picture,
@@ -222,6 +215,7 @@ impl Resources {
         };
         r.portrait = load(HUD_ART, "portrait_hex.png");
         r.plus = load(HUD_ART, "plus.png");
+        r.skull = load(HUD_ART, "skull.png");
         r.glow_ring = load(HUD_ART, "glow_ring.png");
         r.dash_ring = load(HUD_ART, "dash_ring.png");
         r.flare = load(HUD_ART, "flare.png");
@@ -456,7 +450,9 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
 
     // ---- Enemy health bars (DESIGN.md 5i, your Overwatch screenshots): a row of segments above each damaged enemy,
     // lit red for the health left (Overwatch's are pink), dark see-through red for what's lost, health just lost
-    // lighter for a moment; the boss's as a long bar at the top centre. Drawn first, under everything else.
+    // lighter for a moment. Bosses (and field bosses) get a longer bar of 20 thin segments with a skull badge on
+    // its left (your reference and pick, 2026-10-08): Overwatch's skull-in-a-diamond badge, red with a yellow skull.
+    // Drawn first, under everything else.
     let segments = |cx: f32, bottom: f32, n: usize, seg_w: f32, seg_h: f32, gap: f32, hp: f32, trail: f32| {
         let total = n as f32 * seg_w + (n - 1) as f32 * gap;
         let (x0, y0) = (cx - total / 2.0, bottom - seg_h);
@@ -477,10 +473,21 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     };
     for bar in &s.enemies[..s.enemy_count.min(ENEMY_BARS)] {
         let (sx, sy) = ((bar.x + 1.0) / 2.0 * width, (1.0 - bar.y) / 2.0 * height);
-        segments(sx, sy, 10, 8.6 * k, 10.0 * k, 2.0 * k, bar.hp, bar.trail);
-    }
-    if let Some(boss) = s.boss {
-        segments(width / 2.0, 84.0 * k, 20, 32.0 * k, 14.0 * k, 3.0 * k, boss.hp, boss.trail);
+        if !bar.boss {
+            segments(sx, sy, 10, 8.6 * k, 10.0 * k, 2.0 * k, bar.hp, bar.trail);
+            continue;
+        }
+        let (n, seg_w, seg_h, gap) = (20, 7.0 * k, 11.0 * k, 1.5 * k);
+        let total = n as f32 * seg_w + (n - 1) as f32 * gap;
+        segments(sx + 10.0 * k, sy, n, seg_w, seg_h, gap, bar.hp, bar.trail);
+        // The badge, centred on the bar's left end: Overwatch's diamond with the skull cut out, tinted red, over a
+        // smaller light yellow diamond that shows through the skull.
+        let (bx, by, half) = (sx + 10.0 * k - total / 2.0 - 10.0 * k, sy - seg_h / 2.0, 15.0 * k);
+        let inner = half * 0.62;
+        let yellow = col([255, 222, 120, 255]);
+        draw.add_triangle([bx, by - inner], [bx + inner, by], [bx, by + inner], yellow).filled(true).build();
+        draw.add_triangle([bx, by - inner], [bx, by + inner], [bx - inner, by], yellow).filled(true).build();
+        picture(&draw, r.skull, [bx, by], half * 2.0, 0.0, [214, 36, 48, 255]);
     }
 
     // ---- Bottom left: hexagon portrait, "+" box, health "hp | max", 10 white segments.
