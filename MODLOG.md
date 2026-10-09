@@ -3,6 +3,18 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Quick melee also cancels a shuriken burst
+
+**Changed:** `blade.rs` (`Blade::meleeing()`), `camera.rs`: a quick melee (mouse 5) cuts a burst short like a
+dash does, so you throw 1 or 2 and melee. No shuriken while the melee is under way (its 0.8 s recovery).
+**Why:** You: "melee also do the same. you can cancel the burst with melee".
+**Tested how:** The build and the 34 unit tests pass (the burst-cancel test covers any block, dash or melee). Not
+tested in game.
+**Result:** Not tested in game.
+**Still broken / not tested:** In game. The 0.8 s is our melee's recovery; Overwatch's own melee lockout isn't
+measured.
+**Next:** Your test.
+
 ## 2026-10-09 Shuriken: a dash cancels the burst, none during the dash, always 3 per burst or fan
 
 **Changed:**

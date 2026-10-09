@@ -2,9 +2,9 @@
 //! the automatic reload. Pure logic, no game access: `tick` says which throws to make this frame, and
 //! `shuriken.rs` makes them.
 //!
-//! Overwatch rules (you, 2026-10-09): Swift Strike stops shooting at once, so a dash cancels the rest of a burst
-//! (the shuriken not thrown aren't spent, so the ammo needn't be a multiple of 3), no shuriken during the dash, and
-//! a burst or fan always throws 3 even with 1 or 2 left (it spends what's left).
+//! Overwatch rules (you, 2026-10-09): Swift Strike and quick melee stop shooting at once, so a dash or a melee cancels
+//! the rest of a burst (the shuriken not thrown aren't spent, so the ammo needn't be a multiple of 3); no shuriken
+//! during the dash or the melee; a burst or fan always throws 3 even with 1 or 2 left (it spends what's left).
 //!
 //! Values (2026-10-07): from a video measurement of Overwatch you passed on (another AI's analysis of 10 consecutive
 //! throws) plus Blizzard's patch notes (0.68 s recovery, 75 m/s): 0.10 s between burst shuriken, 0.687 s between
@@ -72,7 +72,7 @@ impl Firing {
 
         if self.burst_left > 0 {
             if !can_throw {
-                glog!("FIRE", "burst cut short ({} not thrown: dash, Deflect, Dragonblade or the game driving), ammo {}", self.burst_left, self.ammo);
+                glog!("FIRE", "burst cut short ({} not thrown: dash, melee, Deflect, Dragonblade or the game driving), ammo {}", self.burst_left, self.ammo);
                 self.burst_left = 0;
             } else {
                 self.burst_timer -= dt;

@@ -133,6 +133,12 @@ impl Blade {
         self.left
     }
 
+    /// A quick melee is under way (its recovery): no shuriken then, and it cancels the rest of a burst (Overwatch,
+    /// you 2026-10-09).
+    pub fn meleeing(&self) -> bool {
+        self.melee_wait > 0.0
+    }
+
     /// Unsheathing (the first second of Dragonblade): no Swift Strike or Deflect then (you, 2026-10-08).
     pub fn unsheathing(&self) -> bool {
         self.left.is_some() && self.unsheathe > 0.0

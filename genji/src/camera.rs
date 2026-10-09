@@ -323,9 +323,10 @@ fn camera_step_inner(dt: f32) -> bool {
     view.deflect.reflect(player, &look, eye);
 
     // 6. Shuriken (steps 6a, 6b): bursts on left click, Fan of Blades on right click, while we drive (not during
-    // Deflect, Dragonblade or Swift Strike's dash: a dash also cancels the rest of a burst, Overwatch).
-    let dashing = view.mover.dashing();
-    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !dashing) {
+    // Deflect, Dragonblade, Swift Strike's dash or a quick melee: a dash or a melee also cancels the rest of a burst,
+    // so you throw 1 or 2 and dash or melee, Overwatch).
+    let busy = view.mover.dashing() || view.blade.meleeing();
+    for angle in view.firing.tick(dt, left_down, right_down, driving && !deflecting && !blade && !busy) {
         view.thrower.throw(player, &look, eye, angle);
     }
 
