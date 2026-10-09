@@ -212,6 +212,22 @@ pub struct Mover {
     pub dash_started: bool,
     pub dash_segment: Option<(Vec3, Vec3)>,
     pub dash_ended: bool,
+    /// This frame's movement, for its sounds (step 11b-2).
+    pub events: MoveEvents,
+}
+
+/// What the movement did this frame, for the sounds (`camera.rs` plays them).
+#[derive(Default, Clone, Copy)]
+pub struct MoveEvents {
+    pub jumped: bool,
+    pub double_jumped: bool,
+    pub climb_started: bool,
+    /// A wall climb reached the top and hopped over the edge.
+    pub vaulted: bool,
+    /// Landed: speed of the fall (m/s) and height fallen from the highest point (m).
+    pub landed: Option<(f32, f32)>,
+    /// Horizontal distance run on the ground (not dashing), for footsteps.
+    pub ground_travel: f32,
 }
 
 /// What the controller did this frame.
@@ -243,6 +259,7 @@ impl Mover {
         self.dash_started = false;
         self.dash_segment = None;
         self.dash_ended = false;
+        self.events = MoveEvents::default();
         if self.gave_up || dt <= 0.0 {
             return Step::NotReady;
         }
@@ -469,12 +486,14 @@ impl Mover {
             self.fall_time = 0.0;
             self.apex_y = pos.y;
             glog!("MOVE", "jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
+            self.events.jumped = true;
         } else if jump_pressed && !self.grounded && self.air_jumps_used < AIR_JUMPS {
             self.air_jumps_used += 1;
             self.vy = (2.0 * GRAVITY * JUMP_HEIGHT).sqrt();
             self.since_left_ground = f32::INFINITY;
             self.apex_y = self.apex_y.max(pos.y);
             glog!("MOVE", "double jump at ({:.2}, {:.2}, {:.2}), {:.2} m/s up", pos.x, pos.y, pos.z, self.vy);
+            self.events.double_jumped = true;
         }
 
         // Swift Strike's vertical part: lift off when looking up; in the air, no gravity while dashing.
@@ -539,6 +558,7 @@ impl Mover {
                 if !self.climbing {
                     self.climbing = true;
                     glog!("MOVE", "wall climb start at ({:.2}, {:.2}, {:.2}), {:.2}s left", pos.x, pos.y, pos.z, CLIMB_TIME - self.climb_used);
+                    self.events.climb_started = true;
                 }
                 self.vy = CLIMB_SPEED;
                 self.climb_used += dt;
@@ -549,6 +569,7 @@ impl Mover {
                     // The wall ended in front of the chest: we reached the top. Hop over the edge.
                     self.vy = self.vy.max(VAULT_SPEED);
                     glog!("MOVE", "wall climb: reached the top after {:.2}s, vault", self.climb_used);
+                    self.events.vaulted = true;
                 } else {
                     glog!(
                         "MOVE",
@@ -586,6 +607,7 @@ impl Mover {
                     );
                     pos.y = hit.y + GROUND_GAP;
                     let fallen = self.apex_y - pos.y;
+                    self.events.landed = Some((-self.vy, fallen));
                     self.vy = 0.0;
                     self.grounded = true;
                     self.fall_time = 0.0;
@@ -624,6 +646,10 @@ impl Mover {
                     if self.grounded { "on the ground" } else { "in the air" }
                 );
             }
+        }
+
+        if self.grounded && !dashing {
+            self.events.ground_travel = horizontal.length();
         }
 
         // Safety nets.
@@ -680,6 +706,16 @@ impl Mover {
     /// Swift Strike's dash is under way (no shuriken then, Overwatch).
     pub fn dashing(&self) -> bool {
         self.dash_left > 0.0
+    }
+
+    /// Climbing a wall now (for the repeated grab sound).
+    pub fn climbing(&self) -> bool {
+        self.climbing
+    }
+
+    /// Seconds in the air since leaving the ground (0 on the ground): a death after a long fall screams.
+    pub fn airborne_for(&self) -> f32 {
+        if self.grounded { 0.0 } else { self.fall_time }
     }
 
     pub fn release(&mut self, player: &mut PlayerIns) {

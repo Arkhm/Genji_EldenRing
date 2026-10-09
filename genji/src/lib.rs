@@ -11,6 +11,7 @@ mod blade;
 mod camera;
 mod controls;
 mod crosshair;
+mod cues;
 mod deflect;
 mod dinput;
 mod enemy_bars;

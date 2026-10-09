@@ -149,6 +149,11 @@ impl Blade {
         self.melee_wait > 0.0
     }
 
+    /// A quick melee struck a character within the last second (a kill now is a melee kill, for its voice line).
+    pub fn melee_recent(&self) -> bool {
+        self.melee_hits.values().any(|age| *age <= 1.0)
+    }
+
     /// Unsheathing (the first second of Dragonblade): no Swift Strike or Deflect then (you, 2026-10-08).
     pub fn unsheathing(&self) -> bool {
         self.left.is_some() && self.unsheathe > 0.0

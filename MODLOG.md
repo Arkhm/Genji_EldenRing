@@ -3,6 +3,45 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Step 11b-2: movement, health and kill sounds
+
+**Changed:**
+- **New `genji/src/cues.rs`:** the rules for when each of these sounds plays (plan in DESIGN.md 5j, "11b-2"). It has no
+  game access; `camera.rs` plays what it returns. Four tests.
+  - **Movement:**
+    - a footstep every 1.3 m run;
+    - jump and double-jump grunt (at most every 1.5 s), plus the double-jump whoosh;
+    - wall climb: one sound at the start, a short grab every 0.2 s while climbing, the ledge sound on reaching the top;
+    - landing thud, louder the faster the fall, with a grunt after falls of 3 m or more.
+  - **Health:**
+    - a pain line on hits, at most every 3 s;
+    - a stagger line instead when the game plays a hit reaction, plus the knockdown thud and line if it lasts 0.9 s;
+    - critical-health sound below 30%;
+    - health-pack sound and a healing line for a flask (15% or more at once, not lifesteal);
+    - a death line, or a scream after falling for over 1 s;
+    - a respawn line once you're back in control.
+  - **Kills:** first a multikill line (3 kills within 4 s), else a melee-kill line, else a kill-streak line (every 10th
+    kill without dying), else the elimination line on every third kill, as before.
+- `movement.rs`: `MoveEvents` (jumped, double jump, climb start, vault, landing speed and height, distance run),
+  `climbing()` and `airborne_for()`.
+- `blade.rs`: `melee_recent()`.
+- `sound.rs`: footsteps at 2.5 (your recording is quiet: it peaks 28 dB under your dash), critical health at 0.6.
+- `tools/make_sounds.py`: your wall-climb tag split into `wall_climb` (16DC and 930F) and `wall_climb_loop` (16CF).
+  Re-run: 55 events, 373 files.
+**Why:** You: "add the next step of sounds".
+**Tested how:**
+- `cargo build --release` and `cargo test --release` pass (41 tests).
+- The cues tests check footsteps per distance, the pain limit, stagger then knockdown, critical health, lifesteal
+  not counted as a flask, the fall scream, the respawn line waiting for control, and the kill-line order.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- All rules and numbers are guesses at Overwatch's.
+- Whether Elden Ring's hit reactions show up as "the game takes over" is assumed. If they don't, every hit gets the
+  pain line and no stagger or knockdown.
+- The 7.9 s healing loop (388B) isn't used.
+- Elden Ring's own footsteps and grunts still play underneath.
+**Next:** Your test.
+
 ## 2026-10-09 No reload during the quick melee
 
 **Changed:**

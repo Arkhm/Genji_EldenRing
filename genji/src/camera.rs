@@ -79,6 +79,21 @@ struct View {
     enemy_bars: crate::enemy_bars::EnemyBars,
     /// Sound (step 11b): what was true last frame, to play sounds when it changes.
     sound: SoundWatch,
+    /// Movement, health and kill sounds (step 11b-2).
+    cues: crate::cues::Cues,
+    /// Last frame: the game played its own animation (a hit reaction after a drop) / our controller drove.
+    reacting: bool,
+    in_control: bool,
+}
+
+/// Plays this frame's cues (`cues.rs`).
+fn play_cues(cues: Vec<crate::cues::Cue>) {
+    for cue in cues {
+        match cue {
+            crate::cues::Cue::Play(event, gain) => crate::sound::play_gain(event, gain),
+            crate::cues::Cue::Voice(event, urgent) => crate::sound::voice(event, urgent),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -123,14 +138,9 @@ fn camera_step_inner(dt: f32) -> bool {
     view.thrower.tick(player, dt);
     let eliminations = crate::kills::tick(dt);
     view.swift.tick(dt, eliminations);
-    if eliminations > 0 {
-        // Overwatch's elimination sound; a line every third kill (Overwatch doesn't comment on every one).
-        crate::sound::play("kill");
-        view.sound.kills += eliminations;
-        if view.sound.kills % 3 == 1 {
-            crate::sound::voice("voice_elimination", false);
-        }
-    }
+    // Overwatch's elimination sound, and sometimes a line (multikill, melee kill, streak, every third kill: cues.rs).
+    view.sound.kills += eliminations;
+    play_cues(view.cues.kills(eliminations, view.blade.melee_recent()));
     // Elden Ring's sound effects setting, about once a second.
     view.sound.volume_timer += dt;
     if view.sound.volume_timer >= 1.0 {
@@ -175,6 +185,14 @@ fn camera_step_inner(dt: f32) -> bool {
             data.hp = (data.hp + heal).min(data.max_hp);
             glog!("BLADE", "lifesteal +{heal}: hp {before} -> {} / {}", data.hp, data.max_hp);
         }
+    }
+    // Pain, stagger, knockdown, critical health, flask, death and respawn (cues.rs), from last frame's state.
+    let (reacting, in_control) = (view.reacting, view.in_control);
+    (view.reacting, view.in_control) = (false, false);
+    {
+        let data = &player.chr_ins.modules.data;
+        let genji = WANTED.load(Ordering::Relaxed);
+        play_cues(view.cues.health(data.hp, data.max_hp, heal, reacting, view.mover.airborne_for(), genji, in_control, dt));
     }
 
     // STATUS.md option B: the Overwatch field of view through the game's own setting (LockCamParam), while first
@@ -263,12 +281,15 @@ fn camera_step_inner(dt: f32) -> bool {
             if view.mover.dash_ended {
                 view.swift.ended();
             }
+            view.in_control = true;
+            play_cues(view.cues.movement(&view.mover.events, view.mover.climbing(), dt));
             feet
         }
         Step::GameAction(feet) => {
             // The game moves the character itself (door, grab, knockback...): first person follows it. Elden Ring's
             // own walking stays blocked; unblocking it let its walk animations keep the game action going.
             gamepad::set_movement_blocked(true);
+            view.reacting = true;
             feet
         }
         Step::NotReady => {

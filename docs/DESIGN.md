@@ -574,6 +574,42 @@ aw`.
   - elimination (sometimes, after kills);
   - healing.
 
+**11b-2: movement and voice extras** (plan 2026-10-09). All rules below are guesses at Overwatch's, unless noted.
+
+*Movement* (`movement.rs` reports what happened each frame, `camera.rs` plays):
+
+| When | Sound |
+|---|---|
+| Running on the ground | one footstep every 1.3 m (your recording: a step about every 0.235 s at full speed, 5.5 m/s) |
+| Jump | "Jumping" voice grunt (at most every 1.5 s, and only if no other line is playing) |
+| Double jump | the double-jump whoosh (2D98), plus the same grunt |
+| Wall climb start | one climb sound (16DC or 930F) |
+| While climbing | a short grab (16CF, "the loop") every 0.2 s |
+| Climb reaching the top (vault) | ledge sound (16D2) |
+| Landing | the landing thud (3473), louder the faster the fall; a "JumpEnd" grunt after a fall of 3 m or more |
+
+`make_sounds.py` splits your wall-climb tag in two for this: `wall_climb` (16DC + 930F) and `wall_climb_loop`
+(16CF).
+
+*Health and voice* (from the player's HP each frame):
+
+| When | Sound |
+|---|---|
+| Hit (HP drops) | a pain line, at most every 3 s |
+| Hit that makes the game play a hit reaction (the game takes over right after the drop) | a stagger line instead |
+| Still in that reaction after 0.9 s (knocked down) | the knockdown thud (92E8) and a knockdown line |
+| HP falls below 30% | Overwatch's critical-health sound (re-armed above 40%) |
+| Healed 15% or more at once, not by Dragonblade's lifesteal (a flask) | the health-pack sound and a healing line |
+| Death | a death line; a scream instead if you were falling for over 1 s |
+| Back in control after dying | a respawn line |
+
+*Kills:* the elimination line every third kill stays, but these come first, in this order:
+- 3 kills within 4 s: a multikill line;
+- a kill within 1 s of a quick melee hit: a melee-kill line;
+- every 10th kill without dying: a kill-streak line.
+
+*Not used:* the 7.9 s healing loop (388B): nothing in Elden Ring heals that slowly over time.
+
 **Later (not in 11):** muting Elden Ring's own sounds for the things Genji replaces (the Tarnished's grunts, the
 Throwing Dagger's sound). This needs the game's sound IDs and is looked at once ours play.
 

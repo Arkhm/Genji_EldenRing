@@ -25,10 +25,13 @@ const SOUND_DIR: &str = r"D:\GenjiBridgeAssets\sound";
 const MASTER: f32 = 0.8;
 /// Per-event level on top of MASTER, from your play test (2026-10-09). Measured from the files: the throw is about
 /// 10 dB louder than the hit sounds; "Ryujin no ken wo kurae!" peaks 12 dB under the roar it plays with; the
-/// elimination sound peaks at full scale (you: "kinda loud").
-const EVENT_GAIN: [(&str, f32); 3] = [("shuriken_throw", 0.45), ("voice_ult_activate", 2.5), ("kill", 0.5)];
+/// elimination sound peaks at full scale (you: "kinda loud"). Your footstep recording peaks about 28 dB under your dash
+/// recording (Overwatch's own mix), raised a little to be heard over Elden Ring; the critical-health sound peaks at
+/// full scale.
+const EVENT_GAIN: [(&str, f32); 5] =
+    [("shuriken_throw", 0.45), ("voice_ult_activate", 2.5), ("kill", 0.5), ("footstep", 2.5), ("low_health", 0.6)];
 /// Events not logged each time they play (too frequent).
-const QUIET: [&str; 2] = ["footstep", "shuriken_throw"];
+const QUIET: [&str; 3] = ["footstep", "shuriken_throw", "wall_climb_loop"];
 
 enum Cmd {
     Play { event: &'static str, gain: f32, delay: f32, channel: Option<&'static str> },
