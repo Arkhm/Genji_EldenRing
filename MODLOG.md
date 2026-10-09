@@ -3,6 +3,29 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Second sound export; Swift Strike, Deflect block and Dragonblade hit aren't in the extraction
+
+**Changed:**
+- `tools/make_sounds.py`: your second export. Group `16CF` ("actually, this is the loop of wall climbing") is added to
+  wall climb, giving 350 files in 50 events.
+- No footstep tag was in the file. The walking-sound tag was probably made after the export.
+**Why:** You: Swift Strike is a long sound (almost a second) and isn't in the candidates; the Dragonblade hit and the
+Deflect block aren't anywhere either.
+**Tested how (dead ends recorded):**
+- **Untagged groups:** 110 groups weren't tagged; about 30 of them last 0.6-1.4 s. You had already listened through
+  them.
+- **Ability extraction:** DataTool's `extract-abilities` gave only the ability icons.
+- **Hidden `extract-anything` mode on ability and character IDs:** DataTool's `list-abilities` gives the IDs (Swift
+  Strike `0DA.09E`, Deflect `0D9.09E`, Dragonblade `0D8.09E`, Genji `029.075`). The mode found nothing for any of
+  them: its finder has no handler for those ID types.
+- **The same mode on all 37 of Genji's entities (`.003`):** 113 sounds, every one already in our extraction.
+- Conclusion: these three sounds aren't reachable through DataTool's extractions. Overwatch most likely keeps them in
+  sound banks that DataTool doesn't unpack this way.
+**Result:** Still missing: Swift Strike, Deflect block, Dragonblade hit (and dash reset, which Overwatch doesn't
+have).
+**Still broken / not tested:** See above.
+**Next:** Recording the three sounds from Overwatch itself (your choice).
+
 ## 2026-10-09 Your sound picks copied into place (tools/make_sounds.py)
 
 **Changed:**

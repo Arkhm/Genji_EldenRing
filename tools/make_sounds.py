@@ -56,9 +56,9 @@ ABILITY = OrderedDict([
     ('blade_end_roar', [('401C', None)]),
     ('blade_end', [('2D36', [1]), ('2D3A', None)]),
     ('blade_sheathe', [('2D36', [2])]),
-    # "from 1 to 13: sound when he is actually wall climbing"; 930F tagged wall climb; "when he is about to finish
-    # climbing to a ledge".
-    ('wall_climb', [('16DC', list(range(1, 14))), ('930F', None)]),
+    # "from 1 to 13: sound when he is actually wall climbing"; 930F "wall climbing and falling"; 16CF "actually, this
+    # is the loop of wall climbing" (2026-10-09, second export); "when he is about to finish climbing to a ledge".
+    ('wall_climb', [('16DC', list(range(1, 14))), ('930F', None), ('16CF', None)]),
     ('wall_climb_ledge', [('16D2', None)]),
     ('double_jump', [('2D98', None)]),
     # "falling sound when he reaches his foot on land".
