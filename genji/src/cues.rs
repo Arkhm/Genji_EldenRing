@@ -25,8 +25,10 @@ const PAIN_EVERY: f32 = 3.0;
 const REACTION_WAIT: f32 = 0.15;
 /// Still in the hit reaction after this long: knocked down.
 const KNOCKDOWN_AFTER: f32 = 0.9;
-/// Critical health below this share of max HP; re-armed above LOW_HEALTH_REARM.
+/// Critical health below this share of max HP; re-armed above LOW_HEALTH_REARM. Its sound plays LOW_HEALTH_DELAY
+/// after the hit (test of 2026-10-09: played at the moment of the hit, under the hit's own sounds, it wasn't heard).
 const LOW_HEALTH: f32 = 0.30;
+const LOW_HEALTH_DELAY: f32 = 0.35;
 const LOW_HEALTH_REARM: f32 = 0.40;
 /// Healed this share of max HP or more at once (not by lifesteal): a flask.
 const FLASK_HEAL: f32 = 0.15;
@@ -44,6 +46,8 @@ const ELIMINATION_LINE_EVERY: u32 = 3;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Cue {
     Play(&'static str, f32),
+    /// After this many seconds.
+    PlayAfter(&'static str, f32),
     Voice(&'static str, bool),
 }
 
@@ -209,7 +213,7 @@ impl Cues {
         if share < LOW_HEALTH && !self.low_said {
             self.low_said = true;
             if genji {
-                out.push(Cue::Play("low_health", 1.0));
+                out.push(Cue::PlayAfter("low_health", LOW_HEALTH_DELAY));
             }
         } else if share > LOW_HEALTH_REARM {
             self.low_said = false;
@@ -311,8 +315,8 @@ mod tests {
         let mut c = Cues::default();
         c.health(1000, 1000, 0, false, 0.0, true, true, DT);
         let low = c.health(200, 1000, 0, false, 0.0, true, true, DT);
-        assert!(low.contains(&Cue::Play("low_health", 1.0)));
-        assert!(c.health(190, 1000, 0, false, 0.0, true, true, DT).iter().all(|q| *q != Cue::Play("low_health", 1.0)));
+        assert!(low.contains(&Cue::PlayAfter("low_health", LOW_HEALTH_DELAY)));
+        assert!(c.health(190, 1000, 0, false, 0.0, true, true, DT).iter().all(|q| !matches!(q, Cue::PlayAfter("low_health", _))));
         // Lifesteal doesn't count as a flask; a flask does.
         assert!(voices(&c.health(400, 1000, 210, false, 0.0, true, true, DT)).is_empty());
         assert_eq!(voices(&c.health(700, 1000, 0, false, 0.0, true, true, DT)), ["voice_healing"]);

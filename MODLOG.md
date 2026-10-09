@@ -3,6 +3,30 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-09 Silence the Tarnished's grunts; critical-health sound audible
+
+**Changed:**
+- **New `genji/src/game_voice.rs`:** while Genji input is captured, death included, every row of Elden Ring's table
+  `WwiseValueToStrParam_Switch_PlayerVoiceType` gets a name no sound bank has.
+  - That table gives the name of the sound switch that picks the player's voice.
+  - The names are restored in memory when capture ends, and the originals are logged (`VOICE`).
+- `cues.rs` and `sound.rs`: the critical-health sound now plays 0.35 s after the hit that crosses 30%, at full level
+  (was at the moment of the hit, at 0.6).
+**Why:** Your test:
+- "when I take a hit, I hear the elden ring char grunt of pain, not genji".
+- Below 30% health, nothing was heard.
+- Your log shows Genji's pain line did play, 0.15 s after each hit (265.2 s, 279.7 s, 291.5 s): under Elden Ring's
+  grunt.
+- The critical-health sound also played (267.9 s and 291.3 s), but exactly on the hit, quieter, and much of its
+  energy is below 200 Hz.
+**Tested how:** `cargo build --release` and `cargo test --release` pass (41 tests). The silencing idea comes from the
+table's name in the fromsoftware-rs crate.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- It may only take effect after a loading screen, or the game may fall back to a default voice for an unknown name.
+- A pain line is still skipped if another line (like the dash shout) is playing at that moment.
+**Next:** Your test. If the grunts stay, read the `VOICE` lines and try the next idea.
+
 ## 2026-10-09 Step 11b-2: movement, health and kill sounds
 
 **Changed:**

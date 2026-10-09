@@ -84,6 +84,8 @@ struct View {
     /// Last frame: the game played its own animation (a hit reaction after a drop) / our controller drove.
     reacting: bool,
     in_control: bool,
+    /// The Tarnished's own voice, silenced while Genji input is captured (game_voice.rs).
+    game_voice: crate::game_voice::GameVoice,
 }
 
 /// Plays this frame's cues (`cues.rs`).
@@ -91,6 +93,7 @@ fn play_cues(cues: Vec<crate::cues::Cue>) {
     for cue in cues {
         match cue {
             crate::cues::Cue::Play(event, gain) => crate::sound::play_gain(event, gain),
+            crate::cues::Cue::PlayAfter(event, delay) => crate::sound::play_after(event, delay),
             crate::cues::Cue::Voice(event, urgent) => crate::sound::voice(event, urgent),
         }
     }
@@ -174,6 +177,8 @@ fn camera_step_inner(dt: f32) -> bool {
     view.swift.set_values(reason.is_none());
     view.deflect.set_values(reason.is_none());
     view.blade.set_values(reason.is_none());
+    // Silent Tarnished while Genji input is captured, death included (Genji's own death line plays then).
+    view.game_voice.set_silent(WANTED.load(Ordering::Relaxed));
     view.blade.confirm(player);
     view.swift.confirm(player);
     // Dragonblade lifesteal (30 % of each swing's damage), while alive.

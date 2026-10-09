@@ -610,7 +610,17 @@ aw`.
 
 *Not used:* the 7.9 s healing loop (388B): nothing in Elden Ring heals that slowly over time.
 
-**Later (not in 11):** muting Elden Ring's own sounds for the things Genji replaces (the Tarnished's grunts, the
+**Silencing the Tarnished's voice** (2026-10-09, `game_voice.rs`; your test: Elden Ring's pain grunt covered
+Genji's line):
+- The game picks the player's voice through a sound switch, named by the table
+  `WwiseValueToStrParam_Switch_PlayerVoiceType`.
+- While Genji input is captured, every row's name is swapped in memory for one no sound bank has, and put back after.
+- Not known: whether this applies at once or only after a loading screen, and whether an unknown name means silence
+  or a default voice. The `VOICE` log lines show the original names.
+- The same kind of table exists for the player's shoes (footsteps), equipment and attacks, should those need silencing
+  too.
+
+**Later (not in 11):** muting Elden Ring's other own sounds for the things Genji replaces (the Tarnished's grunts, the
 Throwing Dagger's sound). This needs the game's sound IDs and is looked at once ours play.
 
 ## 6. Risks and unknowns (honest list)

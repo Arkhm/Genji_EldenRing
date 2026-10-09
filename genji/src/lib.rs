@@ -16,6 +16,7 @@ mod deflect;
 mod dinput;
 mod enemy_bars;
 mod firing;
+mod game_voice;
 mod gamepad;
 mod hud;
 mod kills;
