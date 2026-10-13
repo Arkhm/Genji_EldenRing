@@ -3,6 +3,45 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-13 Dragonblade's green trail redone from your Overwatch recording
+
+**Changed:**
+- `trail.rs`, rewritten:
+  - the trail is a soft ribbon along the path of a point 80% of the way along the blade, in three layers: a green
+    glow (0.2 s, widening as it fades), a yellow middle (0.13 s), a white core (0.09 s);
+  - the old end tapers to nothing; the blade end frays into five short strands that splay out;
+  - the path is smoothed.
+  - The ribbon is built as a list of pieces first, then drawn, so a test can draw it too.
+- `arms.rs`: between two pictures, the blade's position is worked out along the animation itself, 120 times a second
+  of it (only the pose; nothing extra is drawn). Before, a swing gave the ribbon 2-3 points.
+- `hud.rs`: hands its soft ribbon texture to the trail (`ribbon_texture`); `crosshair.rs` passes it on.
+- Swift Strike's edge streaks are unchanged. The wakizashi's trail in the dash uses the new ribbon.
+**Why:** Your test of 2026-10-10: the green effects "look nothing like Overwatch".
+**Tested how:**
+- Measured on your recording (clip1, frames 0079-0081), as shares of the screen's height:
+  - at the swing: white core 0.03 wide, yellow (250, 255, 110) either side, green glow out to 0.12;
+  - 0.1 s later: no white; the newest part solid yellow 0.08 wide, the rest faint green;
+  - 0.2 s: wisps only.
+- New ignored test `trail_pictures` draws the ribbon as the overlay does (two triangles a piece, the same soft
+  texture), under the exported arms in Dragonblade's swing, at its fastest moment (0.15 s) and 0.1 and 0.2 s later.
+  It writes `D:\GenjiBridgeAssets\viewmodel\trail_000/100/200.png`. I looked at them next to the frames and tuned
+  twice:
+  - widths doubled (the soft texture is solid over only half its width);
+  - layers hold, then drop;
+  - strands moved to the blade end (they had looked like outlines).
+  Now: white core and yellow band along the fresh part, a soft green edge, strands at the blade. 0.1 s later a wider,
+  fading green; 0.2 s, nothing.
+- New tests `layers_fade_as_in_the_recording` and `still_blades_and_jumps_leave_no_ribbon`. `cargo test --release`
+  passes (59 tests). Built with `tools/build.ps1`.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- How it looks in game, and whether the extra blade poses cost drawing time (the ARMS timing lines will show it).
+- Our swing is slower than Overwatch's (the trail covers about half the screen, not all of it), so the white shows
+  only along its fresher half.
+- Seams: each piece has one strength, so faint bands across the ribbon may show.
+- Swift Strike: not redone. There's no recording of Overwatch's dash to work from.
+**Next:** Your test. For Swift Strike: a first-person recording of a dash, or the effect textures from DataTool.
+
 ## 2026-10-13 Status bars: a status that has taken hold shows its time left
 
 **Changed:**

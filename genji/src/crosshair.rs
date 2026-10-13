@@ -180,7 +180,7 @@ impl Overlay {
         }
         // The blades' green trails and Swift Strike's streaks (trail.rs), under the arms so the hand and blade cover
         // them.
-        crate::trail::draw(ui, width, height);
+        crate::trail::draw(ui, self.hud.ribbon_texture(), width, height);
         // Genji's arms, stretched over the whole screen, under everything else we draw.
         if let (Some(id), true, true) = (self.arms.id, self.arms.ready, crate::arms::shown()) {
             ui.get_foreground_draw_list().add_image(id, [0.0, 0.0], [width, height]).build();

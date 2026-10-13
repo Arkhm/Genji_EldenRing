@@ -65,7 +65,9 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
 - Built, **not tested** yet (2026-10-13): a status that has taken hold shows its time left, draining, with the
   seconds after its name (blood loss, which has no lasting phase, flashes).
 - Green blade trails on Dragonblade swings and dashes, green streaks during Swift Strike, no more Blood Blade
-  crescent: they work but "look nothing like Overwatch" (your test, 2026-10-10); being redone.
+  crescent: they showed but "look nothing like Overwatch" (your test, 2026-10-10). Built, **not tested** yet
+  (2026-10-13): the Dragonblade trail redone from your recording (white core, yellow band, green glow, strands).
+  Swift Strike's effect isn't redone yet (no recording of Overwatch's dash).
 - Sounds and voice (step 11b): the ability sounds and lines play and you adjusted their levels (tested 2026-10-09).
   - Built, **not tested** yet: footsteps, jumps, wall climb and landing; pain, stagger, knockdown, critical health,
     flask, death and respawn lines; multikill, melee-kill and kill-streak lines.

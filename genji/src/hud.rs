@@ -215,6 +215,11 @@ unsafe impl Send for Resources {}
 unsafe impl Sync for Resources {}
 
 impl Resources {
+    /// The soft ribbon texture, for the blade trails (trail.rs).
+    pub fn ribbon_texture(&self) -> Option<TextureId> {
+        self.ribbon.map(|r| r.0)
+    }
+
     /// Loads the pictures and fonts (called from the overlay's initialize, before the font atlas is built).
     pub fn load(ctx: &mut Context, render: &mut dyn RenderContext) -> Self {
         let mut r = Resources::default();

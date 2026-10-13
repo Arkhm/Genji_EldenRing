@@ -22,6 +22,9 @@ use crate::viewmodel::{self, Canvas, Viewmodel};
 const ARM_THREADS: usize = 4;
 /// Timing report every this many seconds.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
+/// Seconds of animation between two pictures over which the blade is still sampled for its trail (longer: a hitch,
+/// not sampled).
+const TRAIL_MAX_SPAN: f32 = 0.25;
 
 #[derive(Clone, Copy, PartialEq)]
 struct Request {
@@ -128,6 +131,8 @@ fn run(w: usize, h: usize) {
     let mut last_rect: Option<[u32; 4]> = None;
     // The pose last drawn: the same pose again (a resting pose, every frame) is neither drawn nor copied again.
     let mut last: Option<Request> = None;
+    // The last request with a blade trail and when it was drawn: the blade is sampled between it and the next.
+    let mut trail_from: Option<(Request, Instant)> = None;
     loop {
         let req = {
             let mut s = SHARED.lock().unwrap_or_else(|e| e.into_inner());
@@ -155,8 +160,9 @@ fn run(w: usize, h: usize) {
         let Some(main) = posed(&req.pose.main) else {
             continue;
         };
-        let pose = match req.pose.from.as_ref().and_then(|c| posed(c)) {
-            Some(from) if req.pose.mix < 1.0 => vm.blend(&from, &main, req.pose.mix),
+        let from = req.pose.from.as_ref().and_then(|c| posed(c));
+        let pose = match &from {
+            Some(from) if req.pose.mix < 1.0 => vm.blend(from, &main, req.pose.mix),
             _ => main,
         };
         canvas.clear();
@@ -174,9 +180,43 @@ fn run(w: usize, h: usize) {
         } else {
             None
         };
-        match line.and_then(|l| l.on_screen(&pose, &canvas)) {
-            Some((base, tip)) => crate::trail::push(base, tip),
-            None => crate::trail::pause(),
+        // Between the last picture and this one, the blade along the animation itself, trail::RATE times a second of
+        // it (only the pose, nothing drawn), each stamped at its share of the time between the two pictures: a swing
+        // crosses the screen in 2-3 pictures (DESIGN.md 5l, part 5).
+        let now = Instant::now();
+        match line {
+            Some(l) => {
+                let same_clip = |p: &Request| p.pose.main.role == req.pose.main.role && p.pose.main.variant == req.pose.main.variant;
+                if let Some((prev, prev_at)) = trail_from.filter(|(p, _)| same_clip(p)) {
+                    let span = req.pose.main.t - prev.pose.main.t;
+                    if span > 0.0 && span <= TRAIL_MAX_SPAN {
+                        let n = ((span * crate::trail::RATE).ceil() as usize).min(32);
+                        for k in 1..n {
+                            let f = k as f32 / n as f32;
+                            let clip = Clip { t: prev.pose.main.t + span * f, ..req.pose.main };
+                            let mix = prev.pose.mix + (req.pose.mix - prev.pose.mix) * f;
+                            let Some(m) = posed(&clip) else { break };
+                            let p = match &from {
+                                Some(from) if mix < 1.0 => vm.blend(from, &m, mix),
+                                _ => m,
+                            };
+                            match l.on_screen(&p, &canvas) {
+                                Some((base, tip)) => crate::trail::push_at(prev_at + (now - prev_at).mul_f32(f), base, tip),
+                                None => crate::trail::pause(),
+                            }
+                        }
+                    }
+                }
+                match l.on_screen(&pose, &canvas) {
+                    Some((base, tip)) => crate::trail::push_at(now, base, tip),
+                    None => crate::trail::pause(),
+                }
+                trail_from = Some((req, now));
+            }
+            None => {
+                crate::trail::pause();
+                trail_from = None;
+            }
         }
         let frame = Arc::new(canvas.rgba.clone());
         let took = started.elapsed();

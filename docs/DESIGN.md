@@ -789,8 +789,14 @@ the HUD showed nothing). The green effects "look nothing like Overwatch". One co
        animation, between the pictures it draws (only the pose, which is cheap; nothing more is drawn). The ribbon
        follows a point 80% of the way along the blade.
      - **Drawing:** a ribbon along those points, in three layers with the soft texture the HUD already has: green
-       glow (wide, lasts 0.2 s, widens as it ages), yellow middle (lasts 0.13 s), white core (lasts 0.07 s). Both
-       ends taper. Four thin strands across it, splaying out near the blade. Only where the blade moves fast, as now.
+       glow (wide, lasts 0.2 s, widens as it ages), yellow middle (lasts 0.13 s), white core (lasts 0.09 s; our swing
+       is slower than Overwatch's, so the white is given a little longer, still gone by 0.1 s as in frame 0080). Each
+       layer holds, then drops. The old end tapers to nothing, the blade end frays into five short strands that
+       splay out. The path is smoothed (the animation's keyframes put kinks in it). Only where the blade moves fast,
+       as before.
+     - **Checked outside the game:** an ignored test (`trail_pictures`) draws the ribbon the way the overlay does,
+       over the exported Dragonblade swing, and writes `trail_000/100/200.png` next to the export, for comparing with
+       frames 0079-0081.
    - **Swift Strike** keeps its streaks and gets the same ribbon on the wakizashi for now: there's no recording of
      Overwatch's dash. To redo it, we need either your recording of a dash in first person, or the effect textures
      extracted with DataTool (the effect folders extracted so far hold only sounds: 554 `.ogg`, no textures).
