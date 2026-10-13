@@ -1,5 +1,11 @@
 # Genji in Elden Ring: design
 
+## Reference analysis intake (2026-10-13)
+
+Analyze the three user-supplied videos as saved reference material before adding new findings to the mod-manager prompt. Preserve originals under `D:\GenjiBridgeAssets\references`; decode actual video timestamps, keep the three audio tracks separate, inspect full-clip contact sheets, then examine action/reload/effect transitions at native frame spacing. Write timestamped reports and a proposed DataTool investigation brief in project `references/`. Record observations, measurements and unknowns separately. Show the reports and selected evidence to the user for approval; do not incorporate the new findings into the manager prompt until approved. No mod implementation changes are part of this step.
+
+Completed intake and user approval: 2026-10-13. The three reports and approved DataTool/effects/HUD brief are now incorporated into `docs/OPUS-5.5-MOD-MANAGER-PROMPT.md`. Current scope preserves working cooldown/gameplay logic and existing audio; audio listening remains unavailable as recorded in `STATUS.md`. Reference approval is not runtime fidelity acceptance.
+
 Plain-language description of how this project works and the order we build it in. Terms are explained
 the first time they appear.
 

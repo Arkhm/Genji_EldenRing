@@ -3,6 +3,33 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-13 Approved references incorporated into Opus manager prompt
+
+**Changed:** Integrated the user-approved three-video reports, timestamps, effects/HUD brief and forearm DataTool investigation into `docs/OPUS-5.5-MOD-MANAGER-PROMPT.md`. Removed obsolete pending-intake/originals-missing statements; made current effects/HUD scope and cooldown/audio preservation explicit. Updated approval/integration status in the reference index/review/method/three reports/proposal record, `docs/DESIGN.md` and listening-only `STATUS.md`. Updated external `D:\GenjiBridgeAssets\references\verification-20261013.json` with approval date, pre/post integration prompt hashes and documentation-check result. No mod implementation, audio/media, game files, staging or commits changed.
+**Why:** User explicitly approved the reference package and proposed manager addition. The prompt is now ready to send to Opus 5.5 with approved evidence and preserved working behavior.
+**Tested how:** Read the full prompt/approved brief and current project rules; checked integration of all three reports, critical event ranges, DataTool leads, side-by-side measurement requirements and protected cooldown/audio instructions. Checked stale pending phrases were removed from current documents, all 78 reference links resolved, prompt report paths existed, and `git diff --check` passed. Review command: `Get-Content -Raw 'D:\games-mods\Games\GenjiBridge\docs\OPUS-5.5-MOD-MANAGER-PROMPT.md'`.
+**Result:** Copy-ready prompt contains approved references and DataTool instructions, current effects/HUD scope, separate phase/full-project fidelity gates, specialist coordination and manager-owned evidence checks. Expected review output: approved batch dated 2026-10-13, all three timestamped reports, preserved working cooldowns/audio and no pending-intake instructions.
+**Still broken / not tested:** Listening limitation remains documented; sound identities/transcripts and actual mod runtime fidelity **not tested**. Reference approval does not certify 95% visual similarity. No game was launched and no manager agent was dispatched.
+**Next:** Copy the updated prompt into the user's Opus 5.5 agent. That manager performs baseline comparison and effects/HUD work under the included rules.
+
+## 2026-10-13 Three Overwatch videos analyzed for effects/HUD review
+
+**Changed:** Added `tools/analyze_reference_videos.py`, project `references/METHOD.md`, the three `OW-20261013-A/B/C.md` reports, `REVIEW-20261013.md`, `AUDIO-BASELINE.md`, `PROPOSED-MANAGER-ADDITION.md` and root `STATUS.md`; updated reference index and added the intake plan to `docs/DESIGN.md`. Outside source, copied only the three explicitly supplied originals into `D:\GenjiBridgeAssets\references\originals` and generated timestamped frames/contact sheets, separate audio WAVs/metrics, phase crops, source maps, metadata, a read-only sound baseline and validation results under that references root. Manager prompt has not yet received this batch. No mod/game/audio source, installed game files, cooldowns, `.gitignore`, staging or commits changed.
+**Why:** User requested timestamped analysis for approval before prompt integration, including DataTool investigation of forearm shuriken. Latest scope prioritizes effects/HUD transitions and preserves working cooldowns and already-correct audio.
+**Tested how:** Surveyed all three clips, inspected denser action sequences and native critical phases; checked original/copy hashes, sequential source timestamps, extracted source-frame matches, all 2,121 JPEG file/dimension/integrity checks, all nine WAV formats/durations, documentation links, Python syntax and `git diff --check`. Rechecked all 375 indexed existing audio files against their baseline hashes. Reindex test commands/expected counts are in `references/README.md`.
+**Result:** Copy hashes matched. Source/extracted frame-reference counts: A 1971/653, B 2062/578, C 3598/890. Zero timestamp frame recovered correctly by integer PTS/time-base parsing. Existing sound hashes unchanged. Detailed reload, dash, Deflect, blade and HUD phase evidence prepared with source frame anchors. Verification artifact: `D:\GenjiBridgeAssets\references\verification-20261013.json`.
+**Still broken / not tested:** Audio listening unavailable: MP3 conversion failed with missing libmp3lame encoder; valid WAV forwarding confirmed unsupported audio input. Identities/transcripts are unverified and no audio replacements proposed; two attempts recorded in STATUS.md. A one-off link validation initially failed on Windows default encoding, then passed with explicit UTF-8. Not every native source frame was visually inspected. Exact skin/FOV/build and missing action coverage remain unknown. Live game launch, current mod comparison and 95% fidelity **not tested**.
+**Next:** User reviews timestamped reports/phase sheets and proposed manager addition. Integrate only approved material into the prompt, replace its stale intake statements, and keep working cooldowns/audio protected.
+
+## 2026-10-13 Reference-video intake folders and analysis format
+
+**Changed:** Added project `references/README.md` and `references/ANALYSIS-TEMPLATE.md`; updated `docs/OPUS-5.5-MOD-MANAGER-PROMPT.md` to read the new index/reports and cite clip/event timestamps. Created media folders `originals`, `frames`, `audio`, `comparisons` under `D:\GenjiBridgeAssets\references`. No game/mod source or media changed.
+**Why:** User will supply videos for detailed reference analysis of throws, dashes, animations, sounds, effects and HUD. Media stays outside the repository per AGENTS.md.
+**Tested how:** Checked current rules/status/prompt; verified folder creation and documentation links/status. Verification command is in `references/README.md`.
+**Result:** Intake structure and analysis template prepared. Prompt explicitly distinguishes pending uploads/templates from analyzed reference evidence.
+**Still broken / not tested:** No new videos attached yet; video analysis and game behavior **not tested**. No new timestamps, measurements or audio identifications claimed.
+**Next:** Receive the user videos, inspect their source metadata and complete one indexed analysis per clip; update the prompt with actual report paths and event ranges.
+
 ## 2026-10-13 Dragonblade swing drawn with Overwatch's own textures and gradient
 
 **Changed:**
