@@ -3,6 +3,37 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-13 Status bars: a status that has taken hold shows its time left
+
+**Changed:**
+- `status.rs`:
+  - a status whose bar drops from 80% or more to 10% or less in one frame has taken hold;
+  - the effects that start within 0.3 s of that moment and last over 1 s are linked to it; the bar follows the one
+    that ends first (or, with no finite one, one that lasts until removed);
+  - its time left is the game's countdown (`removal_timer / duration`), or our own clock if that countdown doesn't
+    count down;
+  - with no lasting effect (blood loss), the row flashes for 1.5 s.
+- `hud.rs`: such a row shows the time left draining, a light outline round its lit segments, and the seconds after
+  the name.
+- `docs/DESIGN.md` 5l: plan for this and for redoing the green trails from your recording (parts 4 and 5).
+- `README.md`: the prompts and buildup bars are marked as tested by you.
+- The project moved to `D:\games-mods\Games\GenjiBridge` (you did that; assets still in `D:\GenjiBridgeAssets`). The
+  me3 profile uses paths relative to itself, so it still finds `build\genji.dll`.
+**Why:** Your test of 2026-10-10: "I got scarlet rot and the HUD showed nothing."
+**Tested how:**
+- From my notes of that session's log: rot at 5/101 (counting down, 95% built up) at 101.585 s, 101/101 at
+  102.155 s; 21000 (180 s) and 505 (900 s) started then; both ended at 128.697 s. The `logs/genji.log` now on disk is
+  a different session (no buildup at all in it), so I couldn't re-read those lines.
+- New tests `taking_hold_is_a_full_bar_emptying_at_once` and `the_bar_follows_the_lasting_effect_that_ends_first`
+  (with your rot's numbers). `cargo test --release` passes (57 tests). Built with `tools/build.ps1`.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- Which of rot's two effects is its real active phase: 21000 is used (180 s; it ends first). If the bar ends while
+  you're still rotting, it's the other one.
+- Whether `removal_timer` counts down (the log says if our own clock had to be used).
+- Poison, frostbite, sleep, madness and death blight taking hold haven't been seen in a log yet.
+**Next:** Your test; then the Dragonblade trail (DESIGN.md 5l, part 5).
+
 ## 2026-10-09 Green trails on Dragonblade and Swift Strike; no blood crescent
 
 **Changed:**

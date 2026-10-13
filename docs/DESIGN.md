@@ -750,6 +750,51 @@ Your requests after testing the arms, done in this order, one commit each.
    - **The dash:** the same trail on the wakizashi, plus green streaks along the screen edges for the dash's length.
    - The Blood Blade crescent (Elden Ring's red sweep, 2635) is no longer spawned.
 
+### After your test of 2026-10-10 (plan 2026-10-13)
+
+Your test: prompts work, buildup bars work. Missing: a bar once a status has taken hold (you got scarlet rot and
+the HUD showed nothing). The green effects "look nothing like Overwatch". One commit each, in this order.
+
+4. **A status that has taken hold.**
+   - **What the log showed** (session of 2026-10-10; that log was later overwritten, these are my notes from it):
+     - rot buildup was at 5/101 (counting down, so 95% built up) at 101.585 s, and back at 101/101 at 102.155 s.
+       The buildup empties in one step when the status takes hold.
+     - Two lasting effects started at that moment: 21000 (180 s) and 505 (900 s). Both ended at 128.697 s, when
+       4600, 4650, 19996 and 32 started (probably a cure item).
+   - **Detect it:** a status whose bar goes from at least 80% to at most 10% between two frames has taken hold.
+     A bar draining normally never drops that much in one frame.
+   - **Link it to the effect that keeps it going:** the effects that start within 0.3 s of that moment (before or
+     after) and last more than 1 s. The one with the shortest finite length is the one the bar follows; with none
+     finite, one that lasts until removed (duration -1).
+   - **Show it:** the status's row, in its colour, filled with the time left and draining (`removal_timer /
+     duration`), the seconds left after its name, a brighter outline than the buildup bar. If `removal_timer` doesn't
+     look like a countdown (outside 0..duration), our own clock since the start is used, and the log says so. It goes
+     when that effect ends.
+   - **No lasting effect** (blood loss is a single burst): the row flashes full for 1.5 s and fades.
+   - **Logged** (`STATUS`): "took hold", each linked effect with its length, time left, and from its param row
+     `state_info` (the game's own label for what the effect is) and `icon_id`; the time left every 5 s; the end.
+   - **Not known:** which of the two rot effects is the real one (21000 at 180 s is used by the rule above); whether
+     other statuses work the same way. Your next test answers it from the log.
+5. **Dragonblade's green trail, redone from your recording** (clip1, frames 0079-0081, 7.8-8.0 s).
+   - **What Overwatch shows** (measured on the frames; widths as shares of the screen's height):
+     - at the swing: a long streak along the path the blade just swept, from the blade's outer half far across the
+       screen. A white core (0.03 wide), a yellow band (250, 255, 110) either side, then a green glow fading out to
+       about 0.12 wide. Near the blade, a few brush strands splay out;
+     - 0.1 s later: no white left; the newest part solid yellow, 0.08 wide; the older part a faint green;
+     - 0.2 s: gone but for wisps.
+   - **Why ours looked wrong:** it filled flat triangles between the 2-3 pictures the arms thread draws in a swing,
+     the whole area the blade covered, with two flat colours. Overwatch draws a soft streak.
+   - **New way:**
+     - **Sampling:** the arms thread works out where the blade was along the animation itself, 120 times a second of
+       animation, between the pictures it draws (only the pose, which is cheap; nothing more is drawn). The ribbon
+       follows a point 80% of the way along the blade.
+     - **Drawing:** a ribbon along those points, in three layers with the soft texture the HUD already has: green
+       glow (wide, lasts 0.2 s, widens as it ages), yellow middle (lasts 0.13 s), white core (lasts 0.07 s). Both
+       ends taper. Four thin strands across it, splaying out near the blade. Only where the blade moves fast, as now.
+   - **Swift Strike** keeps its streaks and gets the same ribbon on the wakizashi for now: there's no recording of
+     Overwatch's dash. To redo it, we need either your recording of a dash in first person, or the effect textures
+     extracted with DataTool (the effect folders extracted so far hold only sounds: 554 `.ogg`, no textures).
+
 ## 6. Risks and unknowns (honest list)
 
 - ~~Build tools are missing.~~ Resolved 2026-10-07: Visual Studio 2022 Build Tools installed.

@@ -131,7 +131,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     enemies: [EnemyBar { x: 0.0, y: 0.0, hp: 0.0, trail: 0.0, boss: false, name: [0; NAME_BYTES], name_len: 0 }; ENEMY_BARS],
     enemy_count: 0,
     kills: 0,
-    statuses: [crate::status::Bar { fill: 0.0 }; crate::status::COUNT],
+    statuses: [crate::status::Bar::EMPTY; crate::status::COUNT],
 });
 
 pub fn update(state: State) {
@@ -625,27 +625,43 @@ pub fn draw(ui: &Ui, r: &mut Resources, width: f32, height: f32) {
     // ---- Above the health: your status effects building up (DESIGN.md 5l; you, 2026-10-09: "a custom like
     // overwatch hp bar, on the left side for each status"). One row each, only while building up: its name in its
     // colour over 10 thin segments like the health bar's, filling in that colour; full, it pulses.
+    // Taken hold (5l part 4; your test of 2026-10-10): the row shows the time left instead, draining, with the seconds
+    // after the name and a light outline round each lit segment; taken hold with no lasting effect, it flashes full.
     let mut row_bottom = num_mid - 24.0 * k;
     for (i, bar) in s.statuses.iter().enumerate() {
-        if bar.fill < 0.01 {
+        if bar.fill < 0.01 && bar.active.is_none() && bar.flash <= 0.0 {
             continue;
         }
         let c = STATUS_COLOURS[i];
         let thin = 7.0 * k;
         let y0 = row_bottom - thin;
-        let pulse = if bar.fill >= 0.999 { 0.75 + 0.25 * (now * 9.0).sin() } else { 1.0 };
-        let fill = bar.fill * 10.0;
+        let (fill, strength) = match bar.active {
+            Some((share, _)) => (share, 1.0),
+            None if bar.flash > 0.0 => (1.0, bar.flash * (0.75 + 0.25 * (now * 14.0).sin())),
+            None if bar.fill >= 0.999 => (1.0, 0.75 + 0.25 * (now * 9.0).sin()),
+            None => (bar.fill, 1.0),
+        };
+        let fill = fill * 10.0;
         for j in 0..10 {
             let x0 = hx + j as f32 * (seg_w + gap);
             draw.add_rect([x0, y0], [x0 + seg_w, row_bottom], col(alpha(c, 0.22))).filled(true).build();
             let part = (fill - j as f32).clamp(0.0, 1.0);
             if part > 0.0 {
-                draw.add_rect([x0, y0], [x0 + seg_w * part, row_bottom], col(alpha(c, pulse))).filled(true).build();
+                draw.add_rect([x0, y0], [x0 + seg_w * part, row_bottom], col(alpha(c, strength))).filled(true).build();
+                if bar.active.is_some() || bar.flash > 0.0 {
+                    let edge = mix(c, WHITE, 0.6);
+                    draw.add_rect([x0, y0], [x0 + seg_w * part, row_bottom], col(alpha(edge, 0.9 * strength))).thickness(1.2 * k).build();
+                }
             }
         }
         let name = crate::status::NAMES[i];
         let t = measure(r.label, name);
-        text([hx, y0 - 3.0 * k - t[1]], r.label, c, name);
+        let a = if bar.active.is_some() || bar.fill >= 0.01 { 1.0 } else { bar.flash };
+        text([hx, y0 - 3.0 * k - t[1]], r.label, alpha(c, a), name);
+        if let Some((_, Some(left))) = bar.active {
+            let secs = format!("{}s", left.ceil() as i32);
+            text([hx + t[0] + 8.0 * k, y0 - 3.0 * k - t[1]], r.label, WHITE, &secs);
+        }
         row_bottom = y0 - t[1] - 9.0 * k;
     }
 
