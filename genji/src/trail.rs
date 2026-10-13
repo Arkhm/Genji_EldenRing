@@ -8,8 +8,16 @@
 //!   so a blade held still leaves nothing. The katana in Dragonblade's swings and its dash; for now the same ribbon on
 //!   the wakizashi in Swift Strike (no recording of Overwatch's dash yet);
 //! - Swift Strike: green streaks rushing out along the screen's edges for as long as the dash lasts (not redone yet).
+//!
+//! With Overwatch's own textures (DESIGN.md 5l, part 7; you, 2026-10-13: "redo the dragonblade swing with the real
+//! textures"): the effect reader (tools\extract_effects.ps1) found what the first-person swing is drawn with: the brush
+//! streak 4E2F as its shape, the jagged core 57E6 and the wavy lines 6613 as detail, and a gradient (8008CA787D10, row
+//! 4) turning brightness into colour, dark green to yellow to white. `bake` runs them through that gradient once, at
+//! LEVELS brightnesses side by side; each piece of ribbon uses the level for its age, so a fresh streak is white-hot
+//! and goes yellow, then green, then away. Without those files, the plain layered ribbon above is drawn.
 
 use std::collections::VecDeque;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -31,6 +39,26 @@ const MAX_JUMP: f32 = 0.6;
 const OLD_TAPER: f32 = 0.3;
 const NEW_TAPER: f32 = 0.1;
 const NEW_END_WIDTH: f32 = 0.15;
+
+/// Overwatch's textures for the swing (written by tools\extract_effects.ps1, outside the repository).
+pub const FX_DIR: &str = r"D:\GenjiBridgeAssets\fx\textures";
+const BRUSH: &str = "000000004E2F.png";
+const CORE_LINE: &str = "0000000057E6.png";
+const WAVE: &str = "000000006613.png";
+const GREEN_RAMP: &str = "8008CA787D10.png";
+/// The gradient's colour row (rows 0-3 and 5 are plain white, black or yellow: other settings of the effect).
+const RAMP_ROW: u32 = 4;
+/// Brightness levels baked side by side.
+pub const LEVELS: usize = 32;
+/// The textured ribbon's width (screen heights; the brush fills about the middle 3/4 of it), and its growth by the
+/// end of LIFE.
+const TEX_WIDTH: f32 = 0.2;
+const TEX_GROW: f32 = 0.08;
+/// Where along the brush texture (0 top, 1 bottom) the ribbon's old end and its new end (at the blade) sit: the brush is
+/// dense near the top and frays into strands lower down. Dense at the blade, so the fresh streak is white-hot there as
+/// in frame 0079, and the tail frays out as it ages (the other way round, checked offline, left it dim at the blade).
+const TEX_OLD: f32 = 0.82;
+const TEX_NEW: f32 = 0.04;
 
 /// One layer of the ribbon. Widths in screen heights (the soft texture is solid over about the middle half of it);
 /// `grow` is added by the end of LIFE.
@@ -84,11 +112,68 @@ pub struct Point {
     pub new_stroke: bool,
 }
 
-/// One piece of ribbon, in pixels: corners left-old, right-old, right-new, left-new. The texture across it (left to
-/// right) is the soft ribbon: clear at both edges, full in the middle.
+/// One piece of ribbon, in pixels: corners left-old, right-old, right-new, left-new, with the texture coordinates at
+/// each (plain ribbon: across it, left to right, the soft ribbon texture; textured: a cell of the baked texture).
 pub struct Quad {
     pub p: [[f32; 2]; 4],
+    pub uv: [[f32; 2]; 4],
     pub color: [u8; 4],
+}
+
+const PLAIN_UV: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+
+/// Overwatch's swing textures run through its gradient: LEVELS cells side by side, cell k at brightness 1 - k/LEVELS.
+/// Per pixel: brightness = level x brush x (0.55 + 0.45 x core line), coloured by the gradient, its opacity rising
+/// with it; the wavy lines whiten it, fading faster (the second material's white gradient). RGBA, width LEVELS x the
+/// brush's width.
+pub fn bake(dir: &Path) -> Result<(Vec<u8>, u32, u32), String> {
+    let load = |name: &str| crate::hud::decode_png(&dir.join(name)).map_err(|e| format!("{name}: {e}"));
+    let (brush, w, h) = load(BRUSH)?;
+    let (core, cw, chh) = load(CORE_LINE)?;
+    let (wave, ww, wh) = load(WAVE)?;
+    if (cw, chh) != (w, h) || (ww, wh) != (w, h) {
+        return Err(format!("texture sizes differ: brush {w}x{h}, core {cw}x{chh}, wave {ww}x{wh}"));
+    }
+    let (ramp, rw, rh) = load(GREEN_RAMP)?;
+    if rh <= RAMP_ROW || rw < 2 {
+        return Err(format!("{GREEN_RAMP} is {rw}x{rh}, expected 256x6"));
+    }
+    let row = &ramp[(RAMP_ROW * rw * 4) as usize..((RAMP_ROW + 1) * rw * 4) as usize];
+    let gradient = |i: f32| -> [f32; 3] {
+        let x = i.clamp(0.0, 1.0) * (rw - 1) as f32;
+        let (a, f) = (x.floor() as usize, x.fract());
+        let b = (a + 1).min(rw as usize - 1);
+        std::array::from_fn(|k| row[a * 4 + k] as f32 * (1.0 - f) + row[b * 4 + k] as f32 * f)
+    };
+    let (w, h) = (w as usize, h as usize);
+    let out_w = LEVELS * w;
+    let mut out = vec![0u8; out_w * h * 4];
+    for level in 0..LEVELS {
+        let s = 1.0 - level as f32 / LEVELS as f32;
+        for y in 0..h {
+            for x in 0..w {
+                let at = (y * w + x) * 4;
+                let lum = |t: &[u8]| t[at] as f32 / 255.0;
+                let (b, c, v) = (lum(&brush), lum(&core), lum(&wave));
+                let green = s * b * (0.55 + 0.45 * c);
+                let white = s * s * b * v;
+                let mut rgb = gradient(green);
+                for ch in &mut rgb {
+                    *ch += (255.0 - *ch) * (white * 0.8).min(1.0);
+                }
+                let a = smooth(green * 1.8).max(white);
+                let o = (y * out_w + level * w + x) * 4;
+                out[o..o + 3].copy_from_slice(&rgb.map(|v| v.round().clamp(0.0, 255.0) as u8));
+                out[o + 3] = (a * 255.0).round() as u8;
+            }
+        }
+    }
+    Ok((out, out_w as u32, h as u32))
+}
+
+/// The baked level for a piece of ribbon `age` seconds old: 0 (brightest) while fresh, LEVELS - 1 (dimmest) at the end.
+fn level(age: f32) -> usize {
+    (((1.0 - fade(age, LIFE)) * LEVELS as f32) as usize).min(LEVELS - 1)
 }
 
 static SAMPLES: Mutex<VecDeque<Sample>> = Mutex::new(VecDeque::new());
@@ -141,8 +226,9 @@ fn fade(age: f32, life: f32) -> f32 {
     smooth(1.0 - (age / life).powi(2))
 }
 
-/// The ribbon's pieces for `points` (oldest first) on a `width` x `height` screen.
-pub fn ribbon(points: &[Point], width: f32, height: f32) -> Vec<Quad> {
+/// The ribbon's pieces for `points` (oldest first) on a `width` x `height` screen; `textured`: with the baked
+/// Overwatch texture (else the plain layered ribbon).
+pub fn ribbon(points: &[Point], width: f32, height: f32, textured: bool) -> Vec<Quad> {
     let mut quads = Vec::new();
     let mut start = 0;
     for i in 1..=points.len() {
@@ -151,7 +237,7 @@ pub fn ribbon(points: &[Point], width: f32, height: f32) -> Vec<Quad> {
             (((b[0] - a[0]) * width / height).powi(2) + (b[1] - a[1]).powi(2)).sqrt() > MAX_JUMP
         };
         if breaks {
-            stroke(&points[start..i], width, height, &mut quads);
+            stroke(&points[start..i], width, height, textured, &mut quads);
             start = i;
         }
     }
@@ -159,7 +245,7 @@ pub fn ribbon(points: &[Point], width: f32, height: f32) -> Vec<Quad> {
 }
 
 /// One unbroken stroke's pieces.
-fn stroke(pts: &[Point], width: f32, height: f32, quads: &mut Vec<Quad>) {
+fn stroke(pts: &[Point], width: f32, height: f32, textured: bool, quads: &mut Vec<Quad>) {
     let n = pts.len();
     if n < 2 {
         return;
@@ -210,6 +296,38 @@ fn stroke(pts: &[Point], width: f32, height: f32, quads: &mut Vec<Quad>) {
             [-dy / len, dx / len]
         })
         .collect();
+    if textured {
+        // One ribbon with the baked texture: along it from TEX_OLD (old end) to TEX_NEW (the blade), across it a cell
+        // (a little in from each side, so the next cell doesn't bleed in), the cell for its age.
+        let half = |j: usize| {
+            (TEX_WIDTH + TEX_GROW * (pts[j].age / LIFE).min(1.0)) * height * smooth(j as f32 / (n - 1) as f32 / OLD_TAPER) / 2.0
+        };
+        let side = |j: usize| {
+            let (p, h) = (c[j], half(j));
+            ([p[0] + normal[j][0] * h, p[1] + normal[j][1] * h], [p[0] - normal[j][0] * h, p[1] - normal[j][1] * h])
+        };
+        let along = |j: usize| TEX_OLD + (TEX_NEW - TEX_OLD) * j as f32 / (n - 1) as f32;
+        let cell = 1.0 / LEVELS as f32;
+        let pad = cell / 64.0;
+        let mut prev = side(0);
+        for j in 1..n {
+            let cur = side(j);
+            let age = 0.5 * (pts[j - 1].age + pts[j].age);
+            let a = 0.5 * (fast[j - 1] + fast[j]) * (fade(age, LIFE) * 3.0).min(1.0);
+            if a > 0.003 {
+                let k = level(age) as f32;
+                let (u0, u1) = (k * cell + pad, (k + 1.0) * cell - pad);
+                let (v0, v1) = (along(j - 1), along(j));
+                quads.push(Quad {
+                    p: [prev.0, prev.1, cur.1, cur.0],
+                    uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+                    color: [255, 255, 255, (a.clamp(0.0, 1.0) * 255.0) as u8],
+                });
+            }
+            prev = cur;
+        }
+        return;
+    }
     let mut strip = |centre: &dyn Fn(usize) -> [f32; 2], half: &dyn Fn(usize) -> f32, strength: &dyn Fn(usize) -> f32, color: [u8; 3]| {
         let side = |j: usize| {
             let (p, h) = (centre(j), half(j));
@@ -221,7 +339,7 @@ fn stroke(pts: &[Point], width: f32, height: f32, quads: &mut Vec<Quad>) {
             let a = 0.5 * (strength(j - 1) + strength(j));
             if a > 0.003 {
                 let alpha = (a.clamp(0.0, 1.0) * 255.0) as u8;
-                quads.push(Quad { p: [prev.0, prev.1, cur.1, cur.0], color: [color[0], color[1], color[2], alpha] });
+                quads.push(Quad { p: [prev.0, prev.1, cur.1, cur.0], uv: PLAIN_UV, color: [color[0], color[1], color[2], alpha] });
             }
             prev = cur;
         }
@@ -241,8 +359,9 @@ fn stroke(pts: &[Point], width: f32, height: f32, quads: &mut Vec<Quad>) {
     }
 }
 
-/// The overlay, before the arms: the blade trail (with the HUD's soft ribbon texture) and Swift Strike's streaks.
-pub fn draw(ui: &Ui, ribbon_texture: Option<TextureId>, width: f32, height: f32) {
+/// The overlay, before the arms: the blade trail (with Overwatch's baked swing texture, or else the HUD's soft ribbon
+/// texture) and Swift Strike's streaks.
+pub fn draw(ui: &Ui, ribbon_texture: Option<TextureId>, swing_texture: Option<TextureId>, width: f32, height: f32) {
     let now = Instant::now();
     let points: Vec<Point> = {
         let mut s = SAMPLES.lock().unwrap_or_else(|e| e.into_inner());
@@ -254,9 +373,10 @@ pub fn draw(ui: &Ui, ribbon_texture: Option<TextureId>, width: f32, height: f32)
             .collect()
     };
     let draw = ui.get_foreground_draw_list();
-    if let Some(id) = ribbon_texture {
-        for q in ribbon(&points, width, height) {
+    if let Some((id, textured)) = swing_texture.map(|t| (t, true)).or(ribbon_texture.map(|t| (t, false))) {
+        for q in ribbon(&points, width, height, textured) {
             draw.add_image_quad(id, q.p[0], q.p[1], q.p[2], q.p[3])
+                .uv(q.uv[0], q.uv[1], q.uv[2], q.uv[3])
                 .col(ImColor32::from_rgba(q.color[0], q.color[1], q.color[2], q.color[3]))
                 .build();
         }
@@ -315,11 +435,12 @@ mod tests {
             .collect()
     }
 
-    /// The layers last as long as on your recording: white gone by 0.1 s, yellow by 0.13 s, the glow by 0.2 s.
+
+    /// The plain layers last as long as on your recording: white gone by 0.1 s, yellow by 0.13 s, the glow by 0.2 s.
     #[test]
     fn layers_fade_as_in_the_recording() {
         let colours = |age: f32| -> Vec<[u8; 3]> {
-            ribbon(&swing(8, age), 2580.0, 1080.0).iter().map(|q| [q.color[0], q.color[1], q.color[2]]).collect()
+            ribbon(&swing(8, age), 2580.0, 1080.0, false).iter().map(|q| [q.color[0], q.color[1], q.color[2]]).collect()
         };
         let has = |v: &[[u8; 3]], c: [u8; 3]| v.contains(&c);
         let fresh = colours(0.0);
@@ -329,22 +450,79 @@ mod tests {
         assert!(colours(0.2).is_empty());
     }
 
-    /// A blade held still leaves nothing; a jump between two animations isn't joined.
+    /// A blade held still leaves nothing; a jump between two animations isn't joined (both ways of drawing).
     #[test]
     fn still_blades_and_jumps_leave_no_ribbon() {
         let still: Vec<Point> = (0..10).map(|j| Point { age: j as f32 / RATE, base: [0.5, 0.8], tip: [0.6, 0.5], new_stroke: false }).collect();
-        assert!(ribbon(&still, 2580.0, 1080.0).is_empty());
         let jump = [
             Point { age: 0.01, base: [0.1, 0.8], tip: [0.1, 0.5], new_stroke: false },
             Point { age: 0.0, base: [0.9, 0.8], tip: [0.9, 0.5], new_stroke: false },
         ];
-        assert!(ribbon(&jump, 2580.0, 1080.0).is_empty());
+        for textured in [false, true] {
+            assert!(ribbon(&still, 2580.0, 1080.0, textured).is_empty());
+            assert!(ribbon(&jump, 2580.0, 1080.0, textured).is_empty());
+        }
     }
 
-    /// The ribbon drawn the way the overlay draws it (two triangles per piece, the soft texture across), over a grey
-    /// like the recording's wall, for comparing with D:\GenjiBridgeAssets\ow_ref\clip1\frames10\0079-0081.jpg. With the
-    /// exported arms, Dragonblade's swing at GENJI_TRAIL_T seconds (default 0.25) and 0.1 and 0.2 s after it; writes
-    /// trail_<ms>.png next to the export. Run: cargo test --release trail_pictures -- --ignored --nocapture
+    /// Textured: fresh pieces use the brightest baked cells, older ones dimmer cells, and nothing is left at 0.2 s;
+    /// every piece's texture stays inside one cell, its old end towards the brush's frayed bottom, the blade end its top.
+    #[test]
+    fn textured_pieces_age_through_the_levels() {
+        assert_eq!(level(0.0), 0);
+        assert!(level(0.1) > level(0.03) && level(0.15) > level(0.1));
+        assert_eq!(level(LIFE), LEVELS - 1);
+        let fresh = ribbon(&swing(12, 0.0), 2580.0, 1080.0, true);
+        assert!(!fresh.is_empty());
+        let cell = 1.0 / LEVELS as f32;
+        for q in &fresh {
+            let k = (q.uv[0][0] / cell).floor();
+            assert!(q.uv.iter().all(|uv| (uv[0] / cell).floor() == k), "a piece spans two cells: {:?}", q.uv);
+            assert!(q.uv[0][1] > q.uv[3][1] && (TEX_NEW..=TEX_OLD).contains(&q.uv[0][1]));
+        }
+        assert!((fresh.last().unwrap().uv[0][0] / cell).floor() as usize <= 1);
+        assert!(ribbon(&swing(12, 0.2), 2580.0, 1080.0, true).is_empty());
+    }
+
+    /// The baked texture (when the effect reader's files are there): LEVELS cells; the brightest cell has white where
+    /// the brush and the core line are strongest, and every cell's colours come from the green gradient (green at
+    /// least as strong as red, except near white).
+    #[test]
+    fn bake_runs_the_brush_through_the_green_gradient() {
+        let dir = Path::new(FX_DIR);
+        if !dir.join(BRUSH).is_file() {
+            return;
+        }
+        let (rgba, w, h) = bake(dir).unwrap();
+        assert_eq!((w, h), (LEVELS as u32 * 128, 512));
+        let cw = (w as usize) / LEVELS;
+        let px = |level: usize, x: usize, y: usize| -> [u8; 4] {
+            let o = (y * w as usize + level * cw + x) * 4;
+            rgba[o..o + 4].try_into().unwrap()
+        };
+        let brightest = (0..h as usize)
+            .flat_map(|y| (0..cw).map(move |x| (x, y)))
+            .map(|(x, y)| px(0, x, y))
+            .max_by_key(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 + p[3] as u32)
+            .unwrap();
+        println!("brightest pixel of the freshest cell: {brightest:?}");
+        assert!(brightest[0] > 230 && brightest[1] > 230 && brightest[3] > 230);
+        for level in 0..LEVELS {
+            for y in (0..h as usize).step_by(7) {
+                for x in (0..cw).step_by(5) {
+                    let p = px(level, x, y);
+                    if p[3] > 40 && p[2] < 200 {
+                        assert!(p[1] >= p[0], "level {level} ({x}, {y}): {p:?} isn't from the green gradient");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The ribbon drawn the way the overlay draws it (two triangles a piece, with the baked Overwatch texture, or the
+    /// plain one with GENJI_TRAIL_PLAIN=1), over a grey like the recording's wall, for comparing with
+    /// D:\GenjiBridgeAssets\ow_ref\clip1\frames10\0079-0081.jpg. With the exported arms, Dragonblade's swing at
+    /// GENJI_TRAIL_T seconds (default 0.15, its fastest moment) and 0.1 and 0.2 s after it; writes trail_<ms>.png next
+    /// to the export. Run: cargo test --release trail_pictures -- --ignored --nocapture
     #[test]
     #[ignore]
     fn trail_pictures() {
@@ -357,7 +535,27 @@ mod tests {
         let mut canvas = Canvas::new(w, h);
         canvas.parts = crate::arms_anim::parts_for("blade_swing");
         canvas.eye = viewmodel::EYE + glam::Vec3::Z * crate::arms::BLADE_DROP;
-        let at: f32 = std::env::var("GENJI_TRAIL_T").ok().and_then(|v| v.parse().ok()).unwrap_or(0.25);
+        let at: f32 = std::env::var("GENJI_TRAIL_T").ok().and_then(|v| v.parse().ok()).unwrap_or(0.15);
+        let baked = if std::env::var("GENJI_TRAIL_PLAIN").is_ok() { None } else { bake(Path::new(FX_DIR)).ok() };
+        println!("drawn {}", if baked.is_some() { "with Overwatch's textures" } else { "plain" });
+        let sample = |uv: [f32; 2]| -> [f32; 4] {
+            match &baked {
+                None => [1.0, 1.0, 1.0, smooth(1.0 - (2.0 * uv[0] - 1.0).abs())],
+                Some((rgba, tw, th)) => {
+                    let (tw, th) = (*tw as usize, *th as usize);
+                    let (x, y) = ((uv[0] * tw as f32 - 0.5).max(0.0), (uv[1] * th as f32 - 0.5).max(0.0));
+                    let (x0, y0) = ((x as usize).min(tw - 1), (y as usize).min(th - 1));
+                    let (x1, y1) = ((x0 + 1).min(tw - 1), (y0 + 1).min(th - 1));
+                    let (fx, fy) = (x.fract(), y.fract());
+                    let at = |x: usize, y: usize, k: usize| rgba[(y * tw + x) * 4 + k] as f32 / 255.0;
+                    std::array::from_fn(|k| {
+                        let top = at(x0, y0, k) * (1.0 - fx) + at(x1, y0, k) * fx;
+                        let bottom = at(x0, y1, k) * (1.0 - fx) + at(x1, y1, k) * fx;
+                        top * (1.0 - fy) + bottom * fy
+                    })
+                }
+            }
+        };
         for later in [0.0f32, 0.1, 0.2] {
             // The blade 120 times a second up to `at`; shown `later` seconds after (the swing goes on meanwhile).
             let now = at + later;
@@ -370,14 +568,12 @@ mod tests {
                 }
                 t += 1.0 / RATE;
             }
-            let quads = ribbon(&points, w as f32, h as f32);
+            let quads = ribbon(&points, w as f32, h as f32, baked.is_some());
             let mut rgb = vec![[150f32, 148.0, 135.0]; w * h];
             for q in &quads {
-                let a = q.color[3] as f32 / 255.0;
-                let c = [q.color[0] as f32, q.color[1] as f32, q.color[2] as f32];
-                for (tri, us) in [([q.p[0], q.p[1], q.p[2]], [0.0, 1.0, 1.0]), ([q.p[0], q.p[2], q.p[3]], [0.0, 1.0, 0.0])] {
-                    fill_triangle(&mut rgb, w, h, tri, us, c, a);
-                }
+                let c = q.color.map(|v| v as f32 / 255.0);
+                fill_triangle(&mut rgb, w, h, [q.p[0], q.p[1], q.p[2]], [q.uv[0], q.uv[1], q.uv[2]], c, &sample);
+                fill_triangle(&mut rgb, w, h, [q.p[0], q.p[2], q.p[3]], [q.uv[0], q.uv[2], q.uv[3]], c, &sample);
             }
             canvas.clear();
             viewmodel::draw(&vm, &vm.pose(anim, now, false), &mut canvas, 4);
@@ -397,9 +593,9 @@ mod tests {
         }
     }
 
-    /// One triangle, `u` across the ribbon interpolated over it, the soft texture's alpha (as hud.rs makes it) times
-    /// `a`, blended over `rgb`.
-    fn fill_triangle(rgb: &mut [[f32; 3]], w: usize, h: usize, p: [[f32; 2]; 3], u: [f32; 3], c: [f32; 3], a: f32) {
+    /// One triangle as ImGui draws it: texture coordinates interpolated over it, the texture's colour times the
+    /// piece's colour, blended over `rgb` by the texture's alpha times the piece's.
+    fn fill_triangle(rgb: &mut [[f32; 3]], w: usize, h: usize, p: [[f32; 2]; 3], uv: [[f32; 2]; 3], c: [f32; 4], tex: &dyn Fn([f32; 2]) -> [f32; 4]) {
         let area = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[2][0] - p[0][0]) * (p[1][1] - p[0][1]);
         if area.abs() < 1e-6 {
             return;
@@ -415,11 +611,11 @@ mod tests {
                 if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                     continue;
                 }
-                let uu = w0 * u[0] + w1 * u[1] + w2 * u[2];
-                let k = a * smooth(1.0 - (2.0 * uu - 1.0).abs());
+                let t = tex([w0 * uv[0][0] + w1 * uv[1][0] + w2 * uv[2][0], w0 * uv[0][1] + w1 * uv[1][1] + w2 * uv[2][1]]);
+                let k = c[3] * t[3];
                 let d = &mut rgb[y * w + x];
                 for i in 0..3 {
-                    d[i] += (c[i] - d[i]) * k;
+                    d[i] += (c[i] * t[i] * 255.0 - d[i]) * k;
                 }
             }
         }

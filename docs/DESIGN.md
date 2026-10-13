@@ -845,6 +845,28 @@ the HUD showed nothing). The green effects "look nothing like Overwatch". One co
        `1769` has 12 ribbons and 19 systems; how it differs from `0542` isn't known yet.
      - **Not decoded yet:** the curves (`ECCV`, `ECAB`), the particle settings, and how the meshes are positioned.
        Their raw numbers are in `effects.txt` and `raw/`.
+7. **Dragonblade swing with Overwatch's own textures** (you, 2026-10-13: "yes redo the dragonblade swing with the
+   real textures").
+   - **What Overwatch draws:** a curved band (`2B80`, 85 points), drawn twice:
+     - with the brush streak `4E2F` as its shape, the jagged core `57E6` as detail, and the green gradient
+       (`8008CA787D10`) turning brightness into colour;
+     - with the same shape, the wavy lines `6613` as detail, and a white gradient.
+     Turned into our arms' space, the band runs from the upper right down to the lower left, as in your frame 0079.
+     Where Overwatch puts it relative to the camera, and how it reveals it over the swing, are in curves not decoded
+     yet.
+   - **What we draw:** our ribbon keeps following the blade's real path (so it matches our swing), but now carries
+     Overwatch's textures:
+     - **Baked at start-up**, from `D:\GenjiBridgeAssets\fx\textures` (`tools\extract_effects.ps1` writes them):
+       the shape times the detail, run through the gradient, at 32 brightness levels side by side in one texture
+       (16 showed bands between neighbouring pieces).
+       Dimmer levels come out yellower, then greener, because that's what the gradient does.
+     - **Drawn:** each piece of ribbon uses the level for its age, so a fresh streak is white-hot and it goes yellow,
+       then green, then away, as in frames 0079-0081. The texture runs along the ribbon: its dense end at the
+       blade, so the fresh streak is white-hot there; its frayed end trailing, so the tail frays into strands. Checked
+       offline, the other way round left the streak dim at the blade.
+     - Without those files, the ribbon of part 5 is drawn instead (logged).
+   - **Checked outside the game:** the picture test draws it with the textures, for comparing with the frames.
+   - **Not done:** drawing the band itself (`2B80`) needs its placement and reveal, from the undecoded curves.
 
 ## 6. Risks and unknowns (honest list)
 

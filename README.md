@@ -66,7 +66,8 @@ How it works and the build plan: [docs/DESIGN.md](docs/DESIGN.md). Change histor
   seconds after its name (blood loss, which has no lasting phase, flashes).
 - Green blade trails on Dragonblade swings and dashes, green streaks during Swift Strike, no more Blood Blade
   crescent: they showed but "look nothing like Overwatch" (your test, 2026-10-10). Built, **not tested** yet
-  (2026-10-13): the Dragonblade trail redone from your recording (white core, yellow band, green glow, strands).
+  (2026-10-13): the Dragonblade trail drawn with Overwatch's own swing textures and colour gradient, found with the
+  effect reader (`tools/extract_effects.ps1`).
   Swift Strike's effect isn't redone yet (no recording of Overwatch's dash).
 - Sounds and voice (step 11b): the ability sounds and lines play and you adjusted their levels (tested 2026-10-09).
   - Built, **not tested** yet: footsteps, jumps, wall climb and landing; pain, stagger, knockdown, critical health,

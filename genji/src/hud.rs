@@ -167,6 +167,8 @@ pub struct Resources {
     /// Soft across (strips: bright in the middle, clear at both edges), and fading from top to bottom (fire band).
     ribbon: Picture,
     fade: Picture,
+    /// Dragonblade's swing: Overwatch's own textures, baked by trail.rs.
+    swing: Picture,
     italic_ult: Option<FontId>,
     italic_cd: Option<FontId>,
     bold_big: Option<FontId>,
@@ -218,6 +220,11 @@ impl Resources {
     /// The soft ribbon texture, for the blade trails (trail.rs).
     pub fn ribbon_texture(&self) -> Option<TextureId> {
         self.ribbon.map(|r| r.0)
+    }
+
+    /// Overwatch's swing textures baked through its gradient (trail.rs), if its files were there.
+    pub fn swing_texture(&self) -> Option<TextureId> {
+        self.swing.map(|r| r.0)
     }
 
     /// Loads the pictures and fonts (called from the overlay's initialize, before the font atlas is built).
@@ -276,6 +283,23 @@ impl Resources {
             let up = smooth((v / 0.3).min(1.0));
             [255, 255, 255, (255.0 * across * up) as u8]
         });
+        let t = std::time::Instant::now();
+        r.swing = match crate::trail::bake(Path::new(crate::trail::FX_DIR)) {
+            Ok((rgba, w, h)) => match render.load_texture(&rgba, w, h) {
+                Ok(id) => {
+                    glog!("HUD", "swing texture: Overwatch's, baked {w}x{h} in {:?}", t.elapsed());
+                    Some((id, [w as f32, h as f32]))
+                }
+                Err(e) => {
+                    glog!("HUD", "swing texture upload failed ({e:?}); plain trail");
+                    None
+                }
+            },
+            Err(e) => {
+                glog!("HUD", "swing texture not baked ({e}); plain trail. Run tools\\extract_effects.ps1");
+                None
+            }
+        };
         let k = (ctx.io().display_size[1] / REFERENCE_HEIGHT).max(0.5);
         let fonts = ctx.fonts();
         fonts.add_font(&[FontSource::DefaultFontData { config: None }]);

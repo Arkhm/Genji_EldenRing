@@ -3,6 +3,55 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-13 Dragonblade swing drawn with Overwatch's own textures and gradient
+
+**Changed:**
+- `trail.rs`: `bake` reads Overwatch's swing textures from `D:\GenjiBridgeAssets\fx\textures` (written by the effect
+  reader):
+  - the brush streak `4E2F` as the shape;
+  - the jagged core `57E6` and the wavy lines `6613` as detail;
+  - the gradient `8008CA787D10` (row 4), dark green to yellow to white.
+
+  It runs them through the gradient at 32 brightness levels side by side. The ribbon (same path and timing as
+  before) is now one textured strip. Each piece uses the level for its age: white-hot when fresh, then yellow, then
+  green, then gone by 0.2 s. The brush's dense end is at the blade, its frayed end trailing.
+- `hud.rs`: bakes and uploads that texture at start-up and logs it (`HUD swing texture: ...`); without the files it
+  logs why and the plain ribbon of the last change is drawn. `crosshair.rs` passes it to the trail.
+- `docs/DESIGN.md` 5l part 7.
+**Why:** You: "yes redo the dragonblade swing with the real textures."
+**Tested how:**
+- Read the swing's mesh (`2B80`, 85 points) from the export. Turned into our arms' space, it runs from the upper
+  right to the lower left, as in frame 0079. Where Overwatch places it and how it reveals it aren't decoded, so our
+  ribbon still follows the blade's real path.
+- The picture test (`trail_pictures`) now draws with the baked texture the way ImGui does (texture colour and alpha
+  times the piece's). Checked against frames 0079-0081 and changed twice:
+  - the brush's dense end moved to the blade (the other way, the streak was dim at the blade);
+  - 16 levels became 32 (bands showed between pieces 0.1 s later).
+  Now: fresh, a white-hot head at the blade, a green body with Overwatch's brush strands, the tail fraying out;
+  0.1 s later a faint green; 0.2 s, nothing.
+- New tests:
+  - `textured_pieces_age_through_the_levels`;
+  - `bake_runs_the_brush_through_the_green_gradient`: on the real files, the freshest cell's brightest pixel is
+    (254, 255, 241); every coloured pixel is from the green gradient.
+- `cargo test --release` passes (61 tests). Built with `tools/build.ps1`.
+**Result:** Built. **Not tested in game.**
+**Still broken / not tested:**
+- How it looks in game, and the baking time at start-up (logged).
+- The streak's blade end is a rounded edge, not splayed strands. The blade and hand should cover most of it there.
+- Overwatch's own band shape (`2B80`) isn't drawn: where it goes on screen and how it reveals itself are in curves
+  not decoded yet.
+- Swift Strike: still the old streaks; its real textures are found (DESIGN.md 5l part 6), not used yet.
+**Next:** Your test. Then Swift Strike with its own textures, if you want it.
+
+## 2026-10-13 Reference audit and Opus 5.5 mod-manager prompt
+
+**Changed:** Added `docs/REFERENCE-AUDIT.md` and `docs/OPUS-5.5-MOD-MANAGER-PROMPT.md`. No mod code or assets changed.
+**Why:** User requested an inspection of project/reference material before preparing a manager prompt for delegated work and measured Overwatch fidelity of at least 95%.
+**Tested how:** Read project rules/documentation and relevant implementation/history; inventoried the named project and `D:\GenjiBridgeAssets` read-only; checked indexes, extraction log and selected saved reference images; decoded selected image dimensions and checked named effect texture paths. See the audit for the exact scope and verification command.
+**Result:** Authentic reference sequences exist (118/266/170 full-size action frames), along with HUD crops, extracted animation/effect data and mod comparison renders. Older `recordings\rec3` contains dash reference imagery despite newer notes saying it is missing. The prompt requires fixed scoring, individual category/case gates, specialist ownership, independent integration review and runtime evidence before acceptance.
+**Still broken / not tested:** Game behavior and fidelity **not tested**. This is not a complete line-by-line source/history or individual binary-asset review. Source videos/HUD text specs outside the named roots were not accessed; target skin mismatch, low reference cadence/detail and partly undecoded effects prevent a complete fidelity certification.
+**Next:** Give the saved prompt to Opus 5.5; its first step is verified reference coverage and an acceptance specification before implementation.
+
 ## 2026-10-13 Effect reader: every Genji effect read from Overwatch's files
 
 **Changed:**
