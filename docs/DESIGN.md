@@ -800,6 +800,51 @@ the HUD showed nothing). The green effects "look nothing like Overwatch". One co
    - **Swift Strike** keeps its streaks and gets the same ribbon on the wakizashi for now: there's no recording of
      Overwatch's dash. To redo it, we need either your recording of a dash in first person, or the effect textures
      extracted with DataTool (the effect folders extracted so far hold only sounds: 554 `.ogg`, no textures).
+6. **An effect reader: every Genji effect as Overwatch defines it** (you, 2026-10-13: "cant you just extract the
+   effect of everything using data tool? ... try to find it").
+   - **Why DataTool alone isn't enough:**
+     - its effect files (`.oweffect`) are no longer written: the animation files point at them, but they're missing;
+     - its parser skips particles and ribbons (that code is commented out in its source), and Overwatch's trails
+       are ribbons;
+     - the textures it does export are shared by all heroes, so nothing says which one the dash or a swing uses.
+   - **The reader:** one extra DataTool mode, `extract-genji-effects`, written by us in
+     `tools/fx_reader/ExtractGenjiEffects.cs`. `tools/extract_effects.ps1` copies it into DataTool's own source (at
+     the commit matching our DataTool release, in `D:\GenjiBridgeAssets\tools\OWLib-src`), builds it with the
+     .NET 10 SDK (installed for this in `D:\GenjiBridgeAssets\tools\dotnet`, not system-wide), and runs it on the
+     same offline copy of Overwatch the other extractions read.
+   - **What it writes** to `D:\GenjiBridgeAssets\fx\` (outside the repository):
+     - `effects.txt`: every effect Genji's entities use, which animations and entities start it, and its parts in
+       order. For each part:
+       - its start time and length;
+       - what it is: a ribbon, particle system, mesh, sound or sub-effect;
+       - its material's textures and constants, which probably hold the colours;
+       - the raw numbers of the parts TankLib doesn't decode, to read sizes, colours and timings from;
+     - `index.txt`: one line per effect, with its animations, sounds and part counts, to find the dash and the swings
+       (cross-checked with the sounds we already picked for them);
+     - `textures/`: each texture those effects use, once;
+     - `raw/`: each part's bytes, for closer reading.
+   - **Then:** redo the trail and the dash from what Overwatch actually uses (its textures, colours, timings), one
+     commit each.
+   - **What it found (first run, 2026-10-13):** 365 effects (210 started by animations, 155 by scripts), 576
+     textures. Also `graphs.txt`: Genji's 108 scripts and the effects each can start. No script names its ability in
+     a way a byte scan finds, so abilities are told apart by the effects they share with known animations and sounds.
+     - **Dragonblade swing, first person** (animations 1257 and 125A start effects 0396 and 0397):
+       - not a ribbon: one mesh (`2B80`) drawn twice, with two materials, over 1 s, its look driven by 13 curves
+         (`ECCV`);
+       - textures: `4E2F`, a feathered brush streak (the "strands" in your recording), and two lines, `6613`
+         (wavy) and `57E6` (a jagged bright core);
+       - colour, from gradient `8008CA787D10` row 4: dark green `026e00`, green `51ff00`, yellow-green `beff00`,
+         yellow `f3ff7d`, near white `fffff1`.
+     - **Swift Strike** (script `5362`, the one with the "ability still on cooldown" sound `0FCB`; Deflect has its own
+       script, `03A3`) starts effects `0542` and `1769`, both with sound `218A`. `0542`:
+       - two ribbons (`07F5`), 0.4 s, textured with a jagged energy streak (`28FD9`), one tinted dark green to white
+         (`800CFE354630` row 3), the other dark red to white (`8009788D7547`); probably the friendly and enemy
+         versions (not confirmed);
+       - a mesh particle system (`29FB`) with the same brush textures as the swing (`4E2F`, `4E30`);
+       - a 0.133 s sub-effect (`6BC3`).
+       `1769` has 12 ribbons and 19 systems; how it differs from `0542` isn't known yet.
+     - **Not decoded yet:** the curves (`ECCV`, `ECAB`), the particle settings, and how the meshes are positioned.
+       Their raw numbers are in `effects.txt` and `raw/`.
 
 ## 6. Risks and unknowns (honest list)
 

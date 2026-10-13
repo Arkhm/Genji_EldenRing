@@ -3,6 +3,43 @@
 Everything that changed and what was tested. Newest entry first. Template:
 [MODLOG-template.md](MODLOG-template.md).
 
+## 2026-10-13 Effect reader: every Genji effect read from Overwatch's files
+
+**Changed:**
+- New `tools/fx_reader/ExtractGenjiEffects.cs`: an extra DataTool mode, `extract-genji-effects`. For every effect
+  Genji's entities use, it writes:
+  - its parts in order (timing, ribbon, particle system, mesh, sound, sub-effect);
+  - each material's textures and constants;
+  - the raw numbers of every part TankLib doesn't decode;
+  - which of Genji's scripts can start it.
+- New `tools/extract_effects.ps1`: copies the mode into DataTool's source, builds it and runs it. Output in
+  `D:\GenjiBridgeAssets\fx\`: `effects.txt`, `index.txt`, `graphs.txt`, `abilities.txt`, `textures/`, `raw/`.
+- `.gitignore`: `*.cs` whitelisted (our own source).
+- `docs/DESIGN.md` 5l part 6: why, how, and what it found.
+- **Outside the repo** (with your OK): .NET 10 SDK 10.0.401 installed to `D:\GenjiBridgeAssets\tools\dotnet`
+  (Microsoft's `dotnet-install.ps1`, local only, not system-wide, not on PATH).
+  - DataTool's source cloned to `D:\GenjiBridgeAssets\tools\OWLib-src` at `df522f0c`, the commit of our DataTool
+    release, with its two submodules.
+  - Built into `D:\GenjiBridgeAssets\tools\datatool-built`.
+  - Contact sheets of the earlier exports' textures are in `D:\GenjiBridgeAssets\fx_survey\`.
+**Why:** You: "cant you just extract the effect of everything using data tool? ... try to find it." DataTool no
+longer writes its effect files, and its parser skips particles and ribbons.
+**Tested how:**
+- DataTool built from source unchanged first: 0 errors.
+- With the mode, it ran on the offline Overwatch copy: 41 entities, 515 animations, 365 effects, 576 textures.
+- Checked by hand:
+  - the effects the swing animations start (1257, 125A: effects 0396, 0397) and their textures;
+  - Swift Strike's script, told apart by its cooldown sound, and its effect `0542`;
+  - the colour gradients, read pixel by pixel (DESIGN.md 5l part 6).
+**Result:** Found the real textures and colours of the first-person Dragonblade swing and of Swift Strike (details
+in DESIGN.md). Nothing in the game mod changed.
+**Still broken / not tested:**
+- How Overwatch animates these: the curves and particle settings are written out as raw numbers, not decoded.
+- Which script is which ability is worked out from shared sounds and animations, not read from the files.
+- `1769` (Swift Strike's other effect) isn't understood yet.
+**Next:** Redo the Dragonblade trail with Overwatch's own textures and gradient (loaded from
+`D:\GenjiBridgeAssets\fx` at run time, like the arms); then the dash.
+
 ## 2026-10-13 Dragonblade's green trail redone from your Overwatch recording
 
 **Changed:**

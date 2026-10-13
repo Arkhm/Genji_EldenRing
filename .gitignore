@@ -29,6 +29,8 @@
 !*.ps1
 !*.bat
 !*.cmd
+# Our DataTool mode (tools/fx_reader), built into DataTool's source outside the repo
+!*.cs
 
 # Shaders we write ourselves
 !*.hlsl
